@@ -2,6 +2,7 @@
 
 (function () {
     const OLLAMA_DEFAULT_URL = 'http://localhost:11434';
+    const LITERT_SETUP_STATUS_EVENT = 'gnosys-litert-setup-status';
     let launchModal = null;
     let pollInterval = null;
     let launcherApiStatus = 'unknown';
@@ -802,8 +803,14 @@
         { value: 'phi3', label: 'Phi 3 (3.8B) - High Reasoning', size_gb: 2.2 }
     ];
 
-    window.populateModelSelector = async function (selectEl, currentModel, cleanEndpoint) {
+    window.populateModelSelector = async function (selectEl, currentModel, cleanEndpoint, options = {}) {
         if (!selectEl) return false;
+
+        const setActionStatus = (state, message) => {
+            if (typeof options.onStatusChange === 'function') {
+                options.onStatusChange({ state, message });
+            }
+        };
         
         selectEl.innerHTML = '';
         const tempOpt = document.createElement('option');
@@ -895,6 +902,10 @@
             }
 
             opt.textContent = `${m.label} (${sizeText}) (${statusText})`;
+            opt.dataset.modelKind = 'ollama';
+            opt.dataset.installed = installedInfo ? 'true' : 'false';
+            opt.dataset.modelLabel = m.label;
+            opt.dataset.modelSize = sizeText;
             if (m.value === currentModel) opt.selected = true;
             recGroup.appendChild(opt);
         });
@@ -918,6 +929,10 @@
                 opt.value = m.name;
                 const sizeText = m.size ? ` (${(m.size / (1024**3)).toFixed(1)} GB)` : '';
                 opt.textContent = `${m.name}${sizeText}`;
+                opt.dataset.modelKind = 'ollama';
+                opt.dataset.installed = 'true';
+                opt.dataset.modelLabel = m.name;
+                opt.dataset.modelSize = sizeText.trim() || 'Installed';
                 if (m.name === currentModel) opt.selected = true;
                 otherGroup.appendChild(opt);
             });
@@ -938,6 +953,10 @@
             const opt = document.createElement('option');
             opt.value = `litert:${t.value}`;
             opt.textContent = `${t.label} (~${t.size})`;
+            opt.dataset.modelKind = 'litert';
+            opt.dataset.installed = 'false';
+            opt.dataset.modelLabel = t.label;
+            opt.dataset.modelSize = t.size;
             if (`litert:${t.value}` === currentModel) {
                 opt.selected = true;
             }
@@ -954,6 +973,9 @@
             const opt = document.createElement('option');
             opt.value = currentModel;
             opt.textContent = `${currentModel} (unlisted)`;
+            opt.dataset.modelKind = 'ollama';
+            opt.dataset.installed = checkInstalled(currentModel) ? 'true' : 'false';
+            opt.dataset.modelLabel = currentModel;
             opt.selected = true;
             unlistedGroup.appendChild(opt);
             selectEl.appendChild(unlistedGroup);
@@ -1016,8 +1038,10 @@
             }
         }
 
-        const handleSelectChange = () => {
+        const handleSelectChange = async () => {
             const val = selectEl.value;
+            if (!val) return;
+
             if (val === '__custom__') {
                 const writeIn = prompt('Enter the custom Ollama model tag (e.g. deepseek-coder:6.7b):');
                 if (writeIn && writeIn.trim()) {
@@ -1032,6 +1056,9 @@
                     const opt = document.createElement('option');
                     opt.value = cleanedModel;
                     opt.textContent = `${cleanedModel} (Custom)`;
+                    opt.dataset.modelKind = 'ollama';
+                    opt.dataset.installed = checkInstalled(cleanedModel) ? 'true' : 'false';
+                    opt.dataset.modelLabel = cleanedModel;
                     opt.selected = true;
                     customGrp.appendChild(opt);
                     
@@ -1039,22 +1066,54 @@
                 } else {
                     selectEl.value = currentModel;
                 }
-            } else if (val.startsWith('litert:')) {
-                const modelId = val.substring(7);
-                localStorage.setItem('gnosys_llm_route_mode', 'mobile-ondevice');
-                localStorage.setItem('gnosys_ondevice_selected_model', modelId);
-                localStorage.setItem('gnosys_active_llm', val);
-                localStorage.setItem('chemistry_llm', val);
-                if (window.GnosysLLM) {
-                    window.GnosysLLM.init();
+                return;
+            }
+
+            const selectedOption = selectEl.options[selectEl.selectedIndex];
+            const isLiteRt = val.startsWith('litert:') || selectedOption?.dataset?.modelKind === 'litert';
+            const isInstalled = selectedOption?.dataset?.installed === 'true' || checkInstalled(val);
+            const modelLabel = selectedOption?.dataset?.modelLabel || val;
+
+            selectEl.disabled = true;
+            try {
+                if (isLiteRt) {
+                    const modelId = val.substring(7);
+                    localStorage.setItem('gnosys_llm_route_mode', 'mobile-ondevice');
+                    localStorage.setItem('gnosys_ondevice_selected_model', modelId);
+                    localStorage.setItem('gnosys_active_llm', val);
+                    localStorage.setItem('chemistry_llm', val);
+
+                    setActionStatus('working', `Opening Smart LLM Setup for ${modelLabel}...`);
+                    await window.GnosysLLM?.init?.();
+                    if (typeof window.GnosysLLM?.showMobileChoiceModal === 'function') {
+                        window.GnosysLLM.showMobileChoiceModal();
+                        setActionStatus('info', 'Smart LLM Setup opened. Choose where to save your LiteRT model file.');
+                    } else {
+                        setActionStatus('error', 'Unable to open Smart LLM Setup.');
+                    }
+                    return;
                 }
-            } else {
+
+                if (!isInstalled) {
+                    setActionStatus('working', `Downloading ${modelLabel} via Ollama...`);
+                    await window.ensureOllamaActive(cleanEndpoint, val);
+                    setActionStatus('success', `${modelLabel} download complete. Model is ready.`);
+                } else {
+                    setActionStatus('working', `Switching to ${modelLabel}...`);
+                }
+
                 localStorage.setItem('gnosys_llm_route_mode', 'desktop-ollama');
                 localStorage.setItem('gnosys_active_llm', val);
                 localStorage.setItem('chemistry_llm', val);
-                if (window.GnosysLLM) {
-                    window.GnosysLLM.init();
+                await window.GnosysLLM?.init?.();
+                if (isInstalled) {
+                    setActionStatus('success', `${modelLabel} is now active.`);
                 }
+            } catch (err) {
+                console.error('[Launcher] Model selection action failed:', err);
+                setActionStatus('error', err?.message || 'Failed to apply model selection.');
+            } finally {
+                selectEl.disabled = false;
             }
         };
         selectEl.removeEventListener('change', selectEl._gnosysCustomHandler);
@@ -1142,6 +1201,12 @@
                     <p id="chem-settings-model-offline-msg" class="hidden text-[10px] text-amber-500 mt-1.5 leading-snug">
                         <i class="fa-solid fa-circle-exclamation mr-1"></i> Ollama offline. Showing cached model only.
                     </p>
+                    <p id="chem-settings-model-action-status" class="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
+                        Ready to switch models or start download.
+                    </p>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                        LiteRT selections open Smart LLM Setup so you can choose where to save model files.
+                    </p>
                 </div>
 
                 <!-- Explore mode toggle -->
@@ -1220,6 +1285,31 @@
         const purgeBtn = overlay.querySelector('#chem-settings-purge-btn');
         const cancelBtn = overlay.querySelector('#chem-settings-cancel');
         const offlineMsg = overlay.querySelector('#chem-settings-model-offline-msg');
+        const actionStatusEl = overlay.querySelector('#chem-settings-model-action-status');
+
+        const setModelActionStatus = ({ state = 'idle', message = '' } = {}) => {
+            if (!actionStatusEl) return;
+            actionStatusEl.textContent = message || 'Ready to switch models or start download.';
+
+            actionStatusEl.classList.remove('text-slate-500', 'dark:text-slate-400', 'text-amber-600', 'dark:text-amber-300', 'text-emerald-600', 'dark:text-emerald-300', 'text-rose-600', 'dark:text-rose-300');
+            if (state === 'working') {
+                actionStatusEl.classList.add('text-amber-600', 'dark:text-amber-300');
+            } else if (state === 'success' || state === 'info') {
+                actionStatusEl.classList.add('text-emerald-600', 'dark:text-emerald-300');
+            } else if (state === 'error') {
+                actionStatusEl.classList.add('text-rose-600', 'dark:text-rose-300');
+            } else {
+                actionStatusEl.classList.add('text-slate-500', 'dark:text-slate-400');
+            }
+        };
+
+        const handleLiteRtSetupStatus = (event) => {
+            const detail = event?.detail;
+            if (!detail || typeof detail.message !== 'string') return;
+            setModelActionStatus(detail);
+        };
+
+        window.addEventListener(LITERT_SETUP_STATUS_EVENT, handleLiteRtSetupStatus);
 
         const currentModel = window.getGnosysModel('chemistry_llm');
         const isBypass = localStorage.getItem('chemistry_curriculum_bypass') === 'true';
@@ -1232,30 +1322,11 @@
         const endpoint = localStorage.getItem("chemistry_ollama_endpoint") || "http://localhost:11434";
         const cleanEndpoint = endpoint.replace('/api/chat', '').replace('/api/generate', '');
         
-        window.populateModelSelector(selectEl, currentModel, cleanEndpoint).then(online => {
+        window.populateModelSelector(selectEl, currentModel, cleanEndpoint, {
+            onStatusChange: setModelActionStatus,
+        }).then(online => {
             if (!online && offlineMsg) {
                 offlineMsg.classList.remove('hidden');
-            }
-        });
-
-        selectEl.addEventListener('change', () => {
-            const val = selectEl.value;
-            if (val.startsWith('litert:')) {
-                const modelId = val.substring(7);
-                localStorage.setItem('gnosys_llm_route_mode', 'mobile-ondevice');
-                localStorage.setItem('gnosys_ondevice_selected_model', modelId);
-                localStorage.setItem('gnosys_active_llm', val);
-                localStorage.setItem('chemistry_llm', val);
-                if (window.GnosysLLM) {
-                    window.GnosysLLM.init();
-                }
-            } else if (val !== '__custom__') {
-                localStorage.setItem('gnosys_llm_route_mode', 'desktop-ollama');
-                localStorage.setItem('gnosys_active_llm', val);
-                localStorage.setItem('chemistry_llm', val);
-                if (window.GnosysLLM) {
-                    window.GnosysLLM.init();
-                }
             }
         });
 
@@ -1281,6 +1352,7 @@
         }
 
         const closeModal = () => {
+            window.removeEventListener(LITERT_SETUP_STATUS_EVENT, handleLiteRtSetupStatus);
             overlay.classList.remove('opacity-100');
             overlay.firstElementChild.classList.add('scale-95');
             setTimeout(() => overlay.remove(), 300);

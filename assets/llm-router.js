@@ -256,8 +256,80 @@
         isOpfsSupported: Boolean(navigator.storage?.getDirectory),
         mobileChoicePending: false,
         modalEl: null,
+        smartSetupOpenQueued: false,
         badgeIntervalId: null,
     };
+
+    const LITERT_SETUP_STATUS_EVENT = 'gnosys-litert-setup-status';
+
+    function emitLiteRtSetupStatus(detail) {
+        window.dispatchEvent(new CustomEvent(LITERT_SETUP_STATUS_EVENT, { detail }));
+    }
+
+    function showTransientToast(message, variant = 'success') {
+        const text = String(message || '').trim();
+        if (!text) return;
+
+        const existingToast = document.getElementById('gnosys-litert-toast');
+        if (existingToast) {
+            existingToast.remove();
+        }
+
+        const toast = document.createElement('div');
+        toast.id = 'gnosys-litert-toast';
+        toast.textContent = text;
+        toast.style.cssText = [
+            'position:fixed',
+            'right:16px',
+            'bottom:16px',
+            'z-index:100001',
+            'max-width:min(360px,calc(100vw - 32px))',
+            'padding:12px 14px',
+            'border-radius:14px',
+            'font-size:0.82rem',
+            'font-weight:800',
+            'line-height:1.3',
+            'box-shadow:0 18px 36px rgba(0,0,0,0.28)',
+            'backdrop-filter:blur(8px)',
+            'opacity:0',
+            'transform:translateY(10px)',
+            'transition:opacity .2s ease, transform .2s ease',
+            'pointer-events:none',
+            variant === 'success'
+                ? 'background:rgba(6,95,70,0.96);color:#ecfdf5;border:1px solid rgba(16,185,129,0.35);'
+                : variant === 'error'
+                    ? 'background:rgba(127,29,29,0.96);color:#fee2e2;border:1px solid rgba(248,113,113,0.35);'
+                    : 'background:rgba(15,23,42,0.96);color:#e2e8f0;border:1px solid rgba(148,163,184,0.3);'
+        ].join(';');
+
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        });
+
+        window.setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(10px)';
+            window.setTimeout(() => toast.remove(), 220);
+        }, 2800);
+    }
+
+    function queueSmartSetupModal(options = {}) {
+        const force = Boolean(options.force);
+        if (state.smartSetupOpenQueued) return;
+        if (isMobileDevice) return;
+        if (localStorage.getItem(STORAGE_KEYS.routeMode) === 'no-ai') return;
+
+        state.smartSetupOpenQueued = true;
+        queueMicrotask(() => {
+            state.smartSetupOpenQueued = false;
+            if (localStorage.getItem(STORAGE_KEYS.routeMode) === 'no-ai') return;
+            if (document.getElementById('gnosys-desktop-ollama-modal')) return;
+            if (!force && state.providerName === 'desktop-ollama') return;
+            showMobileChoiceModal();
+        });
+    }
 
     const routerApi = {
         init,
@@ -1703,7 +1775,8 @@
         }
 
         overlay.innerHTML = `
-            <div style="max-width:480px;width:100%;background:#0f172a;border:1px solid #334155;border-radius:22px;padding:24px;color:#e2e8f0;box-shadow:0 20px 60px rgba(0,0,0,0.5);text-align:center;">
+            <div style="max-width:480px;width:100%;background:#0f172a;border:1px solid #334155;border-radius:22px;padding:24px;color:#e2e8f0;box-shadow:0 20px 60px rgba(0,0,0,0.5);text-align:center;position:relative;">
+                <button id="gnosys-desktop-launch-close" style="position:absolute;top:14px;right:14px;border:none;background:transparent;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px 8px;line-height:1;" aria-label="Close">✕</button>
                 <div style="font-size:3rem;margin-bottom:12px;display:inline-block;animation:float 3s ease-in-out infinite;">🤖</div>
                 <h3 style="margin:0 0 4px 0;font-size:1.2rem;font-weight:800;color:#f8fafc;">Local AI Connection Offline</h3>
                 
@@ -1745,20 +1818,46 @@
 
         document.body.appendChild(overlay);
 
+        const closeBtn = overlay.querySelector('#gnosys-desktop-launch-close');
         const yesBtn = overlay.querySelector('#gnosys-desktop-launch-yes');
         const browserBtn = overlay.querySelector('#gnosys-desktop-launch-browser');
         const cancelBtn = overlay.querySelector('#gnosys-desktop-launch-cancel');
         const statusEl = overlay.querySelector('#gnosys-desktop-launch-status');
+        let isLaunchingOllama = false;
+
+        function closeHardwareModalAndOpenSmartSetup() {
+            if (isLaunchingOllama) {
+                if (statusEl) {
+                    statusEl.style.display = 'block';
+                    statusEl.style.color = '#f59e0b';
+                    statusEl.textContent = 'Ollama launch is in progress. Please wait for the connection check to finish.';
+                }
+                return;
+            }
+            overlay.remove();
+            queueSmartSetupModal();
+        }
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeHardwareModalAndOpenSmartSetup);
+        }
+
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) {
+                closeHardwareModalAndOpenSmartSetup();
+            }
+        });
 
         if (browserBtn) {
             browserBtn.addEventListener('click', () => {
-                overlay.remove();
                 localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
+                closeHardwareModalAndOpenSmartSetup();
                 init();
             });
         }
 
         yesBtn.addEventListener('click', async () => {
+            isLaunchingOllama = true;
             yesBtn.setAttribute('disabled', 'true');
             yesBtn.style.opacity = '0.5';
             yesBtn.textContent = 'Launching...';
@@ -1802,13 +1901,14 @@
                     if (statusEl) statusEl.textContent = '✓ Connected to Ollama successfully!';
                     setTimeout(() => {
                         overlay.remove();
+                        queueSmartSetupModal({ force: true });
                         state.provider = createOllamaProvider();
                         setProvider('desktop-ollama');
                         state.mobileChoicePending = false;
-                        window.location.reload(); 
                     }, 1000);
                 } else if (attempts >= maxAttempts) {
                     clearInterval(pollInterval);
+                    isLaunchingOllama = false;
                     yesBtn.removeAttribute('disabled');
                     yesBtn.style.opacity = '1';
                     yesBtn.textContent = 'Retry Launch';
@@ -2277,6 +2377,31 @@
                 const progressBar = overlay.querySelector('#gnosys-ondevice-progress-bar');
                 const cancelBtn = overlay.querySelector('#gnosys-download-cancel-btn');
 
+                const finalizeLiteRtSetup = async (message, toastMessage = message) => {
+                    const finalMessage = String(message || 'Download complete / Model ready').trim();
+                    if (progressWrap) progressWrap.style.display = 'block';
+                    if (progressBar) {
+                        progressBar.style.width = '100%';
+                        progressBar.classList.remove('animate-pulse');
+                    }
+                    if (progressText) {
+                        progressText.textContent = finalMessage;
+                        progressText.style.color = '#22c55e';
+                        progressText.style.fontWeight = '800';
+                    }
+
+                    emitLiteRtSetupStatus({
+                        state: 'success',
+                        message: finalMessage,
+                    });
+
+                    await new Promise((resolve) => setTimeout(resolve, 900));
+                    overlay.style.display = 'none';
+                    state.modalEl = null;
+                    overlay.remove();
+                    showTransientToast(toastMessage || finalMessage, 'success');
+                };
+
                 if (fsaSaveBtn) {
                     fsaSaveBtn.addEventListener('click', async () => {
                         const activeConfig = getActiveModelConfig();
@@ -2338,15 +2463,18 @@
                             state.provider = provider;
                             state.mobileChoicePending = false;
                             setProvider('mobile-litert');
-                            overlay.style.display = 'none';
-                            state.modalEl = null;
-                            overlay.remove();
+                            await finalizeLiteRtSetup('Download complete / Model ready', 'LiteRT model is ready to use.');
                         } catch (err) {
                             if (err.name === 'AbortError') {
                                 if (progressText) progressText.textContent = 'Download cancelled.';
+                                emitLiteRtSetupStatus({ state: 'info', message: 'LiteRT setup cancelled.' });
                             } else {
                                 console.error('[GnosysLLM] Direct stream setup failed:', err);
                                 alert(`Storage setup failed: ${err.message || err}`);
+                                emitLiteRtSetupStatus({
+                                    state: 'error',
+                                    message: `LiteRT setup failed: ${err.message || err}`,
+                                });
                             }
                             localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
                             if (progressWrap) progressWrap.style.display = 'none';
@@ -2387,12 +2515,14 @@
                             state.provider = provider;
                             state.mobileChoicePending = false;
                             setProvider('mobile-litert');
-                            overlay.style.display = 'none';
-                            state.modalEl = null;
-                            overlay.remove();
+                            await finalizeLiteRtSetup('Download complete / Model ready', 'LiteRT model is ready to use.');
                         } catch (err) {
                             console.error('[GnosysLLM] Local file linking failed:', err);
                             alert(`File linking failed: ${err.message || err}`);
+                            emitLiteRtSetupStatus({
+                                state: 'error',
+                                message: `LiteRT setup failed: ${err.message || err}`,
+                            });
                         }
                     });
                 }
@@ -2498,15 +2628,17 @@
                             state.mobileChoicePending = false;
                             localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
                             setProvider('mobile-litert');
-                            overlay.style.display = 'none';
-                            state.modalEl = null;
-                            overlay.remove();
+                            await finalizeLiteRtSetup('Download complete / Model ready', 'LiteRT model is ready to use.');
                         } catch (err) {
                             console.error('[GnosysLLM] OPFS setup failed:', err);
                             localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
                             const detail = String(err?.message || err || 'Unknown OPFS error');
                             if (progressText) progressText.textContent = `Setup failed: ${detail}`;
                             alert(`LiteRT OPFS Error: ${detail}`);
+                            emitLiteRtSetupStatus({
+                                state: 'error',
+                                message: `LiteRT setup failed: ${detail}`,
+                            });
                         }
                     });
                 }

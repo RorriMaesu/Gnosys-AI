@@ -91,6 +91,7 @@ let pendingResetAction = null;
 let resetUndoTimer = null;
 let resetUndoTickTimer = null;
 let resetModalKeyHandler = null;
+let cmrLiteRtSetupStatusListener = null;
 
 const QUESTION_HELP_STYLE_ID = 'cmr-question-help-style';
 const RESET_UNDO_TIMEOUT_MS = 20000;
@@ -1873,7 +1874,8 @@ function getAdaptiveLessonRow(stageId, lessonId) {
 }
 
 function applyPersistedTheme() {
-    const darkEnabled = localStorage.getItem('chemistry_darkmode') === 'true';
+    const pref = localStorage.getItem('chemistry_darkmode');
+    const darkEnabled = pref === null || pref === 'true';
     document.documentElement.classList.toggle('dark', darkEnabled);
     syncThemeButton(darkEnabled);
 }
@@ -1893,6 +1895,10 @@ function syncThemeButton(darkEnabled = document.documentElement.classList.contai
 }
 
 function closeSettingsModal() {
+    if (cmrLiteRtSetupStatusListener) {
+        window.removeEventListener('gnosys-litert-setup-status', cmrLiteRtSetupStatusListener);
+        cmrLiteRtSetupStatusListener = null;
+    }
     const modal = document.getElementById('cmr-settings-modal');
     if (!modal || modal.classList.contains('hidden')) return;
     modal.classList.add('hidden');
@@ -1917,6 +1923,7 @@ async function openSettingsModal() {
     const selectEl = document.getElementById('cmr-settings-model-select');
     const bypassToggle = document.getElementById('cmr-settings-bypass-toggle');
     const offlineMsg = document.getElementById('cmr-settings-model-status');
+    const actionStatus = document.getElementById('cmr-settings-model-action-status');
 
     if (!selectEl || !bypassToggle || !offlineMsg) {
         return;
@@ -1927,6 +1934,31 @@ async function openSettingsModal() {
     bypassToggle.checked = localStorage.getItem('chemistry_curriculum_bypass') === 'true';
     offlineMsg.classList.add('hidden');
 
+    const setModelActionStatus = ({ state = 'idle', message = '' } = {}) => {
+        if (!actionStatus) return;
+        actionStatus.textContent = message || 'Ready to switch models or start download.';
+        actionStatus.classList.remove('hidden');
+        if (state === 'working') {
+            actionStatus.style.color = '#d97706';
+        } else if (state === 'success' || state === 'info') {
+            actionStatus.style.color = '#059669';
+        } else if (state === 'error') {
+            actionStatus.style.color = '#dc2626';
+        } else {
+            actionStatus.style.color = '';
+        }
+    };
+
+    if (cmrLiteRtSetupStatusListener) {
+        window.removeEventListener('gnosys-litert-setup-status', cmrLiteRtSetupStatusListener);
+    }
+    cmrLiteRtSetupStatusListener = (event) => {
+        const detail = event?.detail;
+        if (!detail || typeof detail.message !== 'string') return;
+        setModelActionStatus(detail);
+    };
+    window.addEventListener('gnosys-litert-setup-status', cmrLiteRtSetupStatusListener);
+
     const currentModel = typeof window.getGnosysModel === 'function'
         ? window.getGnosysModel('chemistry_llm')
         : (localStorage.getItem('gnosys_active_llm') || localStorage.getItem('chemistry_llm') || 'gemma4:e4b');
@@ -1935,7 +1967,9 @@ async function openSettingsModal() {
         .replace('/api/generate', '');
 
     if (typeof window.populateModelSelector === 'function') {
-        const online = await window.populateModelSelector(selectEl, currentModel, endpoint);
+        const online = await window.populateModelSelector(selectEl, currentModel, endpoint, {
+            onStatusChange: setModelActionStatus,
+        });
         if (!online) {
             offlineMsg.classList.remove('hidden');
         }
@@ -1976,12 +2010,14 @@ function bindSettingsModal() {
         }
     });
 
-    selectEl.addEventListener('change', () => {
-        const val = selectEl.value;
-        if (!val || val === '__custom__') return;
-        localStorage.setItem('gnosys_active_llm', val);
-        localStorage.setItem('chemistry_llm', val);
-    });
+    if (typeof window.populateModelSelector !== 'function') {
+        selectEl.addEventListener('change', () => {
+            const val = selectEl.value;
+            if (!val || val === '__custom__') return;
+            localStorage.setItem('gnosys_active_llm', val);
+            localStorage.setItem('chemistry_llm', val);
+        });
+    }
 
     bypassToggle.addEventListener('change', () => {
         const enabled = bypassToggle.checked;
