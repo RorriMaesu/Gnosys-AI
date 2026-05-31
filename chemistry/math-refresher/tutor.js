@@ -212,7 +212,7 @@ Guidelines:
             if (typingWrap.parentNode) {
                 typingWrap.remove();
             }
-            appendInlineBubble(msgsEl, "assistant", "Could not connect to the local AI provider.");
+            appendInlineBubble(msgsEl, "assistant", `Could not connect to the local AI provider: ${e && e.message ? e.message : e}`);
         }
     }
 

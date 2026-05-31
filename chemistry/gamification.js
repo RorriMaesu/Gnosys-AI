@@ -491,7 +491,7 @@
         if (shieldEl) {
             if (xpData.streakShields > 0) {
                 shieldEl.classList.remove('hidden');
-                shieldEl.textContent = '🛡️'.repeat(xpData.streakShields);
+                shieldEl.textContent = `🛡️${xpData.streakShields}`;
             } else {
                 shieldEl.classList.add('hidden');
             }
@@ -522,8 +522,7 @@
                     <div class="flex justify-between items-center mb-0.5">
                         <span class="text-xs font-semibold ${done ? 'text-emerald-600 line-through dark:text-emerald-400' : 'text-gray-600 dark:text-slate-300'} truncate">${q.label}</span>
                         <span class="text-[10px] font-bold ${done ? 'text-emerald-500' : 'text-amber-500'} ml-2 shrink-0">${done ? '✓' : `${q.current}/${q.target}`} +${q.xpReward}XP</span>
-                    </div>
-                    <div class="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                                 <div class="w-full h-1.5 bg-gray-100 dark:bg-gray-850 rounded-full overflow-hidden">
                         <div class="h-full ${done ? 'bg-emerald-400' : 'bg-amber-400'} rounded-full transition-all duration-500" style="width:${pct}%"></div>
                     </div>
                 </div>
@@ -540,21 +539,21 @@
             if (header.querySelector('.global-level-badge')) return;
 
             // Find where to insert (usually next to the title or inside flex elements)
-            const titleContainer = header.querySelector('.flex.items-center.gap-4, .flex.items-center.space-x-3');
+            const titleContainer = header.querySelector('[data-header-left]') || header.querySelector('.flex.items-center.gap-4, .flex.items-center.space-x-3');
             if (titleContainer) {
                 const badge = document.createElement('div');
-                badge.className = 'global-level-badge relative group cursor-pointer ml-3';
+                badge.className = 'global-level-badge relative group cursor-pointer ml-1.5 xs:ml-3 shrink-0';
                 badge.onclick = () => window.openStatsModal();
                 badge.innerHTML = `
-                    <div class="flex items-center gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-full pl-1 pr-4 py-1 shadow-sm hover:border-amber-300 transition-colors">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-emerald-600 flex items-center justify-center text-white font-black shadow-inner">
+                    <div class="flex items-center gap-1.5 xs:gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-full pl-1 pr-1 sm:pr-4 py-1 shadow-sm hover:border-amber-300 transition-colors">
+                        <div class="w-7 h-7 xs:w-8 xs:h-8 rounded-full bg-gradient-to-br from-amber-400 to-emerald-600 flex items-center justify-center text-white text-xs xs:text-sm font-black shadow-inner shrink-0">
                             <span id="level-num-global">1</span>
                         </div>
-                        <div class="flex flex-col">
+                        <div class="hidden sm:flex flex-col">
                             <span id="level-title-global" class="text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-none mt-0.5">Novice</span>
                             <div class="flex items-center gap-1.5 mt-0.5">
                                 <div class="w-20 h-1.5 bg-gray-100 dark:bg-gray-850 rounded-full overflow-hidden">
-                                    <div id="xp-progress-bar-global" class="h-full bg-amber-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    <div id="xp-progress-bar-global" class="h-full bg-amber-500 rounded-full transition-all duration-555" style="width: 0%"></div>
                                 </div>
                                 <span id="xp-header-text-global" class="text-[10px] font-bold text-amber-600 dark:text-amber-400">0 XP</span>
                             </div>
@@ -565,26 +564,18 @@
             }
 
             // Streak insertion
-            const rightContainer = header.querySelector('.flex.items-center.gap-2, .flex.items-center.space-x-4');
+            const rightContainer = header.querySelector('[data-header-right]') || header.querySelector('.flex.items-center.gap-2, .flex.items-center.space-x-4');
             if (rightContainer && !rightContainer.querySelector('.global-streak-badge')) {
-                // Insert streak and stats button
+                // Insert streak badge
                 const streakBadge = document.createElement('div');
-                streakBadge.className = 'global-streak-badge flex items-center gap-1.5 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 text-orange-800 dark:text-orange-300 px-3 py-2 rounded-xl font-bold text-sm shadow-sm border border-orange-200 dark:border-orange-900/30 whitespace-nowrap';
+                streakBadge.className = 'global-streak-badge flex items-center gap-1 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 text-orange-800 dark:text-orange-300 px-2 py-1.5 xs:px-3 xs:py-2 rounded-xl font-bold text-xs xs:text-sm shadow-sm border border-orange-200 dark:border-orange-900/30 whitespace-nowrap shrink-0';
                 streakBadge.innerHTML = `
                     <i class="fa-solid fa-fire text-orange-500"></i>
                     <span id="streak-counter-global">0</span>
-                    <span id="shield-indicator-global" class="hidden text-xs ml-1"></span>
+                    <span id="shield-indicator-global" class="hidden text-[10px] ml-0.5 opacity-90 font-mono"></span>
                 `;
-                
-                const statsBtn = document.createElement('button');
-                statsBtn.id = 'global-stats-btn';
-                statsBtn.title = 'View Stats & Achievements';
-                statsBtn.className = 'w-9 h-9 rounded-full bg-white hover:bg-slate-50 text-emerald-600 dark:bg-slate-900 dark:border-slate-800 dark:text-emerald-400 dark:hover:bg-slate-850 border border-gray-200 flex items-center justify-center shadow-sm transition-colors shrink-0';
-                statsBtn.innerHTML = '<i class="fa-solid fa-chart-simple"></i>';
-                statsBtn.onclick = () => window.openStatsModal();
 
                 rightContainer.insertBefore(streakBadge, rightContainer.firstChild);
-                rightContainer.insertBefore(statsBtn, rightContainer.children[1]);
             }
         });
     }

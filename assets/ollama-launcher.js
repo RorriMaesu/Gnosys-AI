@@ -1099,6 +1099,30 @@
                     </label>
                 </div>
 
+                <!-- Dark Mode toggle -->
+                <div class="flex items-center justify-between py-3 px-1 border-b border-gray-100 dark:border-slate-800 mb-5">
+                    <div>
+                        <p class="text-sm font-bold text-gray-700 dark:text-slate-200">Dark Mode</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Switch between light and dark themes</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chem-settings-theme-toggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 dark:bg-slate-800 rounded-full peer peer-checked:bg-amber-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5"></div>
+                    </label>
+                </div>
+
+                <!-- Budget Phone Optimizations toggle -->
+                <div class="flex items-center justify-between py-3 px-1 border-b border-gray-100 dark:border-slate-800 mb-5">
+                    <div>
+                        <p class="text-sm font-bold text-gray-700 dark:text-slate-200">Budget Phone Optimizations</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Aggressive memory clean-up for 4GB RAM devices</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chem-settings-lowram-toggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 dark:bg-slate-800 rounded-full peer peer-checked:bg-amber-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5"></div>
+                    </label>
+                </div>
+
                 <!-- Reset Progress action -->
                 <div class="py-3 px-1 mb-6">
                     <button id="chem-settings-reset-btn" class="w-full flex items-center gap-4 p-4 rounded-2xl border border-rose-200 hover:bg-rose-50 dark:border-rose-950/20 dark:hover:bg-rose-950/10 transition-colors text-left group">
@@ -1133,6 +1157,8 @@
 
         const selectEl = overlay.querySelector('#chem-settings-model-select');
         const bypassToggle = overlay.querySelector('#chem-settings-bypass-toggle');
+        const themeToggle = overlay.querySelector('#chem-settings-theme-toggle');
+        const lowramToggle = overlay.querySelector('#chem-settings-lowram-toggle');
         const resetBtn = overlay.querySelector('#chem-settings-reset-btn');
         const purgeBtn = overlay.querySelector('#chem-settings-purge-btn');
         const cancelBtn = overlay.querySelector('#chem-settings-cancel');
@@ -1141,6 +1167,10 @@
         const currentModel = window.getGnosysModel('chemistry_llm');
         const isBypass = localStorage.getItem('chemistry_curriculum_bypass') === 'true';
         bypassToggle.checked = isBypass;
+        themeToggle.checked = document.documentElement.classList.contains('dark');
+        if (lowramToggle) {
+            lowramToggle.checked = localStorage.getItem('gnosys_lowram_optimizations') === 'true';
+        }
 
         const endpoint = localStorage.getItem("chemistry_ollama_endpoint") || "http://localhost:11434";
         const cleanEndpoint = endpoint.replace('/api/chat', '').replace('/api/generate', '');
@@ -1164,6 +1194,21 @@
             localStorage.setItem('chemistry_curriculum_bypass', String(enabled));
             window.dispatchEvent(new CustomEvent('curriculumBypassChanged', { detail: { enabled } }));
         });
+
+        themeToggle.addEventListener('change', () => {
+            const isDark = themeToggle.checked;
+            document.documentElement.classList.toggle('dark', isDark);
+            localStorage.setItem('chemistry_darkmode', String(isDark));
+            window.dispatchEvent(new CustomEvent('chemistry-theme-changed', { detail: { isDark } }));
+        });
+
+        if (lowramToggle) {
+            lowramToggle.addEventListener('change', () => {
+                const enabled = lowramToggle.checked;
+                localStorage.setItem('gnosys_lowram_optimizations', String(enabled));
+                console.log(`[Chemistry Settings] Budget Phone Optimizations toggled: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+            });
+        }
 
         const closeModal = () => {
             overlay.classList.remove('opacity-100');

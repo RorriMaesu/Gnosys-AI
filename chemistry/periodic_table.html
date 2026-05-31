@@ -39,6 +39,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     
     <style>
+        html, body { overflow-x: hidden; width: 100%; }
         body { font-family: 'Inter', sans-serif; }
         
         /* Custom scrollbar matching existing panels */
@@ -101,21 +102,20 @@
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 h-screen flex flex-col overflow-hidden">
 
-    <!-- Global Chemistry Header -->
-    <header class="bg-white border-b border-slate-200 dark:bg-slate-950 dark:border-slate-850 px-6 py-4 flex items-center justify-between shadow-sm shrink-0">
-        <div class="flex items-center space-x-3">
-            <div class="p-2 bg-amber-500/10 text-amber-500 rounded border border-amber-500/20">
-                <i class="fa-solid fa-table-cells-large text-xl"></i>
+    <header class="bg-white border-b border-slate-200 dark:bg-slate-950 dark:border-slate-850 px-3 py-2.5 sm:px-6 sm:py-4 flex items-center justify-between shadow-sm shrink-0">
+        <div class="flex items-center space-x-2 sm:space-x-3 min-w-0" data-header-left>
+            <div class="p-1.5 sm:p-2 bg-amber-500/10 text-amber-500 rounded border border-amber-500/20 shrink-0">
+                <i class="fa-solid fa-table-cells-large text-lg sm:text-xl"></i>
             </div>
-            <div>
-                <h1 class="text-lg font-bold tracking-wider text-amber-600 dark:text-amber-500">CH 104Z / 124Z</h1>
-                <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Introductory Chemistry Sandbox</p>
+            <div class="min-w-0">
+                <h1 class="text-xs sm:text-base md:text-lg font-bold tracking-wider text-amber-600 dark:text-amber-500 truncate">CH 104Z / 124Z</h1>
+                <p class="hidden sm:block text-[9px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium truncate">Introductory Chemistry Sandbox</p>
             </div>
         </div>
 
         <!-- Navigation -->
-        <div class="flex items-center space-x-4">
-            <nav class="flex items-center space-x-1 mr-4">
+        <div class="flex items-center space-x-2 sm:space-x-4" data-header-right>
+            <nav class="hidden lg:flex items-center space-x-1 mr-4">
                 <a href="index.html" class="px-3 py-1.5 rounded text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition hover:bg-slate-100 dark:hover:bg-slate-800">
                     <i class="fa-solid fa-house mr-2"></i>Skills Lab
                 </a>
@@ -130,10 +130,46 @@
                 </a>
             </nav>
 
-            <!-- Theme Toggle -->
-            <button id="btn-darkmode" title="Toggle Dark Mode" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white flex items-center justify-center shadow-sm transition">
-                <i class="fa-solid fa-moon"></i>
+            <!-- Settings & Theme -->
+            <button id="btn-settings" title="Settings & Reset" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white hidden md:flex items-center justify-center shadow-sm transition shrink-0">
+                <i class="fa-solid fa-gear text-sm"></i>
             </button>
+
+            <!-- Mobile Dropdown Trigger -->
+            <div class="relative lg:hidden shrink-0">
+                <button id="btn-mobile-menu" type="button" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-850 hover:bg-slate-200 text-slate-600 dark:text-slate-300 flex items-center justify-center shadow-sm border border-slate-200 dark:border-slate-800 transition-colors" onclick="toggleMobileHeaderMenu()">
+                    <i class="fa-solid fa-bars text-sm"></i>
+                </button>
+                <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-2xl z-[100] p-2 flex flex-col gap-1">
+                    <a href="index.html" class="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-house text-slate-400"></i> Skills Lab
+                    </a>
+                    <a href="coursework.html" class="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-graduation-cap text-slate-400"></i> Coursework
+                    </a>
+                    <a href="#" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-table-cells"></i> Periodic Table
+                    </a>
+                    <a href="assignments.html" class="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-clipboard-list text-slate-400"></i> Homework Binder
+                    </a>
+                    <hr class="border-slate-100 dark:border-slate-900 my-1" />
+                    <div class="px-2 py-1 flex justify-center">
+                        <span data-llm-provider-badge class="text-[10px]">● Checking AI Route...</span>
+                    </div>
+                    <hr class="border-slate-100 dark:border-slate-900 my-1" />
+                    <button onclick="if(typeof window.openStatsModal === 'function') { window.openStatsModal(); } toggleMobileHeaderMenu();" class="w-full px-3.5 py-2 text-left rounded-xl text-xs font-bold text-emerald-600 dark:text-emerald-450 hover:bg-slate-100 dark:hover:bg-slate-900 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-chart-simple text-emerald-500"></i> Stats & Achievements
+                    </button>
+                    <button onclick="if(typeof window.openChemistrySettingsModal === 'function') { window.openChemistrySettingsModal(); } else if (typeof window.confirmAndResetChemistryProgress === 'function') { window.confirmAndResetChemistryProgress(); } toggleMobileHeaderMenu();" class="w-full px-3.5 py-2 text-left rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-gear text-slate-400"></i> Settings & Preferences
+                    </button>
+                    <hr class="border-slate-100 dark:border-slate-900 my-1" />
+                    <a href="https://buymeacoffee.com/rorrimaesu" target="_blank" rel="noopener noreferrer" onclick="toggleMobileHeaderMenu();" class="px-3.5 py-2 rounded-xl text-xs font-bold text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/20 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-mug-hot text-yellow-500"></i> Donate / Support App
+                    </a>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -221,6 +257,7 @@
 
     <!-- Scripts (Load Three.js dependency, and our customized visual/logic stack) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="../assets/llm-router.js?v=1.1.2"></script>
     <script src="../assets/ollama-launcher.js"></script>
     <script src="ai-tutor.js"></script>
     <script src="periodic-table/three-orbital.js"></script>
@@ -679,12 +716,19 @@
             // Initialize chat history rendering on load
             loadChatHistory();
 
-            // Darkmode toggle handler
-            const btnDark = document.getElementById('btn-darkmode');
-            btnDark.addEventListener('click', () => {
-                const html = document.documentElement;
-                const isDark = html.classList.toggle('dark');
-                localStorage.setItem('chemistry_darkmode', isDark);
+            // Settings modal click handler
+            const btnSettings = document.getElementById('btn-settings');
+            if (btnSettings) {
+                btnSettings.addEventListener('click', () => {
+                    if (typeof window.openChemistrySettingsModal === 'function') {
+                        window.openChemistrySettingsModal();
+                    }
+                });
+            }
+
+            // Listen for global theme changes from the settings modal
+            window.addEventListener('chemistry-theme-changed', (e) => {
+                const isDark = e.detail.isDark;
                 if (table.threeRenderer) {
                     table.threeRenderer.setTheme(isDark);
                 }
@@ -704,6 +748,17 @@
                 aside.classList.toggle('show-mobile-tutor');
             }
         }
+        function toggleMobileHeaderMenu() {
+            const dropdown = document.getElementById('mobile-menu-dropdown');
+            if (dropdown) dropdown.classList.toggle('hidden');
+        }
+        window.addEventListener('click', function(e) {
+            const dropdown = document.getElementById('mobile-menu-dropdown');
+            const trigger = document.getElementById('btn-mobile-menu');
+            if (dropdown && trigger && !trigger.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
     </script>
 </body>
 </html>

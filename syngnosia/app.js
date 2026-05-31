@@ -3284,8 +3284,9 @@ async function checkOllamaStatus() {
             }
         }
     } catch {}
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     dot.className = 'inline-block w-2 h-2 rounded-full bg-amber-500';
-    text.textContent = 'Mobile Setup Required';
+    text.textContent = isMobile ? 'Mobile Setup Required' : 'Ollama Offline (Tap to Launch)';
     banner.classList.remove('hidden');
     return false;
 }

@@ -150,8 +150,9 @@ window.PsychTutor = (() => {
                             const statusText = document.getElementById('chat-status-text');
                             const statusDot = document.getElementById('chat-status-dot');
                             if (statusText && statusDot) {
+                                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
                                 const display = window.GnosysLLM?.getTutorStatusDisplay?.(window.GnosysLLM?.getStatus?.());
-                                statusText.textContent = display?.text || 'Mobile Setup Required';
+                                statusText.textContent = display?.text || (isMobile ? 'Mobile Setup Required' : 'Ollama Offline (Tap to Launch)');
                                 statusDot.className = display?.dotClass || 'inline-block w-2 h-2 rounded-full bg-amber-500';
                             }
                         }
@@ -180,7 +181,8 @@ window.PsychTutor = (() => {
             const statusText = document.getElementById('chat-status-text');
             const statusDot = document.getElementById('chat-status-dot');
             if (statusText && statusDot) {
-                statusText.textContent = 'Mobile Setup Required';
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                statusText.textContent = isMobile ? 'Mobile Setup Required' : 'Ollama Offline (Tap to Launch)';
                 statusDot.className = 'inline-block w-2 h-2 rounded-full bg-amber-500';
             }
         }
@@ -207,13 +209,15 @@ window.PsychTutor = (() => {
                     if (window.GnosysLLM && typeof window.GnosysLLM.init === 'function') {
                         const status = await window.GnosysLLM.init();
                         const display = window.GnosysLLM?.getTutorStatusDisplay?.(status);
-                        statusText.textContent = display?.text || 'Mobile Setup Required';
+                        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                        statusText.textContent = display?.text || (isMobile ? 'Mobile Setup Required' : 'Ollama Offline (Tap to Launch)');
                         statusDot.className = display?.dotClass || 'inline-block w-2 h-2 rounded-full bg-amber-500';
                         return;
                     }
                     throw new Error('Provider not ready');
                 } catch(e) {
-                    statusText.textContent = 'Mobile Setup Required';
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    statusText.textContent = isMobile ? 'Mobile Setup Required' : 'Ollama Offline (Tap to Launch)';
                     statusDot.className = 'inline-block w-2 h-2 rounded-full bg-amber-500';
                 }
             };

@@ -3336,8 +3336,9 @@ function bindTutorActions() {
                 return display.connected;
             }
         } catch {}
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         dot.className = "inline-block w-2 h-2 rounded-full bg-amber-500";
-        text.textContent = "Mobile Setup Required";
+        text.textContent = isMobile ? "Mobile Setup Required" : "Ollama Offline (Tap to Launch)";
         return false;
     };
 
@@ -3509,7 +3510,7 @@ function bindTutorActions() {
                 delete window.gnosysActiveModelsCache[currentModel];
             }
             typingWrap.remove();
-            appendBubble("assistant", "Could not connect to the local AI provider.");
+            appendBubble("assistant", `Could not connect to the local AI provider: ${e && e.message ? e.message : e}`);
         }
 
         input.disabled = false;
@@ -4026,6 +4027,9 @@ function bindTabs() {
             if (label) { label.classList.add('text-amber-600'); label.classList.remove('text-gray-400'); }
             activeBBtn.setAttribute('aria-selected', 'true');
             activeBBtn.setAttribute('tabindex', '0');
+            
+            // Smooth scroll selected button to center of bottom nav bar
+            activeBBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }
     };
 
@@ -4678,7 +4682,7 @@ function bindConversionActions() {
         
         // Start block
         const startDiv = document.createElement("div");
-        startDiv.className = "flex flex-col items-center justify-center px-4 py-2 border-r-2 border-gray-300";
+        startDiv.className = "flex flex-col items-center justify-center px-4 py-2 border-r-2 border-gray-300 shrink-0";
         startDiv.dataset.daRole = "start";
         startDiv.innerHTML = `<span class="font-bold text-gray-800">${valueInput.value || 0}</span><span class="text-gray-500 font-semibold">${fromSelect.value}</span>`;
         chainContainer.appendChild(startDiv);
@@ -4686,7 +4690,7 @@ function bindConversionActions() {
         // Factor fractions
         daChain.forEach((factor, idx) => {
             const frac = document.createElement("div");
-            frac.className = "flex flex-col items-center justify-center px-4 relative";
+            frac.className = "flex flex-col items-center justify-center px-4 relative shrink-0";
             frac.dataset.daRole = "factor";
             frac.dataset.daFactorIndex = String(idx);
             if (factor.type === "formula") {
@@ -4704,7 +4708,7 @@ function bindConversionActions() {
             
             if (idx < daChain.length - 1) {
                 const mult = document.createElement("div");
-                mult.className = "text-xl font-bold text-gray-400 px-1";
+                mult.className = "text-xl font-bold text-gray-400 px-1 shrink-0";
                 mult.dataset.daRole = "multiply";
                 mult.innerHTML = "&times;";
                 chainContainer.appendChild(mult);
@@ -7294,7 +7298,7 @@ window.ChemTutor = (() => {
                 delete window.gnosysActiveModelsCache[currentModel];
             }
             typingWrap.remove();
-            appendInlineBubble(msgsEl, "assistant", "Could not connect to the local AI provider.");
+            appendInlineBubble(msgsEl, "assistant", `Could not connect to the local AI provider: ${e && e.message ? e.message : e}`);
         }
     }
 
