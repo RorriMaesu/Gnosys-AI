@@ -3709,6 +3709,12 @@ function bindVideoActions() {
         }
         closeVideoQuiz();
         modalOpen = true;
+
+        const viewEl = document.getElementById("view-videos");
+        if (viewEl) {
+            viewEl.classList.add("video-active-flow");
+        }
+
         modalEl.classList.remove("hidden");
         modalEl.setAttribute("aria-hidden", "false");
         modalCloseBtn.focus();
@@ -3718,6 +3724,12 @@ function bindVideoActions() {
         if (!modalOpen) return;
         closeVideoQuiz();
         modalOpen = false;
+
+        const viewEl = document.getElementById("view-videos");
+        if (viewEl) {
+            viewEl.classList.remove("video-active-flow");
+        }
+
         modalEl.classList.add("hidden");
         modalEl.setAttribute("aria-hidden", "true");
         iframeEl.src = "";

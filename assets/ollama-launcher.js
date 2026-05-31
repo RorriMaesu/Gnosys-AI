@@ -924,7 +924,30 @@
             selectEl.appendChild(otherGroup);
         }
 
-        const isCurrentInstalledOrRec = RECOMMENDED_MODELS.some(m => m.value === currentModel) || checkInstalled(currentModel);
+        // Add Browser-Native LiteRT Models
+        const litertGroup = document.createElement('optgroup');
+        litertGroup.label = 'Browser-Native (WebGPU Accelerated, No Setup)';
+        
+        const LITERT_TIERS = [
+            { value: 'smollm-135m-ultra', label: 'SmolLM2 Ultra-Light (135M)', size: '250MB' },
+            { value: 'gemma-4-e2b', label: 'Gemma 4 Efficient (2.5B)', size: '2.1GB' },
+            { value: 'gemma-4-e4b', label: 'Gemma 4 Pro (4.5B)', size: '3.2GB' }
+        ];
+
+        LITERT_TIERS.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = `litert:${t.value}`;
+            opt.textContent = `${t.label} (~${t.size})`;
+            if (`litert:${t.value}` === currentModel) {
+                opt.selected = true;
+            }
+            litertGroup.appendChild(opt);
+        });
+        selectEl.appendChild(litertGroup);
+
+        const isCurrentInstalledOrRec = RECOMMENDED_MODELS.some(m => m.value === currentModel) || 
+                                        checkInstalled(currentModel) || 
+                                        currentModel.startsWith('litert:');
         if (!isCurrentInstalledOrRec && currentModel && currentModel !== '__custom__' && currentModel !== 'gemma4:e4b') {
             const unlistedGroup = document.createElement('optgroup');
             unlistedGroup.label = 'Currently Active Model';
@@ -935,6 +958,7 @@
             unlistedGroup.appendChild(opt);
             selectEl.appendChild(unlistedGroup);
         }
+
 
         const divider = document.createElement('option');
         divider.disabled = true;
@@ -993,7 +1017,8 @@
         }
 
         const handleSelectChange = () => {
-            if (selectEl.value === '__custom__') {
+            const val = selectEl.value;
+            if (val === '__custom__') {
                 const writeIn = prompt('Enter the custom Ollama model tag (e.g. deepseek-coder:6.7b):');
                 if (writeIn && writeIn.trim()) {
                     const cleanedModel = writeIn.trim();
@@ -1014,6 +1039,22 @@
                 } else {
                     selectEl.value = currentModel;
                 }
+            } else if (val.startsWith('litert:')) {
+                const modelId = val.substring(7);
+                localStorage.setItem('gnosys_llm_route_mode', 'mobile-ondevice');
+                localStorage.setItem('gnosys_ondevice_selected_model', modelId);
+                localStorage.setItem('gnosys_active_llm', val);
+                localStorage.setItem('chemistry_llm', val);
+                if (window.GnosysLLM) {
+                    window.GnosysLLM.init();
+                }
+            } else {
+                localStorage.setItem('gnosys_llm_route_mode', 'desktop-ollama');
+                localStorage.setItem('gnosys_active_llm', val);
+                localStorage.setItem('chemistry_llm', val);
+                if (window.GnosysLLM) {
+                    window.GnosysLLM.init();
+                }
             }
         };
         selectEl.removeEventListener('change', selectEl._gnosysCustomHandler);
@@ -1024,6 +1065,11 @@
     };
 
     window.getGnosysModel = function(moduleKey = null) {
+        const routeMode = localStorage.getItem('gnosys_llm_route_mode');
+        if (routeMode === 'mobile-ondevice') {
+            const modelId = localStorage.getItem('gnosys_ondevice_selected_model') || 'gemma-4-e2b';
+            return `litert:${modelId}`;
+        }
         const shared = localStorage.getItem('gnosys_active_llm');
         if (shared) return shared;
         if (moduleKey) {
@@ -1034,6 +1080,10 @@
     };
 
     window.getActiveModel = function(moduleKey = null, fallbackModel = 'gemma4:e4b') {
+        const routeMode = localStorage.getItem('gnosys_llm_route_mode');
+        if (routeMode === 'mobile-ondevice') {
+            return localStorage.getItem('gnosys_ondevice_selected_model') || 'gemma-4-e2b';
+        }
         const shared = localStorage.getItem('gnosys_active_llm');
         if (shared && shared.trim()) return shared.trim();
         if (moduleKey) {
@@ -1046,6 +1096,13 @@
     window.formatModelLabel = function(modelTag) {
         const raw = String(modelTag || '').trim();
         if (!raw) return 'Local Model';
+        if (raw.startsWith('litert:')) {
+            const id = raw.substring(7);
+            if (id === 'smollm-135m-ultra') return 'SmolLM2 135M';
+            if (id === 'gemma-4-e2b') return 'Gemma 4 2.5B';
+            if (id === 'gemma-4-e4b') return 'Gemma 4 4.5B';
+            return id;
+        }
         return raw.replace(/:latest$/i, '');
     };
 
@@ -1183,9 +1240,22 @@
 
         selectEl.addEventListener('change', () => {
             const val = selectEl.value;
-            if (val !== '__custom__') {
+            if (val.startsWith('litert:')) {
+                const modelId = val.substring(7);
+                localStorage.setItem('gnosys_llm_route_mode', 'mobile-ondevice');
+                localStorage.setItem('gnosys_ondevice_selected_model', modelId);
                 localStorage.setItem('gnosys_active_llm', val);
                 localStorage.setItem('chemistry_llm', val);
+                if (window.GnosysLLM) {
+                    window.GnosysLLM.init();
+                }
+            } else if (val !== '__custom__') {
+                localStorage.setItem('gnosys_llm_route_mode', 'desktop-ollama');
+                localStorage.setItem('gnosys_active_llm', val);
+                localStorage.setItem('chemistry_llm', val);
+                if (window.GnosysLLM) {
+                    window.GnosysLLM.init();
+                }
             }
         });
 

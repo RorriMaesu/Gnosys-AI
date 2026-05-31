@@ -130,6 +130,122 @@
         return MODEL_TIERS[selectedId] || MODEL_TIERS[defaultModel] || MODEL_TIERS['gemma-4-e2b'];
     }
 
+    async function getClientHardwareInfo() {
+        let ramGb = navigator.deviceMemory || 8.0;
+        const cores = navigator.hardwareConcurrency || 4;
+        let gpuName = 'Unknown/Generic GPU';
+        let gpuVendor = 'unknown';
+        let webGpuAvailable = Boolean(navigator.gpu);
+        let vramGb = 0;
+
+        // Try Python server first if we are on desktop
+        if (!isMobileDevice) {
+            try {
+                const res = await fetch('/api/hardware-info', { signal: AbortSignal.timeout(1500) });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'success' && data.hardware) {
+                        ramGb = data.hardware.system_ram_gb || ramGb;
+                        if (data.hardware.gpus && data.hardware.gpus.length > 0) {
+                            const gpu = data.hardware.gpus[0];
+                            gpuName = gpu.name;
+                            gpuVendor = gpu.vendor;
+                            vramGb = gpu.vram_mb / 1024;
+                        } else if (data.hardware.max_vram_mb) {
+                            vramGb = data.hardware.max_vram_mb / 1024;
+                        }
+                        
+                        return {
+                            ramGb,
+                            cores,
+                            gpuName,
+                            gpuVendor,
+                            vramGb: Math.round(vramGb),
+                            hasGamingGpu: gpuVendor === 'nvidia' || gpuVendor === 'amd' || data.hardware.is_mac_silicon,
+                            webGpuAvailable
+                        };
+                    }
+                }
+            } catch (e) {
+                console.warn('[GnosysLLM] Failed to fetch server hardware info:', e);
+            }
+        }
+
+        if (webGpuAvailable) {
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (adapter) {
+                    let info = null;
+                    if (typeof adapter.requestAdapterInfo === 'function') {
+                        info = await adapter.requestAdapterInfo();
+                    } else if (adapter.info) {
+                        info = adapter.info;
+                    }
+                    if (info) {
+                        gpuName = info.description || info.device || gpuName;
+                        gpuVendor = (info.vendor || '').toLowerCase();
+                    }
+                }
+            } catch (e) {
+                console.warn('[GnosysLLM] WebGPU hardware query failed:', e);
+            }
+        }
+
+        if (gpuName === 'Unknown/Generic GPU') {
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (gl) {
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (debugInfo) {
+                        const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || '';
+                        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '';
+                        gpuName = renderer || gpuName;
+                        const vLower = vendor.toLowerCase();
+                        if (vLower.includes('nvidia')) gpuVendor = 'nvidia';
+                        else if (vLower.includes('amd') || vLower.includes('radeon')) gpuVendor = 'amd';
+                        else if (vLower.includes('intel')) gpuVendor = 'intel';
+                        else if (vLower.includes('apple')) gpuVendor = 'apple';
+                    }
+                }
+            } catch (e) {
+                console.warn('[GnosysLLM] WebGL hardware query failed:', e);
+            }
+        }
+
+        const gpuNameLower = gpuName.toLowerCase();
+        if (gpuVendor === 'unknown') {
+            if (gpuNameLower.includes('nvidia')) gpuVendor = 'nvidia';
+            else if (gpuNameLower.includes('amd') || gpuNameLower.includes('radeon')) gpuVendor = 'amd';
+            else if (gpuNameLower.includes('intel')) gpuVendor = 'intel';
+            else if (gpuNameLower.includes('apple')) gpuVendor = 'apple';
+        }
+
+        let hasGamingGpu = false;
+        if (gpuVendor === 'nvidia') {
+            hasGamingGpu = true;
+        } else if (gpuVendor === 'amd') {
+            if (!gpuNameLower.includes('integrated') && !gpuNameLower.includes('graphics') && !gpuNameLower.includes('apu')) {
+                hasGamingGpu = true;
+            }
+        } else if (gpuVendor === 'apple') {
+            if (gpuNameLower.includes('m1') || gpuNameLower.includes('m2') || gpuNameLower.includes('m3') || gpuNameLower.includes('m4') || gpuNameLower.includes('apple m')) {
+                hasGamingGpu = true;
+            }
+        }
+
+        return {
+            ramGb,
+            cores,
+            gpuName,
+            gpuVendor,
+            vramGb,
+            hasGamingGpu,
+            webGpuAvailable
+        };
+    }
+
+
     const state = {
         initialized: false,
         initPromise: null,
@@ -157,6 +273,7 @@
         purgeModelStorage,
         getActiveDesktopModel,
         getPrettyModelName,
+        getClientHardwareInfo,
     };
 
     window.GnosysLLM = routerApi;
@@ -189,70 +306,72 @@
             const ollamaOk = await probeOllamaTags();
             state.lastProbeOk = ollamaOk;
 
-            if (ollamaOk) {
+            let routeMode = localStorage.getItem(STORAGE_KEYS.routeMode) || '';
+            let onDeviceReady = localStorage.getItem(STORAGE_KEYS.onDeviceReady) === 'true';
+            let downloadInProgress = localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true';
+            let storageMode = localStorage.getItem(STORAGE_KEYS.onDeviceStorageMode) || 'localfile';
+
+            let isReady = false;
+            let hasPartialModel = false;
+
+            if (state.isWebGpuSupported) {
+                if (storageMode === 'localfile') {
+                    const activeConfig = getActiveModelConfig();
+                    const hasFsaHandle = ('showSaveFilePicker' in window || 'showOpenFilePicker' in window) && Boolean(await getFileHandle(activeConfig.id));
+                    const hasSavedMetadata = Boolean(localStorage.getItem(STORAGE_KEYS.onDeviceLocalFileMetadata));
+                    isReady = onDeviceReady && (hasFsaHandle || Boolean(selectedLocalFile) || hasSavedMetadata);
+                    hasPartialModel = !isReady && (hasFsaHandle || hasSavedMetadata);
+                } else {
+                    let onDeviceFile = await getOpfsModelFile();
+                    const expectedSize = Number(localStorage.getItem(STORAGE_KEYS.onDeviceExpectedSize) || 0);
+                    hasPartialModel = Boolean(onDeviceFile) && !onDeviceReady;
+                    const hasCorruptInstalledModel = Boolean(onDeviceReady && onDeviceFile && expectedSize > 0 && onDeviceFile.size !== expectedSize);
+
+                    if (hasCorruptInstalledModel || (onDeviceReady && !onDeviceFile)) {
+                        await purgeModelStorage({ suppressModal: true });
+                        routeMode = localStorage.getItem(STORAGE_KEYS.routeMode) || '';
+                        onDeviceReady = false;
+                        downloadInProgress = false;
+                        onDeviceFile = null;
+                    }
+                    isReady = onDeviceReady && Boolean(onDeviceFile);
+                }
+            }
+
+            if (routeMode === 'mobile-ondevice' && state.isWebGpuSupported) {
+                if (isReady) {
+                    state.provider = createLiteRtProvider();
+                    setProvider('mobile-litert');
+                    state.mobileChoicePending = false;
+                } else {
+                    state.provider = null;
+                    state.mobileChoicePending = true;
+                    setProvider('mobile-choice-required');
+                    queueMicrotask(() => showMobileChoiceModal());
+                }
+            } else if (ollamaOk && routeMode !== 'no-ai') {
                 state.provider = createOllamaProvider();
                 setProvider('desktop-ollama');
                 state.mobileChoicePending = false;
             } else {
-                if (!isMobileDevice) {
+                if (routeMode === 'no-ai') {
+                    state.provider = createNoAiProvider();
+                    setProvider('no-ai');
+                    state.mobileChoicePending = false;
+                } else if (!isMobileDevice) {
                     state.provider = createNoAiProvider();
                     setProvider('no-ai');
                     state.mobileChoicePending = false;
                     queueMicrotask(() => showDesktopOllamaLaunchModal());
                 } else {
-                    let routeMode = localStorage.getItem(STORAGE_KEYS.routeMode) || '';
-                    let onDeviceReady = localStorage.getItem(STORAGE_KEYS.onDeviceReady) === 'true';
-                    let downloadInProgress = localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true';
-                    let storageMode = localStorage.getItem(STORAGE_KEYS.onDeviceStorageMode) || 'localfile';
-
-                    let isReady = false;
-                    let hasPartialModel = false;
-
-                    if (storageMode === 'localfile') {
-                        const activeConfig = getActiveModelConfig();
-                        const hasFsaHandle = ('showSaveFilePicker' in window || 'showOpenFilePicker' in window) && Boolean(await getFileHandle(activeConfig.id));
-                        const hasSavedMetadata = Boolean(localStorage.getItem(STORAGE_KEYS.onDeviceLocalFileMetadata));
-                        isReady = onDeviceReady && (hasFsaHandle || Boolean(selectedLocalFile) || hasSavedMetadata);
-                        hasPartialModel = !isReady && (hasFsaHandle || hasSavedMetadata);
-                    } else {
-                        let onDeviceFile = await getOpfsModelFile();
-                        const expectedSize = Number(localStorage.getItem(STORAGE_KEYS.onDeviceExpectedSize) || 0);
-                        hasPartialModel = Boolean(onDeviceFile) && !onDeviceReady;
-                        const hasCorruptInstalledModel = Boolean(onDeviceReady && onDeviceFile && expectedSize > 0 && onDeviceFile.size !== expectedSize);
-
-                        if (hasCorruptInstalledModel || (onDeviceReady && !onDeviceFile)) {
-                            await purgeModelStorage({ suppressModal: true });
-                            routeMode = localStorage.getItem(STORAGE_KEYS.routeMode) || '';
-                            onDeviceReady = false;
-                            downloadInProgress = false;
-                            onDeviceFile = null;
-                        }
-                        isReady = onDeviceReady && Boolean(onDeviceFile);
-                    }
-
-                    if (routeMode === 'no-ai') {
-                        state.provider = createNoAiProvider();
-                        setProvider('no-ai');
-                        state.mobileChoicePending = false;
-                    } else if (state.isWebGpuSupported && routeMode === 'mobile-ondevice' && isReady) {
-                        state.provider = createLiteRtProvider();
-                        setProvider('mobile-litert');
-                        state.mobileChoicePending = false;
-                    } else if (state.isWebGpuSupported && routeMode === 'mobile-ondevice' && (downloadInProgress || hasPartialModel)) {
-                        state.provider = null;
-                        state.mobileChoicePending = true;
-                        setProvider('mobile-choice-required');
+                    state.provider = null;
+                    state.mobileChoicePending = true;
+                    const providerName = !state.isWebGpuSupported
+                        ? 'mobile-webgpu-unsupported'
+                        : 'mobile-choice-required';
+                    setProvider(providerName);
+                    if (state.isWebGpuSupported) {
                         queueMicrotask(() => showMobileChoiceModal());
-                    } else {
-                        state.provider = null;
-                        state.mobileChoicePending = true;
-                        const providerName = !state.isWebGpuSupported
-                            ? 'mobile-webgpu-unsupported'
-                            : 'mobile-choice-required';
-                        setProvider(providerName);
-                        if (state.isWebGpuSupported) {
-                            queueMicrotask(() => showMobileChoiceModal());
-                        }
                     }
                 }
             }
@@ -1390,6 +1509,22 @@
                 background:rgba(245,158,11,0.13);
                 border-color:rgba(245,158,11,0.35);
             }
+            .gnosys-seg-btn {
+                background: transparent;
+                border: none;
+                border-radius: 9px;
+                padding: 6px 12px;
+                font-size: 0.72rem;
+                font-weight: 700;
+                color: #94a3b8;
+                cursor: pointer;
+                transition: all 0.2s ease-in-out;
+            }
+            .gnosys-seg-btn.active {
+                background: #1e293b;
+                color: #f8fafc;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            }
             #gnosys-llm-mobile-choice-card {
                 max-width:560px;
                 width:100%;
@@ -1524,8 +1659,10 @@
         }, 2500);
     }
 
-    function showDesktopOllamaLaunchModal() {
+    async function showDesktopOllamaLaunchModal() {
         if (document.getElementById('gnosys-desktop-ollama-modal')) return;
+
+        const hw = await getClientHardwareInfo();
 
         const overlay = document.createElement('div');
         overlay.id = 'gnosys-desktop-ollama-modal';
@@ -1541,25 +1678,62 @@
             'padding:16px',
         ].join(';');
 
+        let warningBannerHtml = '';
+        if (!hw.hasGamingGpu) {
+            warningBannerHtml = `
+                <div style="margin-bottom:16px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);border-radius:12px;font-size:0.78rem;color:#fca5a5;text-align:left;line-height:1.4;">
+                    <strong>⚠️ No Dedicated Gaming GPU Detected:</strong><br>
+                    Ollama will run desktop models on your CPU, which will be extremely slow. We recommend running our WebGPU-accelerated models directly in your browser.
+                </div>
+            `;
+        }
+
+        let browserBtnHtml = '';
+        if (hw.webGpuAvailable) {
+            browserBtnHtml = `
+                <button id="gnosys-desktop-launch-browser" style="border:1px solid #7c3aed;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#f5f3ff;font-size:0.85rem;font-weight:800;padding:12px 20px;border-radius:12px;cursor:pointer;transition:all 0.2s;flex:1;">
+                    Run Locally in Browser
+                </button>
+            `;
+        }
+
+        let gpuDisplayStr = hw.gpuName.replace(/ANGLE \([^,]+, |, Direct3D.*$/g, '');
+        if (hw.vramGb) {
+            gpuDisplayStr += ` (${hw.vramGb}GB VRAM)`;
+        }
+
         overlay.innerHTML = `
             <div style="max-width:480px;width:100%;background:#0f172a;border:1px solid #334155;border-radius:22px;padding:24px;color:#e2e8f0;box-shadow:0 20px 60px rgba(0,0,0,0.5);text-align:center;">
                 <div style="font-size:3rem;margin-bottom:12px;display:inline-block;animation:float 3s ease-in-out infinite;">🤖</div>
-                <h3 style="margin:0 0 10px 0;font-size:1.2rem;font-weight:800;color:#f8fafc;">Local AI Connection Offline</h3>
+                <h3 style="margin:0 0 4px 0;font-size:1.2rem;font-weight:800;color:#f8fafc;">Local AI Connection Offline</h3>
+                
+                <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:12px;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:10px;display:inline-flex;gap:12px;border:1px solid rgba(255,255,255,0.05);align-items:center;">
+                    <span><strong>GPU:</strong> ${gpuDisplayStr}</span>
+                    <span>|</span>
+                    <span><strong>RAM:</strong> ~${Math.round(hw.ramGb)} GB</span>
+                </div>
+
+
+                ${warningBannerHtml}
+
                 <p style="margin:0 0 20px 0;color:#94a3b8;font-size:0.88rem;line-height:1.5;">
-                    Gnosys-AI could not reach Ollama at <span style="font-family:monospace;color:#14b8a6;">localhost:11434</span>.<br><br>
-                    Would you like Gnosys to search for and launch the local Ollama application on your system?
+                    Gnosys-AI could not reach Ollama at <span style="font-family:monospace;color:#14b8a6;">localhost:11434</span>.<br>
+                    Would you like to start the Ollama application, or run models inside the browser sandbox?
                 </p>
                 
                 <div id="gnosys-desktop-launch-status" style="display:none;font-size:0.8rem;color:#f59e0b;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);padding:10px;border-radius:10px;margin-bottom:16px;line-height:1.4;">
                     Searching and initiating Ollama launch...
                 </div>
 
-                <div style="display:flex;gap:12px;justify-content:center;">
-                    <button id="gnosys-desktop-launch-yes" style="border:1px solid #0f766e;background:linear-gradient(135deg,#0d9488,#0f766e);color:#ecfeff;font-size:0.85rem;font-weight:800;padding:12px 24px;border-radius:12px;cursor:pointer;transition:all 0.2s;flex:1;">
-                        Yes, Launch Ollama
-                    </button>
-                    <button id="gnosys-desktop-launch-cancel" style="border:1px solid #334155;background:#1e293b;color:#f8fafc;font-size:0.85rem;font-weight:800;padding:12px 24px;border-radius:12px;cursor:pointer;transition:all 0.2s;flex:1;">
-                        Not Now
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    <div style="display:flex;gap:10px;width:100%;">
+                        <button id="gnosys-desktop-launch-yes" style="border:1px solid #0f766e;background:linear-gradient(135deg,#0d9488,#0f766e);color:#ecfeff;font-size:0.85rem;font-weight:800;padding:12px 20px;border-radius:12px;cursor:pointer;transition:all 0.2s;flex:1;">
+                            Launch Ollama App
+                        </button>
+                        ${browserBtnHtml}
+                    </div>
+                    <button id="gnosys-desktop-launch-cancel" style="border:1px solid #334155;background:#1e293b;color:#f8fafc;font-size:0.85rem;font-weight:800;padding:10px 20px;border-radius:12px;cursor:pointer;transition:all 0.2s;width:100%;">
+                        Not Now (Disable local AI)
                     </button>
                 </div>
                 
@@ -1572,8 +1746,17 @@
         document.body.appendChild(overlay);
 
         const yesBtn = overlay.querySelector('#gnosys-desktop-launch-yes');
+        const browserBtn = overlay.querySelector('#gnosys-desktop-launch-browser');
         const cancelBtn = overlay.querySelector('#gnosys-desktop-launch-cancel');
         const statusEl = overlay.querySelector('#gnosys-desktop-launch-status');
+
+        if (browserBtn) {
+            browserBtn.addEventListener('click', () => {
+                overlay.remove();
+                localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
+                init();
+            });
+        }
 
         yesBtn.addEventListener('click', async () => {
             yesBtn.setAttribute('disabled', 'true');
@@ -1643,6 +1826,7 @@
             overlay.remove();
             state.provider = createNoAiProvider();
             setProvider('no-ai');
+            localStorage.setItem(STORAGE_KEYS.routeMode, 'no-ai');
         });
     }
 
@@ -1716,7 +1900,6 @@
     function showMobileChoiceModal() {
         if (state.modalEl) {
             state.modalEl.style.display = 'flex';
-            // Trigger refresh of FSA status inside modal if open
             refreshLocalFileStatus();
             return;
         }
@@ -1741,6 +1924,12 @@
         let activeSelection = localStorage.getItem(STORAGE_KEYS.onDeviceSelectedModel) || 'gemma-4-e2b';
         let onDeviceStorageMode = localStorage.getItem(STORAGE_KEYS.onDeviceStorageMode) || 'localfile';
         
+        let activeSetupTab = (localStorage.getItem(STORAGE_KEYS.routeMode) === 'desktop-ollama') ? 'ollama' : 'browser';
+        let activeOllamaSelection = localStorage.getItem('gnosys_active_llm') || 'gemma4:e4b';
+        if (activeOllamaSelection.startsWith('litert:')) {
+            activeOllamaSelection = 'gemma4:e4b';
+        }
+
         const ramGb = navigator.deviceMemory;
         const ramText = ramGb ? `Detected RAM: ~${Math.round(ramGb)} GB` : 'RAM: Unspecified';
         const isHighEnd = ramGb && ramGb >= 8;
@@ -1771,17 +1960,23 @@
                 } catch (_) {}
             }
 
-            return `
-            <div id="gnosys-llm-mobile-choice-card">
-                <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
-                    <div>
-                        <h2 style="margin:0 0 4px 0;font-size:1.1rem;font-weight:800;color:#f8fafc">Smart LLM Setup</h2>
-                        <p style="margin:0;color:#94a3b8;font-size:.82rem;line-height:1.3">Select your local AI configuration profile below.</p>
+            let segControlHtml = '';
+            if (!isMobileDevice) {
+                segControlHtml = `
+                    <div class="gnosys-segmented-control" style="display:flex;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:3px;border-radius:12px;margin-bottom:12px;width:100%;">
+                        <button id="gnosys-toggle-browser" class="gnosys-seg-btn ${activeSetupTab === 'browser' ? 'active' : ''}" style="flex:1;">
+                            Run in Browser (LiteRT)
+                        </button>
+                        <button id="gnosys-toggle-ollama" class="gnosys-seg-btn ${activeSetupTab === 'ollama' ? 'active' : ''}" style="flex:1;">
+                            Run via Desktop App (Ollama)
+                        </button>
                     </div>
-                    <button id="gnosys-llm-modal-close" style="border:none;background:transparent;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px 8px;">✕</button>
-                </div>
+                `;
+            }
 
-                <div style="margin-top:4px;display:grid;gap:10px;">
+            let setupBodyHtml = '';
+            if (activeSetupTab === 'browser') {
+                setupBodyHtml = `
                     ${supportsWebGpu ? `
                         <!-- Option A: Dynamic Profiles Selection Grid -->
                         <div>
@@ -1882,6 +2077,70 @@
                             WebGPU is not available on this browser/device, so on-device Gemma mode is unavailable here.
                         </div>
                     `}
+                `;
+            } else {
+                setupBodyHtml = `
+                    <div>
+                        <div style="font-weight:700;font-size:.8rem;color:#94a3b8;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+                            <span>1. Select Desktop Model Profile</span>
+                            <span id="gnosys-ram-indicator" style="font-size:0.72rem;font-weight:normal;opacity:0.8;background:rgba(20,184,166,0.15);color:#14b8a6;padding:1px 6px;border-radius:4px;">${ramText}</span>
+                        </div>
+                        <div class="gnosys-profile-grid">
+                            <!-- Card 1: Llama 3.2 3B -->
+                            <div id="gnosys-profile-ollama-llama32" class="gnosys-profile-card ${activeOllamaSelection === 'llama3.2' ? 'active' : ''}">
+                                <span class="gnosys-profile-card-title">Llama 3.2 (3B)</span>
+                                <span class="gnosys-profile-card-badge">Fast & Smart</span>
+                                <span class="gnosys-profile-card-desc">Recommended for basic/standard laptops. Low CPU/GPU footprint.</span>
+                            </div>
+                            
+                            <!-- Card 2: Llama 3 8B -->
+                            <div id="gnosys-profile-ollama-llama3" class="gnosys-profile-card ${activeOllamaSelection === 'llama3' ? 'active' : ''}">
+                                <span class="gnosys-profile-card-title">Llama 3 (8B)</span>
+                                <span class="gnosys-profile-card-badge">Classic Balanced</span>
+                                <span class="gnosys-profile-card-desc">Standard performance for gaming GPUs (6GB+ VRAM).</span>
+                            </div>
+                            
+                            <!-- Card 3: Qwen 2.5 7B -->
+                            <div id="gnosys-profile-ollama-qwen25" class="gnosys-profile-card ${activeOllamaSelection === 'qwen2.5' ? 'active' : ''}">
+                                <span class="gnosys-profile-card-title">Qwen 2.5 (7B)</span>
+                                <span class="gnosys-profile-card-badge">Coding & Logic</span>
+                                <span class="gnosys-profile-card-desc">Highly capable reasoning and code comprehension. Requires 6GB+ VRAM.</span>
+                            </div>
+                            
+                            <!-- Card 4: Gemma 4 Pro 4.5B -->
+                            <div id="gnosys-profile-ollama-gemma4" class="gnosys-profile-card ${activeOllamaSelection === 'gemma4:e4b' ? 'active' : ''}">
+                                <span class="gnosys-profile-card-title">Gemma 4 Pro (4.5B)</span>
+                                <span class="gnosys-profile-card-badge">Pro Reasoning</span>
+                                <span class="gnosys-profile-card-desc">Rich Socratic dialogue. Requires premium gaming GPUs (11GB+ VRAM).</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="background:rgba(30,41,59,0.3);border:1px solid #1e293b;border-radius:14px;padding:12px;margin-top:10px;text-align:center;">
+                        <div style="font-size:0.75rem;line-height:1.3;color:#94a3b8;margin-bottom:10px;">
+                            Requires the desktop <a href="https://ollama.com" target="_blank" style="color:#14b8a6;text-decoration:none;font-weight:700;">Ollama application</a> to be running on your system.
+                        </div>
+                        <button id="gnosys-activate-ollama-btn" style="border:1px solid #0f766e;background:linear-gradient(135deg,#0d9488,#0f766e);color:#ecfeff;padding:12px;border-radius:10px;cursor:pointer;width:100%;font-weight:800;font-size:0.8rem;text-align:center;box-shadow: 0 4px 12px rgba(13,148,136,0.15);transition:all 0.2s;">
+                            Select & Activate Profile
+                        </button>
+                    </div>
+                `;
+            }
+
+            return `
+            <div id="gnosys-llm-mobile-choice-card">
+                <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:12px;">
+                    <div>
+                        <h2 style="margin:0 0 4px 0;font-size:1.1rem;font-weight:800;color:#f8fafc">Smart LLM Setup</h2>
+                        <p style="margin:0;color:#94a3b8;font-size:.82rem;line-height:1.3">Select your local AI configuration profile below.</p>
+                    </div>
+                    <button id="gnosys-llm-modal-close" style="border:none;background:transparent;color:#94a3b8;font-size:1.1rem;cursor:pointer;padding:4px 8px;">✕</button>
+                </div>
+
+                ${segControlHtml}
+
+                <div style="margin-top:4px;display:grid;gap:10px;">
+                    ${setupBodyHtml}
 
                     <!-- Sleek Offline Skip Button -->
                     <button id="gnosys-noai-btn" style="border:1px solid #334155;background:transparent;color:#94a3b8;font-size:0.75rem;font-weight:600;padding:10px;border-radius:10px;cursor:pointer;width:100%;text-align:center;transition:all 0.2s ease;margin-top:4px;">
@@ -1898,7 +2157,7 @@
 
         // FSA status management
         async function refreshLocalFileStatus() {
-            if (!supportsFsa) return;
+            if (!supportsFsa || activeSetupTab !== 'browser') return;
             const statusEl = overlay.querySelector('#gnosys-fsa-status');
             if (!statusEl) return;
 
@@ -1936,20 +2195,16 @@
                         return;
                     }
                     overlay.style.display = 'none';
+                    state.modalEl = null;
+                    overlay.remove();
                 });
             }
 
-            const profileUltra = overlay.querySelector('#gnosys-profile-ultra');
-            const profileLite = overlay.querySelector('#gnosys-profile-lite');
-            const profilePro = overlay.querySelector('#gnosys-profile-pro');
-            const profileOpfs = overlay.querySelector('#gnosys-profile-opfs');
-
-            function updateProfile(model, storageMode) {
-                activeSelection = model;
-                onDeviceStorageMode = storageMode;
-                localStorage.setItem(STORAGE_KEYS.onDeviceSelectedModel, model);
-                localStorage.setItem(STORAGE_KEYS.onDeviceStorageMode, storageMode);
-
+            // Tab control toggle events
+            const toggleBrowser = overlay.querySelector('#gnosys-toggle-browser');
+            const toggleOllama = overlay.querySelector('#gnosys-toggle-ollama');
+            
+            function reRenderModal() {
                 const card = document.getElementById('gnosys-llm-mobile-choice-card');
                 if (card) {
                     const temp = document.createElement('div');
@@ -1960,299 +2215,398 @@
                 }
             }
 
-            if (profileUltra) {
-                profileUltra.addEventListener('click', () => {
-                    if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
-                    updateProfile('smollm-135m-ultra', 'localfile');
+            if (toggleBrowser) {
+                toggleBrowser.addEventListener('click', () => {
+                    if (activeSetupTab === 'browser') return;
+                    activeSetupTab = 'browser';
+                    reRenderModal();
                 });
             }
-            if (profileLite) {
-                profileLite.addEventListener('click', () => {
-                    if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
-                    updateProfile('gemma-4-e2b', 'localfile');
-                });
-            }
-            if (profilePro) {
-                profilePro.addEventListener('click', () => {
-                    if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
-                    updateProfile('gemma-4-e4b', 'localfile');
-                });
-            }
-            if (profileOpfs) {
-                profileOpfs.addEventListener('click', () => {
-                    if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
-                    updateProfile('gemma-4-e2b', 'opfs');
+            if (toggleOllama) {
+                toggleOllama.addEventListener('click', () => {
+                    if (activeSetupTab === 'ollama') return;
+                    activeSetupTab = 'ollama';
+                    reRenderModal();
                 });
             }
 
-            // Tab 1 FSA Event Handlers
-            const fsaSaveBtn = overlay.querySelector('#gnosys-fsa-savepicker-btn');
-            const fsaOpenBtn = overlay.querySelector('#gnosys-fsa-openpicker-btn');
-            const progressWrap = overlay.querySelector('#gnosys-ondevice-progress');
-            const progressText = overlay.querySelector('#gnosys-ondevice-progress-text');
-            const progressBar = overlay.querySelector('#gnosys-ondevice-progress-bar');
-            const cancelBtn = overlay.querySelector('#gnosys-download-cancel-btn');
+            // Tab-specific elements
+            if (activeSetupTab === 'browser') {
+                const profileUltra = overlay.querySelector('#gnosys-profile-ultra');
+                const profileLite = overlay.querySelector('#gnosys-profile-lite');
+                const profilePro = overlay.querySelector('#gnosys-profile-pro');
+                const profileOpfs = overlay.querySelector('#gnosys-profile-opfs');
 
-            if (fsaSaveBtn) {
-                fsaSaveBtn.addEventListener('click', async () => {
-                    const activeConfig = getActiveModelConfig();
-                    if (activeConfig.id === 'gemma-4-e4b' && navigator.deviceMemory && navigator.deviceMemory < 8) {
-                        const confirmPro = confirm("Warning: Gemma 4 Pro requires at least 8GB RAM. Your device reports less than 8GB, which may cause your browser tab to crash during initialization.\n\nWe highly recommend using the Gemma 4 Efficient tier instead. Are you sure you want to proceed?");
-                        if (!confirmPro) return;
-                    }
+                function updateProfile(model, storageMode) {
+                    activeSelection = model;
+                    onDeviceStorageMode = storageMode;
+                    localStorage.setItem(STORAGE_KEYS.onDeviceSelectedModel, model);
+                    localStorage.setItem(STORAGE_KEYS.onDeviceStorageMode, storageMode);
+                    reRenderModal();
+                }
 
-                    try {
-                        const options = {
-                            suggestedName: activeConfig.filename,
-                            startIn: 'downloads',
-                            types: [{
-                                description: 'LiteRT LM model (.litertlm)',
-                                accept: { 'application/octet-stream': ['.litertlm'] }
-                            }]
-                        };
-                        const handle = await window.showSaveFilePicker(options);
-                        await saveFileHandle(activeConfig.id, handle);
-                        refreshLocalFileStatus();
+                if (profileUltra) {
+                    profileUltra.addEventListener('click', () => {
+                        if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
+                        updateProfile('smollm-135m-ultra', 'localfile');
+                    });
+                }
+                if (profileLite) {
+                    profileLite.addEventListener('click', () => {
+                        if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
+                        updateProfile('gemma-4-e2b', 'localfile');
+                    });
+                }
+                if (profilePro) {
+                    profilePro.addEventListener('click', () => {
+                        if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
+                        updateProfile('gemma-4-e4b', 'localfile');
+                    });
+                }
+                if (profileOpfs) {
+                    profileOpfs.addEventListener('click', () => {
+                        if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') return;
+                        updateProfile('gemma-4-e2b', 'opfs');
+                    });
+                }
 
-                        // Start piping the stream directly to the target file
-                        if (progressWrap) progressWrap.style.display = 'block';
-                        localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'true');
-                        downloadAbortController = new AbortController();
+                const fsaSaveBtn = overlay.querySelector('#gnosys-fsa-savepicker-btn');
+                const fsaOpenBtn = overlay.querySelector('#gnosys-fsa-openpicker-btn');
+                const progressWrap = overlay.querySelector('#gnosys-ondevice-progress');
+                const progressText = overlay.querySelector('#gnosys-ondevice-progress-text');
+                const progressBar = overlay.querySelector('#gnosys-ondevice-progress-bar');
+                const cancelBtn = overlay.querySelector('#gnosys-download-cancel-btn');
 
-                        const res = await fetch(activeConfig.url, {
-                            signal: downloadAbortController.signal
-                        });
-
-                        if (!res.ok || !res.body) {
-                            throw new Error('Network error; failed to retrieve model file stream.');
+                if (fsaSaveBtn) {
+                    fsaSaveBtn.addEventListener('click', async () => {
+                        const activeConfig = getActiveModelConfig();
+                        if (activeConfig.id === 'gemma-4-e4b' && navigator.deviceMemory && navigator.deviceMemory < 8) {
+                            const confirmPro = confirm("Warning: Gemma 4 Pro requires at least 8GB RAM. Your device reports less than 8GB, which may cause your browser tab to crash during initialization.\n\nWe highly recommend using the Gemma 4 Efficient tier instead. Are you sure you want to proceed?");
+                            if (!confirmPro) return;
                         }
 
-                        if (progressText) progressText.textContent = 'Streaming model directly to target file...';
+                        try {
+                            const options = {
+                                suggestedName: activeConfig.filename,
+                                startIn: 'downloads',
+                                types: [{
+                                    description: 'LiteRT LM model (.litertlm)',
+                                    accept: { 'application/octet-stream': ['.litertlm'] }
+                                }]
+                            };
+                            const handle = await window.showSaveFilePicker(options);
+                            await saveFileHandle(activeConfig.id, handle);
+                            refreshLocalFileStatus();
 
-                        await writeStreamToFileHandle(res.body, handle, (info) => {
-                            if (progressBar && progressText) {
-                                progressBar.style.width = `${info.percent}%`;
-                                progressText.textContent = `Streaming model directly to selected folder: ${info.percent}%`;
+                            // Start piping the stream directly to the target file
+                            if (progressWrap) progressWrap.style.display = 'block';
+                            localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'true');
+                            downloadAbortController = new AbortController();
+
+                            const res = await fetch(activeConfig.url, {
+                                signal: downloadAbortController.signal
+                            });
+
+                            if (!res.ok || !res.body) {
+                                throw new Error('Network error; failed to retrieve model file stream.');
                             }
-                        }, { total: activeConfig.expectedSize });
 
-                        // Verify & complete
-                        localStorage.setItem(STORAGE_KEYS.onDeviceReady, 'true');
-                        localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
-                        localStorage.setItem(STORAGE_KEYS.onDeviceExpectedSize, String(activeConfig.expectedSize));
-                        localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
+                            if (progressText) progressText.textContent = 'Streaming model directly to target file...';
 
-                        const provider = createLiteRtProvider();
-                        await provider.ensureReady((info) => {
-                            if (progressText && progressBar) {
-                                if (info.stage === 'compiling') {
-                                    progressText.textContent = 'Optimizing GPU shaders & allocating VRAM... (takes 10-25s)';
+                            await writeStreamToFileHandle(res.body, handle, (info) => {
+                                if (progressBar && progressText) {
+                                    progressBar.style.width = `${info.percent}%`;
+                                    progressText.textContent = `Streaming model directly to selected folder: ${info.percent}%`;
                                 }
-                            }
-                        });
+                            }, { total: activeConfig.expectedSize });
 
-                        state.provider = provider;
-                        state.mobileChoicePending = false;
-                        setProvider('mobile-litert');
-                        overlay.style.display = 'none';
-                    } catch (err) {
-                        if (err.name === 'AbortError') {
-                            if (progressText) progressText.textContent = 'Download cancelled.';
-                        } else {
-                            console.error('[GnosysLLM] Direct stream setup failed:', err);
-                            alert(`Storage setup failed: ${err.message || err}`);
+                            // Verify & complete
+                            localStorage.setItem(STORAGE_KEYS.onDeviceReady, 'true');
+                            localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
+                            localStorage.setItem(STORAGE_KEYS.onDeviceExpectedSize, String(activeConfig.expectedSize));
+                            localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
+
+                            const provider = createLiteRtProvider();
+                            await provider.ensureReady((info) => {
+                                if (progressText && progressBar) {
+                                    if (info.stage === 'compiling') {
+                                        progressText.textContent = 'Optimizing GPU shaders & allocating VRAM... (takes 10-25s)';
+                                    }
+                                }
+                            });
+
+                            state.provider = provider;
+                            state.mobileChoicePending = false;
+                            setProvider('mobile-litert');
+                            overlay.style.display = 'none';
+                            state.modalEl = null;
+                            overlay.remove();
+                        } catch (err) {
+                            if (err.name === 'AbortError') {
+                                if (progressText) progressText.textContent = 'Download cancelled.';
+                            } else {
+                                console.error('[GnosysLLM] Direct stream setup failed:', err);
+                                alert(`Storage setup failed: ${err.message || err}`);
+                            }
+                            localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
+                            if (progressWrap) progressWrap.style.display = 'none';
+                            refreshLocalFileStatus();
+                        }
+                    });
+                }
+
+                if (fsaOpenBtn) {
+                    fsaOpenBtn.addEventListener('click', async () => {
+                        const activeConfig = getActiveModelConfig();
+                        try {
+                            const [handle] = await window.showOpenFilePicker({
+                                types: [{
+                                    description: 'LiteRT LM model (.litertlm)',
+                                    accept: { 'application/octet-stream': ['.litertlm'] }
+                                }]
+                            });
+                            await saveFileHandle(activeConfig.id, handle);
+                            
+                            // Instantly initialize local provider
+                            localStorage.setItem(STORAGE_KEYS.onDeviceReady, 'true');
+                            localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
+                            localStorage.setItem(STORAGE_KEYS.onDeviceExpectedSize, String(activeConfig.expectedSize));
+                            
+                            if (progressWrap) progressWrap.style.display = 'block';
+                            if (progressText) progressText.textContent = 'Initializing WebGPU engine & warm VRAM...';
+
+                            const provider = createLiteRtProvider();
+                            await provider.ensureReady((info) => {
+                                if (progressText && progressBar) {
+                                    if (info.stage === 'compiling') {
+                                        progressText.textContent = 'Optimizing GPU shaders & warm VRAM... (takes 10-25s)';
+                                    }
+                                }
+                            });
+
+                            state.provider = provider;
+                            state.mobileChoicePending = false;
+                            setProvider('mobile-litert');
+                            overlay.style.display = 'none';
+                            state.modalEl = null;
+                            overlay.remove();
+                        } catch (err) {
+                            console.error('[GnosysLLM] Local file linking failed:', err);
+                            alert(`File linking failed: ${err.message || err}`);
+                        }
+                    });
+                }
+
+                // Tab 1 Standard File Input handlers (Safari / iOS Fallback)
+                const manualBtn = overlay.querySelector('#gnosys-manual-input-btn');
+                const fileInput = overlay.querySelector('#gnosys-local-file-input');
+                const quickCard = overlay.querySelector('#gnosys-quick-reselect-card');
+
+                if (manualBtn && fileInput) {
+                    manualBtn.addEventListener('click', () => {
+                        fileInput.click();
+                    });
+                }
+
+                if (quickCard && fileInput) {
+                    quickCard.addEventListener('click', () => {
+                        fileInput.click();
+                    });
+                }
+
+                if (fileInput) {
+                    fileInput.addEventListener('change', async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+
+                        selectedLocalFile = file;
+
+                        // Save metadata representation in localStorage for fast reload
+                        const meta = { name: file.name, size: file.size, lastModified: file.lastModified };
+                        localStorage.setItem(STORAGE_KEYS.onDeviceLocalFileMetadata, JSON.stringify(meta));
+
+                        // Instantly initialize
+                        const activeConfig = getActiveModelConfig();
+                        localStorage.setItem(STORAGE_KEYS.onDeviceReady, 'true');
+                        localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
+                        localStorage.setItem(STORAGE_KEYS.onDeviceExpectedSize, String(file.size));
+
+                        if (progressWrap) progressWrap.style.display = 'block';
+                        if (progressText) progressText.textContent = 'Loading local file reference & warm WebGPU VRAM...';
+
+                        try {
+                            const provider = createLiteRtProvider();
+                            await provider.ensureReady((info) => {
+                                if (progressText) {
+                                    if (info.stage === 'compiling') {
+                                        progressText.textContent = 'Optimizing GPU shaders & VRAM allocation... (takes 10-25s)';
+                                    }
+                                }
+                            });
+
+                            state.provider = provider;
+                            state.mobileChoicePending = false;
+                            setProvider('mobile-litert');
+                            overlay.style.display = 'none';
+                            state.modalEl = null;
+                            overlay.remove();
+                        } catch (err) {
+                            console.error('[GnosysLLM] iOS Fallback initialization failed:', err);
+                            alert(`Initialization failed: ${err.message || err}`);
+                            if (progressWrap) progressWrap.style.display = 'none';
+                        }
+                    });
+                }
+
+                // Tab 2 OPFS Setup Handlers
+                const onDeviceBtn = overlay.querySelector('#gnosys-ondevice-btn');
+                if (onDeviceBtn) {
+                    onDeviceBtn.addEventListener('click', async () => {
+                        const activeConfig = getActiveModelConfig();
+                        if (activeConfig.id === 'gemma-4-e4b' && navigator.deviceMemory && navigator.deviceMemory < 8) {
+                            const confirmPro = confirm("Warning: Gemma 4 Pro requires at least 8GB RAM. Your device reports less than 8GB, which may cause your browser tab to crash during initialization.\n\nWe highly recommend using the Gemma 4 Efficient tier instead. Are you sure you want to download Pro?");
+                            if (!confirmPro) return;
+                        }
+
+                        if (progressWrap) progressWrap.style.display = 'block';
+                        localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
+                        localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'true');
+
+                        try {
+                            await invalidateStaleOnDeviceCache();
+                            const provider = createLiteRtProvider();
+                            await provider.ensureReady((info) => {
+                                if (!progressText || !progressBar) return;
+                                const pct = typeof info.percent === 'number' ? info.percent : 0;
+                                progressBar.style.width = `${pct}%`;
+                                if (info.stage === 'finalizing') {
+                                    progressText.textContent = 'Verifying storage & finalizing file sync...';
+                                    progressBar.classList.add('animate-pulse');
+                                } else if (info.stage === 'cooling') {
+                                    progressText.textContent = 'Releasing download memory & cleaning up...';
+                                    progressBar.classList.add('animate-pulse');
+                                } else if (info.stage === 'compiling') {
+                                    progressText.textContent = `Optimizing GPU shaders & allocating VRAM... (takes 10-25s)`;
+                                    progressBar.classList.add('animate-pulse');
+                                } else {
+                                    progressText.textContent = `Downloading Gemma 4 ${activeConfig.shortName}: ${pct}%`;
+                                    progressBar.classList.remove('animate-pulse');
+                                }
+                            });
+
+                            state.provider = provider;
+                            state.mobileChoicePending = false;
+                            localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
+                            setProvider('mobile-litert');
+                            overlay.style.display = 'none';
+                            state.modalEl = null;
+                            overlay.remove();
+                        } catch (err) {
+                            console.error('[GnosysLLM] OPFS setup failed:', err);
+                            localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
+                            const detail = String(err?.message || err || 'Unknown OPFS error');
+                            if (progressText) progressText.textContent = `Setup failed: ${detail}`;
+                            alert(`LiteRT OPFS Error: ${detail}`);
+                        }
+                    });
+                }
+
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', () => {
+                        if (downloadAbortController) {
+                            try {
+                                downloadAbortController.abort();
+                                console.log('[GnosysLLM] Download stream explicitly aborted by user.');
+                            } catch (_) {}
                         }
                         localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
                         if (progressWrap) progressWrap.style.display = 'none';
                         refreshLocalFileStatus();
-                    }
-                });
+                    });
+                }
+            } else {
+                const profileOllamaLlama32 = overlay.querySelector('#gnosys-profile-ollama-llama32');
+                const profileOllamaLlama3 = overlay.querySelector('#gnosys-profile-ollama-llama3');
+                const profileOllamaQwen25 = overlay.querySelector('#gnosys-profile-ollama-qwen25');
+                const profileOllamaGemma4 = overlay.querySelector('#gnosys-profile-ollama-gemma4');
+                const activateOllamaBtn = overlay.querySelector('#gnosys-activate-ollama-btn');
+
+                if (profileOllamaLlama32) {
+                    profileOllamaLlama32.addEventListener('click', () => {
+                        activeOllamaSelection = 'llama3.2';
+                        highlightOllamaCard('llama3.2');
+                    });
+                }
+                if (profileOllamaLlama3) {
+                    profileOllamaLlama3.addEventListener('click', () => {
+                        activeOllamaSelection = 'llama3';
+                        highlightOllamaCard('llama3');
+                    });
+                }
+                if (profileOllamaQwen25) {
+                    profileOllamaQwen25.addEventListener('click', () => {
+                        activeOllamaSelection = 'qwen2.5';
+                        highlightOllamaCard('qwen2.5');
+                    });
+                }
+                if (profileOllamaGemma4) {
+                    profileOllamaGemma4.addEventListener('click', () => {
+                        activeOllamaSelection = 'gemma4:e4b';
+                        highlightOllamaCard('gemma4:e4b');
+                    });
+                }
+
+                function highlightOllamaCard(modelVal) {
+                    const cards = {
+                        'llama3.2': profileOllamaLlama32,
+                        'llama3': profileOllamaLlama3,
+                        'qwen2.5': profileOllamaQwen25,
+                        'gemma4:e4b': profileOllamaGemma4
+                    };
+                    Object.keys(cards).forEach(key => {
+                        if (cards[key]) {
+                            if (key === modelVal) {
+                                cards[key].classList.add('active');
+                            } else {
+                                cards[key].classList.remove('active');
+                            }
+                        }
+                    });
+                }
+
+                if (activateOllamaBtn) {
+                    activateOllamaBtn.addEventListener('click', () => {
+                        localStorage.setItem(STORAGE_KEYS.routeMode, 'desktop-ollama');
+                        localStorage.setItem('gnosys_active_llm', activeOllamaSelection);
+                        localStorage.setItem('chemistry_llm', activeOllamaSelection);
+                        overlay.remove();
+                        state.modalEl = null;
+                        init();
+                    });
+                }
             }
 
-            if (fsaOpenBtn) {
-                fsaOpenBtn.addEventListener('click', async () => {
-                    const activeConfig = getActiveModelConfig();
-                    try {
-                        const [handle] = await window.showOpenFilePicker({
-                            types: [{
-                                description: 'LiteRT LM model (.litertlm)',
-                                accept: { 'application/octet-stream': ['.litertlm'] }
-                            }]
-                        });
-                        await saveFileHandle(activeConfig.id, handle);
-                        
-                        // Instantly initialize local provider
-                        localStorage.setItem(STORAGE_KEYS.onDeviceReady, 'true');
-                        localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
-                        localStorage.setItem(STORAGE_KEYS.onDeviceExpectedSize, String(activeConfig.expectedSize));
-                        
-                        if (progressWrap) progressWrap.style.display = 'block';
-                        if (progressText) progressText.textContent = 'Initializing WebGPU engine & warm VRAM...';
-
-                     const provider = createLiteRtProvider();
-                     await provider.ensureReady((info) => {
-                         if (progressText && progressBar) {
-                             if (info.stage === 'compiling') {
-                                 progressText.textContent = 'Optimizing GPU shaders & warm VRAM... (takes 10-25s)';
-                             }
-                         }
-                     });
-
-                     state.provider = provider;
-                     state.mobileChoicePending = false;
-                     setProvider('mobile-litert');
-                     overlay.style.display = 'none';
-                 } catch (err) {
-                     console.error('[GnosysLLM] Local file linking failed:', err);
-                     alert(`File linking failed: ${err.message || err}`);
-                 }
-             });
-         }
-
-         // Tab 1 Standard File Input handlers (Safari / iOS Fallback)
-         const manualBtn = overlay.querySelector('#gnosys-manual-input-btn');
-         const fileInput = overlay.querySelector('#gnosys-local-file-input');
-         const quickCard = overlay.querySelector('#gnosys-quick-reselect-card');
-
-         if (manualBtn && fileInput) {
-             manualBtn.addEventListener('click', () => {
-                 fileInput.click();
-             });
-         }
-
-         if (quickCard && fileInput) {
-             quickCard.addEventListener('click', () => {
-                 fileInput.click();
-             });
-         }
-
-         if (fileInput) {
-             fileInput.addEventListener('change', async (e) => {
-                 const file = e.target.files[0];
-                 if (!file) return;
-
-                 selectedLocalFile = file;
-
-                 // Save metadata representation in localStorage for fast reload
-                 const meta = { name: file.name, size: file.size, lastModified: file.lastModified };
-                 localStorage.setItem(STORAGE_KEYS.onDeviceLocalFileMetadata, JSON.stringify(meta));
-
-                 // Instantly initialize
-                 const activeConfig = getActiveModelConfig();
-                 localStorage.setItem(STORAGE_KEYS.onDeviceReady, 'true');
-                 localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
-                 localStorage.setItem(STORAGE_KEYS.onDeviceExpectedSize, String(file.size));
-
-                 if (progressWrap) progressWrap.style.display = 'block';
-                 if (progressText) progressText.textContent = 'Loading local file reference & warm WebGPU VRAM...';
-
-                 try {
-                     const provider = createLiteRtProvider();
-                     await provider.ensureReady((info) => {
-                         if (progressText) {
-                             if (info.stage === 'compiling') {
-                                 progressText.textContent = 'Optimizing GPU shaders & VRAM allocation... (takes 10-25s)';
-                             }
-                         }
-                     });
-
-                     state.provider = provider;
-                     state.mobileChoicePending = false;
-                     setProvider('mobile-litert');
-                     overlay.style.display = 'none';
-                 } catch (err) {
-                     console.error('[GnosysLLM] iOS Fallback initialization failed:', err);
-                     alert(`Initialization failed: ${err.message || err}`);
-                     if (progressWrap) progressWrap.style.display = 'none';
-                 }
-             });
-         }
-
-         // Tab 2 OPFS Setup Handlers
-         const onDeviceBtn = overlay.querySelector('#gnosys-ondevice-btn');
-         if (onDeviceBtn) {
-             onDeviceBtn.addEventListener('click', async () => {
-                 const activeConfig = getActiveModelConfig();
-                 if (activeConfig.id === 'gemma-4-e4b' && navigator.deviceMemory && navigator.deviceMemory < 8) {
-                     const confirmPro = confirm("Warning: Gemma 4 Pro requires at least 8GB RAM. Your device reports less than 8GB, which may cause your browser tab to crash during initialization.\n\nWe highly recommend using the Gemma 4 Efficient tier instead. Are you sure you want to download Pro?");
-                     if (!confirmPro) return;
-                 }
-
-                 if (progressWrap) progressWrap.style.display = 'block';
-                 localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
-                 localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'true');
-
-                 try {
-                     await invalidateStaleOnDeviceCache();
-                     const provider = createLiteRtProvider();
-                     await provider.ensureReady((info) => {
-                         if (!progressText || !progressBar) return;
-                         const pct = typeof info.percent === 'number' ? info.percent : 0;
-                         progressBar.style.width = `${pct}%`;
-                         if (info.stage === 'finalizing') {
-                             progressText.textContent = 'Verifying storage & finalizing file sync...';
-                             progressBar.classList.add('animate-pulse');
-                         } else if (info.stage === 'cooling') {
-                             progressText.textContent = 'Releasing download memory & cleaning up...';
-                             progressBar.classList.add('animate-pulse');
-                         } else if (info.stage === 'compiling') {
-                             progressText.textContent = `Optimizing GPU shaders & allocating VRAM... (takes 10-25s)`;
-                             progressBar.classList.add('animate-pulse');
-                         } else {
-                             progressText.textContent = `Downloading Gemma 4 ${activeConfig.shortName}: ${pct}%`;
-                             progressBar.classList.remove('animate-pulse');
-                         }
-                     });
-
-                     state.provider = provider;
-                     state.mobileChoicePending = false;
-                     localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
-                     setProvider('mobile-litert');
-                     overlay.style.display = 'none';
-                 } catch (err) {
-                     console.error('[GnosysLLM] OPFS setup failed:', err);
-                     localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
-                     const detail = String(err?.message || err || 'Unknown OPFS error');
-                     if (progressText) progressText.textContent = `Setup failed: ${detail}`;
-                     alert(`LiteRT OPFS Error: ${detail}`);
-                 }
-             });
-         }
-
-         // Cancel/Abort download logic
-         if (cancelBtn) {
-             cancelBtn.addEventListener('click', () => {
-                 if (downloadAbortController) {
-                     try {
-                         downloadAbortController.abort();
-                         console.log('[GnosysLLM] Download stream explicitly aborted by user.');
-                     } catch (_) {}
-                 }
-                 localStorage.setItem(STORAGE_KEYS.onDeviceDownloadInProgress, 'false');
-                 if (progressWrap) progressWrap.style.display = 'none';
-                 refreshLocalFileStatus();
-             });
-         }
-
-         // Option B: No-AI offline handler
-         const noAiBtn = overlay.querySelector('#gnosys-noai-btn');
-         if (noAiBtn) {
-             noAiBtn.addEventListener('click', async () => {
-                 if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') {
-                     alert('Cannot switch modes while download is in progress.');
-                     return;
-                 }
-                 if (state.provider && typeof state.provider.close === 'function') {
-                     await state.provider.close();
-                 }
-                 localStorage.setItem(STORAGE_KEYS.routeMode, 'no-ai');
-                 state.provider = createNoAiProvider();
-                 state.mobileChoicePending = false;
-                 setProvider('no-ai');
-                 overlay.style.display = 'none';
-             });
-         }
-     }
+            // Option B: No-AI offline handler
+            const noAiBtn = overlay.querySelector('#gnosys-noai-btn');
+            if (noAiBtn) {
+                noAiBtn.addEventListener('click', async () => {
+                    if (localStorage.getItem(STORAGE_KEYS.onDeviceDownloadInProgress) === 'true') {
+                        alert('Cannot switch modes while download is in progress.');
+                        return;
+                    }
+                    if (state.provider && typeof state.provider.close === 'function') {
+                        await state.provider.close();
+                    }
+                    localStorage.setItem(STORAGE_KEYS.routeMode, 'no-ai');
+                    state.provider = createNoAiProvider();
+                    state.mobileChoicePending = false;
+                    setProvider('no-ai');
+                    overlay.style.display = 'none';
+                    state.modalEl = null;
+                    overlay.remove();
+                });
+            }
+        }
 
         setupEventListeners();
     }

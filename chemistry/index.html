@@ -785,6 +785,50 @@
                 padding-bottom: 0.75rem !important;
             }
         }
+
+        /* Dynamic flow for video active state */
+        #view-videos.video-active-flow > .grid,
+        #view-videos.video-active-flow > #video-support-tribute {
+            display: none !important;
+        }
+        #view-videos.video-active-flow #video-episode-modal {
+            position: relative !important;
+            inset: auto !important;
+            z-index: 10 !important;
+            width: 100% !important;
+            height: auto !important;
+            display: block !important;
+        }
+        #view-videos.video-active-flow #video-episode-modal-backdrop {
+            display: none !important;
+        }
+        #view-videos.video-active-flow #video-episode-modal > div {
+            height: auto !important;
+        }
+        #view-videos.video-active-flow .video-modal-dialog {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            height: auto !important;
+            max-height: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+        }
+        .dark #view-videos.video-active-flow .video-modal-dialog {
+            background: transparent !important;
+        }
+        #view-videos.video-active-flow .video-modal-content {
+            padding: 1.25rem 0 0 0 !important;
+        }
+        #view-videos.video-active-flow .video-modal-dialog > div.sticky {
+            position: relative !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border-bottom: none !important;
+        }
+        .dark #view-videos.video-active-flow .video-modal-dialog > div.sticky {
+            background: transparent !important;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col selection:bg-amber-200 selection:text-amber-900">
