@@ -100,20 +100,22 @@ A mathematical engine designed to reinforce safety, precision, and accuracy in s
   </tr>
 </table>
 
-### 5. Psychology & Communication Simulator (Active Module)
-A training module for navigating complex interpersonal, behavioral, and professional care situations.
-- **Context Auditor:** Rigorously test your ability to spot hidden behavioral cues, procedural hazards, and safety red flags within complex case charts.
-- **Jargon Filter:** Master professional communication by translating academic terminology into comforting, clear explanations.
-- **Timed Crisis De-escalation:** A high-stakes gauntlet where you must manage severe interpersonal emergencies using timed tactical empathy.
-- **EHR & Documentation Auditor:** Learn the critical difference between subjective reporting and objective, defensible charting.
+### 5. Intro to Psychology (PSY 201Z) (Active Module)
+A full psychology learning system spanning dashboard, Crash Course, coursework, and homework mastery flow.
+- **Dashboard + Navigation Parity:** Chemistry-style dashboard with desktop/mobile section navigation, quick links to coursework/homework, progress cards, and integrated stats modal.
+- **Crash Course Psychology Path:** A dedicated 41-episode learning track with watched-state tracking, progression CTA, and concept-targeted 3-question micro-quizzes powered by PsychTutor.
+- **Interactive Skills Lab Tabs:** Structured practice across Research Design, Axon Signaling, Conditioning, Memory Systems, and Clinical Intake to reinforce core intro psychology competencies.
+- **Coursework Portal:** Lesson-driven progression with lecture flow, Socratic checkpoints, sandbox verification, and Feynman explanation stages.
+- **Homework Binder:** Gate-aware worksheet queue with mastery scoring (>=80%), lesson-state progression, and alignment to coursework unlocks.
+- **PsychTutor + Gamification:** Embedded tutor support throughout activities plus XP, levels, streaks, daily quests, and achievement tracking linked to module behavior.
 
 <table width="100%">
   <tr>
-    <td width="50%"><img src="./assets/screenshots/psychContextAuditorScreenshot.jpg" alt="Context Chart Auditor"></td>
-    <td width="50%"><img src="./assets/screenshots/psychDeescalationScreenshot.jpg" alt="Timed Crisis De-escalation"></td>
+    <td width="50%"><img src="./assets/screenshots/psychContextAuditorScreenshot.jpg" alt="Psychology Skills Workspace"></td>
+    <td width="50%"><img src="./assets/screenshots/psychDeescalationScreenshot.jpg" alt="Psychology Scenario Practice"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="./assets/screenshots/psychEhrAuditorScreenshot.jpg" alt="Legal EHR Auditor"></td>
+    <td width="50%"><img src="./assets/screenshots/psychJargonFilterScreenshot.jpg" alt="Psychology Learning Flow"></td>
     <td width="50%"><img src="./assets/screenshots/psychTutorScreenshot.jpg" alt="Psychology Tutor Chat"></td>
   </tr>
 </table>
@@ -212,7 +214,8 @@ Gnosys-AI is built with pure Vanilla JavaScript and HTML.
 
 ## 🛠️ Architecture
 - **Frontend:** HTML5, TailwindCSS (via CDN), Vanilla JavaScript.
-- **Data Persistence:** Client-side `localStorage`.
+- **Data Persistence:** Client-side `localStorage` (including Psychology mastery, gamification, and video completion state).
+- **Psychology Crash Course Data Pipeline:** `psychology/fetch_curriculum.py` regenerates `psychology/video_data.js` from playlist/watch metadata.
 - **AI Integration:** Direct asynchronous `fetch` requests to `http://localhost:11434` (Ollama REST API).
 - **Icons:** FontAwesome 6.
 
