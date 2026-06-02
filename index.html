@@ -93,108 +93,6 @@
         </div>
     </main>
 
-    <!-- Floating Focus Timer Widget -->
-    <div id="floating-timer-widget" class="fixed bottom-6 left-6 z-[250] flex flex-col-reverse items-start gap-3 transition-all duration-300 pointer-events-auto">
-        <!-- Collapsed Timer Button -->
-        <button id="timer-toggle-btn" onclick="toggleFloatingTimer()" class="w-14 h-14 rounded-full bg-slate-900/90 border border-indigo-500/30 text-white flex items-center justify-center shadow-2xl backdrop-blur-md hover:scale-105 transition-all relative group">
-            <!-- Pulse ring when running -->
-            <span id="timer-pulse-ring" class="absolute inset-0 rounded-full border border-indigo-500/40 scale-100 opacity-0 pointer-events-none"></span>
-            <i class="fa-solid fa-clock text-xl text-indigo-400 group-hover:rotate-12 transition-transform"></i>
-            <span id="timer-badge" class="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-indigo-600 text-[9px] font-extrabold text-white hidden">25m</span>
-        </button>
-
-        <!-- Expanded Timer Box -->
-        <div id="timer-expanded-panel" class="hidden flex-col bg-slate-950/95 border border-white/10 rounded-2xl p-5 shadow-2xl w-80 max-w-sm fade-in backdrop-blur-lg">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-xs uppercase tracking-widest text-slate-400 font-extrabold flex items-center gap-1.5">
-                    <i class="fa-solid fa-hourglass-half text-indigo-400"></i> Focus Workspace
-                </h3>
-                <button onclick="toggleFloatingTimer()" class="text-slate-500 hover:text-white transition-colors">
-                    <i class="fa-solid fa-xmark text-xs"></i>
-                </button>
-            </div>
-            
-            <!-- Clock Display -->
-            <div class="flex items-center gap-4 py-2 border-b border-white/5 mb-3">
-                <div class="relative w-20 h-20 flex items-center justify-center shrink-0">
-                    <svg class="absolute w-full h-full -rotate-90">
-                        <circle cx="40" cy="40" r="34" class="stroke-slate-800 fill-none" stroke-width="4"></circle>
-                        <circle cx="40" cy="40" r="34" class="stroke-indigo-500 fill-none transition-all duration-300" stroke-width="4" stroke-dasharray="213" stroke-dashoffset="0" id="timer-progress-ring"></circle>
-                    </svg>
-                    <span id="timer-display" class="text-base font-black text-white tracking-tight z-10">25:00</span>
-                </div>
-                <div class="flex-grow">
-                    <span id="timer-mode-indicator" class="text-[9px] font-extrabold text-indigo-400 uppercase tracking-widest block mb-1">Focus Session Active</span>
-                    <select id="timer-course-select" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-250 focus:outline-none focus:border-indigo-500 text-slate-300">
-                        <option value="general">General Focus</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Controls -->
-            <div class="flex gap-2">
-                <button id="timer-play" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all">
-                    <i class="fa-solid fa-play"></i> Start
-                </button>
-                <button id="timer-pause" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 border border-white/5 transition-all hidden">
-                    <i class="fa-solid fa-pause"></i> Pause
-                </button>
-                <button id="timer-reset" class="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white border border-white/5 transition-colors">
-                    <i class="fa-solid fa-rotate-right"></i>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Floating Stats Button -->
-    <div class="fixed bottom-6 right-6 z-[250] pointer-events-auto">
-        <button onclick="openStatsModal()" class="w-14 h-14 rounded-full bg-slate-900/90 border border-teal-500/30 text-white flex items-center justify-center shadow-2xl backdrop-blur-md hover:scale-105 transition-all group">
-            <i class="fa-solid fa-chart-simple text-xl text-teal-400 group-hover:scale-110 transition-transform"></i>
-        </button>
-    </div>
-
-    <!-- STATS MODAL OVERLAY -->
-    <div id="modal-stats" class="hidden fixed inset-0 z-[400] items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/65 backdrop-blur-sm" onclick="closeStatsModal()"></div>
-        <div class="glass-card w-full max-w-md rounded-3xl p-6 sm:p-8 border border-white/10 shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-extrabold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-chart-line text-teal-400"></i> Study Metrics
-                </h2>
-                <button onclick="closeStatsModal()" class="w-8 h-8 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center border border-white/5 transition-colors">
-                    <i class="fa-solid fa-xmark text-xs"></i>
-                </button>
-            </div>
-
-            <!-- Grid of Numbers -->
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="bg-slate-950/50 border border-white/5 rounded-2xl p-4 flex flex-col items-center text-center shadow-inner">
-                    <span id="stat-total-focus" class="text-2xl font-black text-indigo-400">0.0 hrs</span>
-                    <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Total Focus Time</span>
-                </div>
-                <div class="bg-slate-950/50 border border-white/5 rounded-2xl p-4 flex flex-col items-center text-center shadow-inner">
-                    <span id="stat-streak" class="text-2xl font-black text-amber-400">3 Days</span>
-                    <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Study Streak 🔥</span>
-                </div>
-            </div>
-
-            <!-- Course Breakdown List -->
-            <div>
-                <h3 class="text-xs uppercase tracking-widest text-slate-400 font-extrabold mb-3">Focus Hours by Module</h3>
-                <div id="stats-course-breakdown" class="space-y-2">
-                    <!-- Injected dynamically -->
-                </div>
-            </div>
-
-            <div class="flex justify-end mt-6 pt-4 border-t border-white/5">
-                <button onclick="closeStatsModal()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-lg shadow-indigo-600/30">Close Stats</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast Notification Container -->
-    <div id="toast-container" class="fixed bottom-6 right-6 z-[300] flex flex-col gap-3 max-w-sm pointer-events-none"></div>
-
     <!-- Footer -->
     <footer class="text-center py-8 text-slate-500 text-sm border-t border-white/5 mt-10">
         <p>&copy; 2026 Gnosys-AI. Built for Academic Excellence.</p>
@@ -202,9 +100,8 @@
     </footer>
 
     <script src="./assets/llm-router.js?v=1.1.2"></script>
-
-    <!-- Hub Application Script -->
-    <script src="./hub.js?v=20260529"></script>
+    <script src="./assets/js/pomodoro.js"></script>
+    <script src="./hub.js?v=20260601c"></script>
 
 </body>
 </html>

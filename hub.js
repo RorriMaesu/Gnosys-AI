@@ -10,6 +10,13 @@ const COURSES = [
         category: 'Clinical Core',
         icon: 'fa-staff-snake',
         color: 'from-teal-500 to-emerald-600',
+        iconWrapClass: 'bg-teal-500/15 border-teal-400/30',
+        iconClass: 'text-teal-300',
+        iconWrapStyle: 'background: rgba(20, 184, 166, 0.18); border-color: rgba(94, 234, 212, 0.45);',
+        iconStyle: 'color: #5eead4;',
+        accentGlow: 'bg-teal-500/10 group-hover:bg-teal-500/20',
+        accentTitleHover: 'group-hover:text-teal-200',
+        accentCta: 'text-teal-400',
         status: 'active'
     },
     {
@@ -20,6 +27,13 @@ const COURSES = [
         category: 'Sciences',
         icon: 'fa-flask-vial',
         color: 'from-amber-500 to-orange-600',
+        iconWrapClass: 'bg-amber-500/15 border-amber-400/35',
+        iconClass: 'text-amber-600',
+        iconWrapStyle: 'background: rgba(245, 158, 11, 0.18); border-color: rgba(252, 211, 77, 0.45);',
+        iconStyle: 'color: #d97706;',
+        accentGlow: 'bg-amber-500/10 group-hover:bg-amber-500/20',
+        accentTitleHover: 'group-hover:text-amber-200',
+        accentCta: 'text-amber-400',
         status: 'active'
     },
     {
@@ -30,6 +44,10 @@ const COURSES = [
         category: 'Sciences',
         icon: 'fa-square-root-variable',
         color: 'from-cyan-500 to-blue-600',
+        iconWrapClass: 'bg-amber-500/15 border-amber-400/35',
+        iconClass: 'text-amber-300',
+        iconWrapStyle: 'background: rgba(245, 158, 11, 0.18); border-color: rgba(252, 211, 77, 0.45);',
+        iconStyle: 'color: #fde68a;',
         status: 'active'
     },
     {
@@ -44,12 +62,19 @@ const COURSES = [
     },
     {
         id: 'psychology-care',
-        title: 'Psychology & Care',
+        title: 'Intro to Psychology',
         description: 'Patient interaction, behavioral sciences, and professional clinical ethics.',
         link: './psychology/index.html',
         category: 'Clinical Core',
         icon: 'fa-brain',
         color: 'from-purple-500 to-fuchsia-600',
+        iconWrapClass: 'bg-purple-500/15 border-purple-400/30',
+        iconClass: 'text-purple-300',
+        iconWrapStyle: 'background: rgba(168, 85, 247, 0.18); border-color: rgba(192, 132, 252, 0.45);',
+        iconStyle: 'color: #d8b4fe;',
+        accentGlow: 'bg-purple-500/10 group-hover:bg-purple-500/20',
+        accentTitleHover: 'group-hover:text-purple-200',
+        accentCta: 'text-purple-400',
         status: 'active'
     },
     {
@@ -145,42 +170,22 @@ const COURSES = [
 ];
 
 let activeFilter = 'all';
-
-// Pomodoro Timer State
-let timerInterval = null;
-let timerTimeLeft = 25 * 60; // 25 minutes default
-let timerMaxTime = 25 * 60;
-let timerIsRunning = false;
-let timerMode = 'focus'; // 'focus' or 'break'
-let timerSelectedCourseId = 'general';
-
 let focusStats = {};
 
 document.addEventListener('DOMContentLoaded', () => {
     loadFocusStats();
-    initTimer();
     renderFilters();
     renderCourseGrid();
-    updateGlobalStats();
 });
 
 function loadFocusStats() {
     try {
         const stored = localStorage.getItem('study_hub_focus_stats');
-        if (stored) {
-            focusStats = JSON.parse(stored);
-        } else {
-            focusStats = {};
-        }
+        focusStats = stored ? JSON.parse(stored) : {};
     } catch (e) {
         console.error('Failed to load focus stats:', e);
         focusStats = {};
     }
-}
-
-function saveFocusStats() {
-    localStorage.setItem('study_hub_focus_stats', JSON.stringify(focusStats));
-    updateGlobalStats();
 }
 
 // Render Filters
@@ -230,6 +235,13 @@ function renderCourseGrid() {
 
     grid.innerHTML = filtered.map(c => {
         const isActive = c.status === 'active';
+        const accentGlow = c.accentGlow || 'bg-indigo-500/10 group-hover:bg-indigo-500/20';
+        const accentTitleHover = c.accentTitleHover || 'group-hover:text-indigo-200';
+        const accentCta = c.accentCta || 'text-indigo-400';
+        const iconWrapClass = c.iconWrapClass || `bg-gradient-to-br ${c.color} border-white/10`;
+        const iconClass = c.iconClass || 'text-white';
+        const iconWrapStyle = c.iconWrapStyle || '';
+        const iconStyle = c.iconStyle || '';
         
         // Status pill
         const statusPill = isActive
@@ -248,13 +260,13 @@ function renderCourseGrid() {
             : `href="#" onclick="showToast('${c.title}'); return false;"`;
 
         return `
-            <a ${clickAction} class="block group relative ${!isActive ? 'opacity-70 hover:opacity-90' : ''}">
+            <a ${clickAction} class="block group relative ${isActive ? '' : 'opacity-70 hover:opacity-90'}">
                 <div class="glass-card rounded-3xl p-8 h-full transition-all duration-300 module-active relative overflow-hidden flex flex-col min-h-[220px]">
-                    <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-indigo-500/20 transition-all"></div>
+                    <div class="absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-10 -mt-10 transition-all ${accentGlow}"></div>
                     
                     <div class="flex justify-between items-start mb-6">
-                        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br ${c.color} flex items-center justify-center border border-white/10 shadow-lg">
-                            <i class="fa-solid ${c.icon} text-2xl text-white"></i>
+                        <div class="w-14 h-14 rounded-2xl flex items-center justify-center border shadow-lg ${iconWrapClass}" style="${iconWrapStyle}">
+                            <i class="fa-solid ${c.icon} text-2xl ${iconClass}" style="${iconStyle}"></i>
                         </div>
                         <div class="flex items-center gap-1">
                             ${statusPill}
@@ -262,10 +274,10 @@ function renderCourseGrid() {
                         </div>
                     </div>
 
-                    <h3 class="text-2xl font-bold text-white mb-2 leading-snug group-hover:text-indigo-200 transition-colors">${c.title}</h3>
+                    <h3 class="text-2xl font-bold text-white mb-2 leading-snug transition-colors ${accentTitleHover}">${c.title}</h3>
                     <p class="text-slate-400 text-sm mb-6 leading-relaxed flex-grow">${c.description}</p>
                     
-                    <div class="mt-auto flex items-center text-indigo-400 font-bold text-sm group-hover:translate-x-1 transition-transform">
+                    <div class="mt-auto flex items-center ${accentCta} font-bold text-sm group-hover:translate-x-1 transition-transform">
                         ${isActive ? 'Launch Module' : 'In Development'} <i class="fa-solid fa-arrow-right ml-2 text-xs"></i>
                     </div>
                 </div>
@@ -274,260 +286,14 @@ function renderCourseGrid() {
     }).join('');
 }
 
-// ----------------------------------------------------
-// FLOATING STATS BUTTON & MODAL
-// ----------------------------------------------------
-window.openStatsModal = function() {
-    updateGlobalStats();
-    document.getElementById('modal-stats').classList.remove('hidden');
-    document.getElementById('modal-stats').classList.add('flex');
-};
-
-window.closeStatsModal = function() {
-    document.getElementById('modal-stats').classList.add('hidden');
-    document.getElementById('modal-stats').classList.remove('flex');
-};
-
-// Update Global Stats in the Modal & Dropdown
-function updateGlobalStats() {
-    const statFocusText = document.getElementById('stat-total-focus');
-    const statStreakText = document.getElementById('stat-streak');
-    const timerSelect = document.getElementById('timer-course-select');
-    const breakdownContainer = document.getElementById('stats-course-breakdown');
-
-    if (statFocusText) {
-        let totalSeconds = 0;
-        Object.values(focusStats).forEach(s => totalSeconds += s);
-        statFocusText.textContent = `${(totalSeconds / 3600).toFixed(1)} hrs`;
+// Listen to storage changes to update grid hours live
+window.addEventListener('storage', (event) => {
+    if (event.key === 'study_hub_focus_stats') {
+        loadFocusStats();
+        renderCourseGrid();
     }
+});
 
-    if (statStreakText) {
-        const streak = localStorage.getItem('study_streak_count') || '3';
-        statStreakText.textContent = `${streak} Days`;
-    }
-
-    // Populate active courses dropdown
-    if (timerSelect) {
-        let options = '<option value="general">General Study Focus</option>';
-        COURSES.filter(c => c.status === 'active').forEach(c => {
-            options += `<option value="${c.id}">${c.title}</option>`;
-        });
-        const currentSelected = timerSelectedCourseId;
-        timerSelect.innerHTML = options;
-        timerSelect.value = currentSelected;
-    }
-
-    // Render course focus time breakdown in the modal
-    if (breakdownContainer) {
-        const activeCourses = COURSES.filter(c => c.status === 'active');
-        let breakdownHTML = activeCourses.map(c => {
-            const seconds = focusStats[c.id] || 0;
-            const hours = (seconds / 3600).toFixed(1);
-            return `
-                <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-white/5 text-slate-200">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid ${c.icon} text-slate-400"></i>
-                        <span class="text-xs font-semibold">${c.title}</span>
-                    </div>
-                    <span class="text-xs font-extrabold text-indigo-400">${hours} hrs</span>
-                </div>
-            `;
-        }).join('');
-
-        // Append General Study Focus stats
-        const generalSeconds = focusStats['general'] || 0;
-        const generalHours = (generalSeconds / 3600).toFixed(1);
-        breakdownHTML += `
-            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-white/5 text-slate-200">
-                <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-hourglass-half text-indigo-400"></i>
-                    <span class="text-xs font-semibold">General Study Focus</span>
-                </div>
-                <span class="text-xs font-extrabold text-indigo-400">${generalHours} hrs</span>
-            </div>
-        `;
-        breakdownContainer.innerHTML = breakdownHTML;
-    }
-}
-
-// ----------------------------------------------------
-// FLOATING TIMER WORKSPACE LOGIC
-// ----------------------------------------------------
-let timerExpanded = false;
-
-window.toggleFloatingTimer = function() {
-    const panel = document.getElementById('timer-expanded-panel');
-    const btn = document.getElementById('timer-toggle-btn');
-    
-    if (!panel || !btn) return;
-
-    timerExpanded = !timerExpanded;
-    if (timerExpanded) {
-        panel.classList.remove('hidden');
-        panel.classList.add('flex');
-        btn.classList.add('border-indigo-400');
-    } else {
-        panel.classList.add('hidden');
-        panel.classList.remove('flex');
-        btn.classList.remove('border-indigo-400');
-    }
-};
-
-function initTimer() {
-    const btnPlay = document.getElementById('timer-play');
-    const btnPause = document.getElementById('timer-pause');
-    const btnReset = document.getElementById('timer-reset');
-    const display = document.getElementById('timer-display');
-    const select = document.getElementById('timer-course-select');
-
-    if (!btnPlay || !btnPause || !btnReset || !display) return;
-
-    btnPlay.addEventListener('click', startTimer);
-    btnPause.addEventListener('click', pauseTimer);
-    btnReset.addEventListener('click', resetTimer);
-    select.addEventListener('change', (e) => {
-        timerSelectedCourseId = e.target.value;
-    });
-
-    updateTimerDisplay();
-}
-
-function startTimer() {
-    if (timerIsRunning) return;
-    timerIsRunning = true;
-    
-    document.getElementById('timer-play').classList.add('hidden');
-    document.getElementById('timer-pause').classList.remove('hidden');
-    
-    // Add pulsing border to floating button
-    const pulse = document.getElementById('timer-pulse-ring');
-    if (pulse) {
-        pulse.classList.remove('opacity-0');
-        pulse.classList.add('animate-ping', 'opacity-100');
-    }
-
-    timerInterval = setInterval(() => {
-        timerTimeLeft--;
-        
-        if (timerMode === 'focus') {
-            logFocusSecond();
-        }
-
-        if (timerTimeLeft <= 0) {
-            playTimerAlert();
-            switchTimerMode();
-        }
-        updateTimerDisplay();
-    }, 1000);
-}
-
-function pauseTimer() {
-    if (!timerIsRunning) return;
-    timerIsRunning = false;
-    clearInterval(timerInterval);
-    document.getElementById('timer-play').classList.remove('hidden');
-    document.getElementById('timer-pause').classList.add('hidden');
-
-    // Remove pulsing border
-    const pulse = document.getElementById('timer-pulse-ring');
-    if (pulse) {
-        pulse.classList.remove('animate-ping', 'opacity-100');
-        pulse.classList.add('opacity-0');
-    }
-}
-
-function resetTimer() {
-    pauseTimer();
-    timerTimeLeft = timerMode === 'focus' ? timerMaxTime : 5 * 60;
-    updateTimerDisplay();
-}
-
-function switchTimerMode() {
-    if (timerMode === 'focus') {
-        timerMode = 'break';
-        timerTimeLeft = 5 * 60; // 5 min break
-        showBrowserNotification('Focus Session Complete!', 'Take a 5-minute break.');
-    } else {
-        timerMode = 'focus';
-        timerTimeLeft = timerMaxTime;
-        showBrowserNotification('Break Over!', 'Lock back into your learning.');
-    }
-    resetTimer();
-}
-
-function updateTimerDisplay() {
-    const display = document.getElementById('timer-display');
-    const modeIndicator = document.getElementById('timer-mode-indicator');
-    const progressRing = document.getElementById('timer-progress-ring');
-    const badge = document.getElementById('timer-badge');
-    
-    if (!display) return;
-
-    const mins = Math.floor(timerTimeLeft / 60);
-    const secs = timerTimeLeft % 60;
-    display.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-
-    if (modeIndicator) {
-        modeIndicator.textContent = timerMode === 'focus' ? 'Focus Session Active' : 'Break Time Active';
-    }
-
-    if (progressRing) {
-        const total = timerMode === 'focus' ? timerMaxTime : 5 * 60;
-        const progress = (total - timerTimeLeft) / total;
-        // Circumference is 2 * pi * r = 2 * 3.14159 * 34 = 213.6
-        const offset = 213 - (progress * 213);
-        progressRing.style.strokeDashoffset = offset;
-    }
-
-    if (badge) {
-        badge.textContent = `${mins}m`;
-        if (timerIsRunning) {
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
-        }
-    }
-}
-
-function logFocusSecond() {
-    if (!focusStats[timerSelectedCourseId]) {
-        focusStats[timerSelectedCourseId] = 0;
-    }
-    focusStats[timerSelectedCourseId]++;
-    
-    if (focusStats[timerSelectedCourseId] % 10 === 0) {
-        saveFocusStats();
-    }
-}
-
-function playTimerAlert() {
-    try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(660, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.35);
-    } catch (e) {
-        console.warn('Audio alert API warning');
-    }
-}
-
-function showBrowserNotification(title, message) {
-    if (Notification.permission === 'granted') {
-        new Notification(title, { body: message });
-    } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-                new Notification(title, { body: message });
-            }
-        });
-    }
-}
 
 // ----------------------------------------------------
 // TOAST NOTIFICATION SYSTEM (For Planned Modules)

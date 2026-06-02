@@ -107,7 +107,8 @@ def fetch_and_map():
         mapped_elements.append(mapped_el)
         
     # Write directly to data.json
-    out_dir = r"t:\StudyApps\MedicalTermMastery\chemistry\periodic-table"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    out_dir = os.path.join(script_dir, "periodic-table")
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "data.json")
     

@@ -4,11 +4,11 @@ Project Context: We are building a "Coursework, Homework, & Mastery" environment
 
 CRITICAL BOUNDARIES & FILE PATHS:
 
-Working Directory: You are operating strictly within T:\StudyApps\MedicalTermMastery\chemistry. Do NOT touch files outside of this folder.
+Working Directory: You are operating strictly within T:\StudyApps\Gnosys-AI\chemistry. Do NOT touch files outside of this folder.
 
 Code Isolation: We have existing interactive calculators in index.html and app.js. You must NOT modify or overwrite these existing files. Build this new system using dedicated files: coursework.html, assignments.html, coursework.js, assignments.js, ai-tutor.js, and mastery.js.
 
-The Syllabus Source of Truth: The master lesson plan is located exactly at T:\StudyApps\MedicalTermMastery\chemistry\chemistry_lesson_plan_CH104Z.md.
+The Syllabus Source of Truth: The master lesson plan is located exactly at T:\StudyApps\Gnosys-AI\chemistry\chemistry_lesson_plan_CH104Z.md.
 
 Design Rules: The tech stack is strictly HTML5, Tailwind CSS (via CDN), FontAwesome (via CDN), and Vanilla JavaScript. You may use marked.js via CDN for parsing Markdown. No React.
 

@@ -1,526 +1,1746 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Psychology & Care Simulator</title>
+    <title>PSY 201Z - Introduction to Psychology Dashboard</title>
     <script>
         (function() {
             var pref = localStorage.getItem('psych_darkmode');
             if (pref === null || pref === 'true') document.documentElement.classList.add('dark');
         })();
     </script>
-    <link rel="stylesheet" href="../assets/css/tailwind.css">
-    <link rel="icon" type="image/jpeg" href="../assets/GnosysAILogo.jpg">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- KaTeX for beautifully rendering LLM math output -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
-    
-    <!-- Marked.js for full markdown parsing -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    
+    <link href="gamification.css" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .hidden-tab { display: none !important; }
-        .fade-in { animation: fadeIn 0.35s ease-out forwards; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        body {
+            font-family: 'Inter', sans-serif;
         }
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(229, 231, 235, 0.5);
+        .hidden-tab {
+            display: none !important;
         }
-        .dark body { background-color: #0f1117; }
-        .dark .bg-white { background-color: #1a1d27; }
-        .dark .bg-gray-50 { background-color: #13151e; }
-        .dark .bg-gray-100 { background-color: #1e2130; }
-        .dark .bg-gray-200\/80 { background-color: rgba(20, 23, 38, 0.9); }
-        .dark .text-gray-800 { color: #e2e8f0; }
-        .dark .text-gray-700 { color: #cbd5e1; }
-        .dark .text-gray-600 { color: #94a3b8; }
-        .dark .text-gray-500 { color: #94a3b8; }
-        .dark .text-gray-400 { color: #64748b; }
-        .dark .border-gray-100 { border-color: #252836; }
-        .dark .border-gray-200 { border-color: #363a52; }
-        .dark .border-gray-300 { border-color: #4a4e6b; }
-        
-        /* Module specific colors (Purple accents) */
-        .dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.1); }
-        .dark .border-purple-200 { border-color: rgba(168, 85, 247, 0.3); }
-        .dark .border-purple-100 { border-color: rgba(168, 85, 247, 0.2); }
-        .dark .text-purple-800 { color: #e9d5ff; }
-        .dark .text-purple-700 { color: #d8b4fe; }
-        .dark .text-purple-600 { color: #c084fc; }
-        .dark .bg-purple-500 { background-color: #a855f7; }
-        .dark .hover\:bg-purple-600:hover { background-color: #9333ea; }
-        
-        .dark .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.1); }
-        .dark .border-indigo-200 { border-color: rgba(99, 102, 241, 0.3); }
-        .dark .text-indigo-800 { color: #c7d2fe; }
-        .dark .text-indigo-700 { color: #a5b4fc; }
-        .dark .text-indigo-600 { color: #818cf8; }
-
-        .dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.1); }
-        .dark .text-emerald-400 { color: #34d399; }
-        .dark .text-rose-400 { color: #fb7185; }
-
-        /* AI Tutor specific (violet) */
-        .dark .bg-violet-50 { background-color: rgba(109, 40, 217, 0.14); }
-        .dark .hover\:bg-violet-100:hover { background-color: rgba(109, 40, 217, 0.25); }
-        .dark .border-violet-100 { border-color: rgba(139, 92, 246, 0.25); }
-        .dark .text-violet-600 { color: #a78bfa; }
-        .dark .text-violet-800 { color: #c4b5fd; }
-        .dark .text-violet-400 { color: #8b5cf6; }
-
-        .dark .hover\:bg-gray-50:hover { background-color: #1e2130; }
-        .dark .hover\:bg-gray-100:hover { background-color: #252836; }
-        .dark .hover\:text-gray-900:hover { color: #f1f5f9; }
-        .dark .glass-panel {
-            background: rgba(22, 25, 40, 0.96);
-            border-bottom-color: rgba(45, 50, 80, 0.5);
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
-        .dark input,
-        .dark select,
-        .dark textarea {
-            background-color: #1e2130;
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .bnav-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #020617;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3b0764;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a855f7;
+        }
+        .video-modal-dialog {
+            width: 100%;
+            height: 100%;
+            max-height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .video-modal-content {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        .video-modal-player-shell {
+            position: relative;
+            aspect-ratio: 16 / 9;
+        }
+        .video-player-frame-hidden {
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .video-quiz-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 25;
+            background: rgba(15, 17, 23, 0.94);
+            padding: 0.75rem;
+        }
+        .video-quiz-overlay.hidden {
+            display: none;
+        }
+        .video-quiz-overlay-shell {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(168, 85, 247, 0.35);
+            background: rgba(15, 23, 42, 0.96);
+            overflow: hidden;
+        }
+        .video-quiz-overlay-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid rgba(168, 85, 247, 0.3);
             color: #e2e8f0;
-            border-color: #363a52;
         }
-
-        .bnav-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
-
-        /* Mobile UI Layout Optimization Overrides */
-        .no-scrollbar::-webkit-scrollbar { display: none !important; }
-        .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }
-
-        @media (max-width: 1024px) {
-            nav.lg\:hidden button {
-                min-width: 72px !important;
-                flex-shrink: 0 !important;
+        .video-quiz-overlay-host {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+        .video-quiz-overlay-host .video-quiz-widget,
+        .video-quiz-mobile-host .video-quiz-widget {
+            margin-top: 0;
+            height: 100%;
+        }
+        .video-quiz-overlay-host .video-quiz-widget > div,
+        .video-quiz-mobile-host .video-quiz-widget > div {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .video-quiz-overlay-host .video-quiz-widget .tutor-messages,
+        .video-quiz-mobile-host .video-quiz-widget .tutor-messages {
+            flex: 1;
+            max-height: none;
+        }
+        .video-quiz-overlay-host .video-quiz-widget .tutor-close,
+        .video-quiz-mobile-host .video-quiz-widget .tutor-close {
+            display: none;
+        }
+        .video-quiz-mobile {
+            position: absolute;
+            inset: 0;
+            z-index: 140;
+            background: rgba(2, 6, 23, 0.98);
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .video-quiz-mobile.hidden {
+            display: none;
+        }
+        .video-quiz-mobile-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(168, 85, 247, 0.35);
+            background: rgba(30, 41, 59, 0.96);
+            color: #e2e8f0;
+        }
+        .video-quiz-mobile-host {
+            flex: 1;
+            min-height: 0;
+            margin-top: 0.75rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(168, 85, 247, 0.35);
+            background: rgba(15, 23, 42, 0.96);
+            overflow: hidden;
+            padding: 0.5rem;
+        }
+        .cc-support-card {
+            border: 1px solid rgba(168, 85, 247, 0.35);
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(88, 28, 135, 0.2) 100%);
+            border-radius: 1rem;
+            padding: 1rem;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.2);
+        }
+        .cc-support-title {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #e2e8f0;
+            letter-spacing: 0.01em;
+            margin-bottom: 0.5rem;
+        }
+        .cc-support-note {
+            font-size: 0.86rem;
+            line-height: 1.6;
+            color: #cbd5e1;
+            margin: 0;
+        }
+        .cc-support-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.625rem;
+            margin-top: 0.85rem;
+        }
+        .cc-support-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 2.25rem;
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.75rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .cc-support-btn-primary {
+            color: #ffffff;
+            background: #7e22ce;
+        }
+        .cc-support-btn-primary:hover {
+            background: #9333ea;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(126, 34, 206, 0.28);
+        }
+        .cc-support-btn-secondary {
+            color: #d8b4fe;
+            background: rgba(126, 34, 206, 0.25);
+            border-color: rgba(192, 132, 252, 0.5);
+        }
+        .cc-support-btn-secondary:hover {
+            color: #f3e8ff;
+            background: rgba(126, 34, 206, 0.38);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(126, 34, 206, 0.22);
+        }
+        #view-videos.video-active-flow > .grid,
+        #view-videos.video-active-flow > #video-support-tribute {
+            display: none !important;
+        }
+        #view-videos.video-active-flow #video-episode-modal {
+            position: relative !important;
+            inset: auto !important;
+            z-index: 10 !important;
+            width: 100% !important;
+            height: auto !important;
+            display: block !important;
+        }
+        #view-videos.video-active-flow #video-episode-modal-backdrop {
+            display: none !important;
+        }
+        #view-videos.video-active-flow #video-episode-modal > div {
+            height: auto !important;
+        }
+        #view-videos.video-active-flow .video-modal-dialog {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            height: auto !important;
+            max-height: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+        }
+        #view-videos.video-active-flow .video-modal-content {
+            padding: 1.25rem 0 0 0 !important;
+        }
+        #view-videos.video-active-flow .video-modal-dialog > div.sticky {
+            position: relative !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border-bottom: none !important;
+        }
+        @media (min-width: 1024px) {
+            .video-modal-dialog {
+                width: 100%;
+                height: 100%;
+                max-height: 100%;
             }
-            header h1 { font-size: 1.1rem !important; }
+            .video-modal-player-shell {
+                aspect-ratio: auto;
+                height: clamp(21rem, 39vh, 30rem);
+            }
         }
-
         @media (max-width: 640px) {
-            #chat-messages {
-                max-height: 40vh !important;
+            .cc-support-actions {
+                flex-direction: column;
             }
-            #chat-input {
-                font-size: 0.9rem !important;
-            }
-            #chart-content {
-                font-size: 1rem !important;
-                line-height: 1.6 !important;
-                word-break: break-word !important;
-                overflow-wrap: break-word !important;
+            .cc-support-btn {
+                width: 100%;
             }
         }
-
-        /* Highlights */
-        .highlight-red { background-color: rgba(239, 68, 68, 0.2); border-bottom: 2px solid #ef4444; color: #ef4444; font-weight: bold; cursor: pointer; }
-        .highlight-green { background-color: rgba(34, 197, 94, 0.2); border-bottom: 2px solid #22c55e; color: #22c55e; font-weight: bold; }
-        .highlight-pending { cursor: pointer; border-bottom: 2px dashed #94a3b8; transition: all 0.2s; }
-        .highlight-pending:hover { background-color: rgba(148, 163, 184, 0.2); }
-        .dark .highlight-pending { border-bottom-color: #475569; }
-        .dark .highlight-pending:hover { background-color: rgba(71, 85, 105, 0.4); }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col selection:bg-purple-200 selection:text-purple-900 relative">
-    
-    <header class="glass-panel sticky top-0 z-40">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center gap-4">
-            <div class="flex items-center gap-4">
-                <a href="../index.html" class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors shadow-sm" title="Back to Hub">
-                    <i class="fa-solid fa-arrow-left text-sm"></i>
-                </a>
-                <h1 class="text-xl sm:text-2xl font-extrabold text-purple-600 flex items-center gap-2 tracking-tight shrink-0">
-                    <i class="fa-solid fa-brain"></i>
-                    Psychology & Care
-                </h1>
-                <span data-llm-provider-badge class="hidden sm:inline-flex">● Checking AI Route...</span>
+<body class="bg-slate-950 text-slate-100 flex flex-col min-h-screen">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900 border-b border-purple-900/35 px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between shadow-lg shrink-0 gap-2 sm:gap-4">
+        <div class="flex items-center space-x-2 sm:space-x-3 shrink-0" data-header-left>
+            <a href="../index.html" class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-950/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-purple-900/35 transition-colors shadow-sm" title="Back to Hub" aria-label="Back to Hub">
+                <i class="fa-solid fa-arrow-left text-sm"></i>
+            </a>
+            <div class="text-purple-400 font-bold text-sm sm:text-base md:text-lg flex items-center space-x-2 min-w-0">
+                <i class="fa-solid fa-brain text-base sm:text-lg"></i>
+                <span class="font-mono text-xs sm:text-sm uppercase tracking-wider text-slate-200 truncate">Gnosys PSY201Z</span>
+            </div>
+            <span class="hidden lg:inline text-slate-500 font-mono text-xs border border-slate-800 rounded px-1.5 py-0.5 bg-slate-950/50">Dashboard</span>
+        </div>
+
+        <div class="hidden md:flex items-center gap-2 lg:gap-3">
+            <a href="coursework.html" title="Coursework" class="px-2.5 py-1.5 lg:px-3.5 lg:py-1.5 rounded-xl text-xs font-bold bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 border border-purple-500/30 hover:border-purple-400/40 transition-all flex items-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-graduation-cap"></i> <span class="hidden lg:inline">Coursework</span>
+            </a>
+            <a href="assignments.html" title="Homework Binder" class="px-2.5 py-1.5 lg:px-3.5 lg:py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border border-emerald-500/30 hover:border-emerald-400/40 transition-all flex items-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-clipboard-list"></i> <span class="hidden lg:inline">Homework Binder</span>
+            </a>
+        </div>
+
+        <div class="flex items-center space-x-2" data-header-right>
+            <div class="inline-flex mr-1 shrink-0 text-[10px] sm:text-xs">
+                <span data-llm-provider-badge>● Checking AI Route...</span>
             </div>
 
-            <!-- Clinical Dashboard Progress Tracking -->
-            <div class="flex items-center gap-2 sm:gap-4 shrink-0">
-                <div class="hidden sm:flex flex-col items-end mr-4">
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Empathy</span>
-                    <div class="flex items-center gap-2 mt-0.5">
-                        <div class="w-20 h-2 bg-gray-200 rounded-full overflow-hidden border border-gray-200">
-                            <div id="dash-empathy-bar" class="h-full bg-indigo-500 transition-all duration-500" style="width: 0%"></div>
-                        </div>
-                        <span id="dash-empathy-text" class="text-[10px] font-bold text-indigo-600">0%</span>
-                    </div>
-                </div>
-                <div class="hidden sm:flex flex-col items-end mr-2">
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Crises</span>
-                    <span id="dash-crises-text" class="text-[10px] font-bold text-emerald-600 mt-0.5">0 / 0</span>
-                </div>
-                
-                <button id="btn-darkmode" title="Toggle Dark Mode" class="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center shadow-sm transition-colors shrink-0">
-                    <i class="fa-solid fa-moon"></i>
+            <!-- Streak Indicator -->
+            <div class="streak-indicator-container hidden lg:flex items-center space-x-1 bg-slate-950/60 border border-amber-500/20 text-amber-500 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                <i class="fa-solid fa-fire text-amber-500 animate-pulse"></i>
+                <span id="header-streak-count">0</span>
+            </div>
+            <!-- Level Display -->
+            <div class="hidden lg:flex items-center space-x-2 bg-slate-950/60 border border-purple-500/20 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                <span id="header-level-badge" class="bg-purple-900/40 text-purple-300 rounded px-1 py-0.5 text-[10px] font-bold">Lvl 1</span>
+                <span id="header-level-title" class="text-slate-300 text-[10px] hidden sm:inline">Apprentice</span>
+            </div>
+            <!-- Pomodoro Timer -->
+            <div id="global-pomodoro-indicator" class="hidden xl:flex items-center space-x-2 bg-slate-950/70 border border-purple-900/40 rounded-full px-3 py-1 text-xs">
+                <i class="fa-solid fa-clock text-purple-400 animate-pulse"></i>
+                <span id="pomo-timer-display" class="font-mono font-semibold text-purple-200">25:00</span>
+                <button id="pomo-toggle-btn" class="hover:text-purple-300 transition"><i class="fa-solid fa-play"></i></button>
+            </div>
+
+            <a href="https://buymeacoffee.com/rorrimaesu" target="_blank" rel="noopener noreferrer" title="Support the App" class="w-9 h-9 rounded-full bg-yellow-50/95 border border-yellow-200 text-yellow-600 hover:bg-yellow-100 hover:border-yellow-400 hidden md:flex items-center justify-center shadow-sm transition-colors shrink-0">
+                <i class="fa-solid fa-mug-hot"></i>
+            </a>
+            <button id="btn-settings" title="Settings & Reset" onclick="openPsychologySettingsModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 hidden md:flex items-center justify-center shadow-sm transition-colors shrink-0">
+                <i class="fa-solid fa-gear text-sm"></i>
+            </button>
+
+            <button onclick="confirmAndResetPsychologyProgress()" class="hidden xl:flex text-slate-400 hover:text-red-400 text-xs font-semibold items-center border border-slate-850 px-2 py-1 rounded hover:border-red-950/40 bg-slate-950 transition">
+                <i class="fa-solid fa-trash-can mr-1.5"></i> Reset Course
+            </button>
+
+            <div class="relative md:hidden shrink-0">
+                <button id="btn-mobile-menu" type="button" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shadow-sm border border-slate-200 transition-colors" onclick="toggleMobileHeaderMenu()">
+                    <i class="fa-solid fa-bars text-sm"></i>
                 </button>
+                <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-56 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl z-[100] p-2 space-y-1">
+                    <a href="coursework.html" class="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-graduation-cap text-slate-400"></i> Coursework
+                    </a>
+                    <a href="assignments.html" class="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-clipboard-list text-slate-400"></i> Homework Binder
+                    </a>
+                    <hr class="border-slate-800 my-1" />
+                    <button onclick="openPsychologyStatsModal(); toggleMobileHeaderMenu();" class="w-full px-3.5 py-2 text-left rounded-xl text-xs font-bold text-emerald-300 hover:bg-slate-800 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-chart-simple text-emerald-400"></i> Stats & Achievements
+                    </button>
+                    <button onclick="openPsychologySettingsModal(); toggleMobileHeaderMenu();" class="w-full px-3.5 py-2 text-left rounded-xl text-xs font-bold text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-gear text-slate-400"></i> Settings & Preferences
+                    </button>
+                    <a href="https://buymeacoffee.com/rorrimaesu" target="_blank" rel="noopener noreferrer" onclick="toggleMobileHeaderMenu();" class="px-3.5 py-2 rounded-xl text-xs font-bold text-yellow-300 hover:bg-yellow-950/20 flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-mug-hot text-yellow-400"></i> Donate / Support App
+                    </a>
+                </div>
             </div>
         </div>
     </header>
 
-    <main class="max-w-4xl mx-auto px-4 flex-grow w-full pb-24 lg:pb-10 pt-4 lg:pt-6">
-        
-        <!-- Desktop tab navigation (lg only) -->
-        <div class="hidden lg:flex px-0 pb-6 justify-center">
-            <div class="inline-flex bg-gray-200/80 backdrop-blur-sm rounded-full p-1 shadow-inner gap-1" role="group">
-                <button id="nav-auditor" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-gray-500 hover:text-gray-800 hover:bg-gray-100/50" onclick="activatePsychTab('auditor')">Chart Auditor</button>
-                <button id="nav-jargon" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-gray-500 hover:text-gray-800 hover:bg-gray-100/50" onclick="activatePsychTab('jargon')">Jargon Filter</button>
-                <button id="nav-deescalation" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-gray-500 hover:text-gray-800 hover:bg-gray-100/50" onclick="activatePsychTab('deescalation')">Timed Crisis</button>
-                <button id="nav-ehr" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-gray-500 hover:text-gray-800 hover:bg-gray-100/50" onclick="activatePsychTab('ehr')">Legal Auditor</button>
-                <button id="nav-tutor" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-gray-500 hover:text-gray-800 hover:bg-gray-100/50" onclick="activatePsychTab('tutor')">AI Tutor</button>
+    <!-- Main Workspace -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 md:p-6 pb-24 lg:pb-8 space-y-6">
+
+        <!-- Tab Controls / Sub Header -->
+        <div class="hidden lg:flex px-0 pb-2 justify-center overflow-x-auto scrollbar-none">
+            <div class="inline-flex bg-slate-900 border border-purple-900/35 rounded-full p-1 shadow-inner gap-1 flex-nowrap shrink-0" role="tablist" aria-label="Psychology learning sections">
+                <button id="nav-dashboard" role="tab" aria-selected="true" aria-controls="view-dashboard" tabindex="0" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 bg-purple-600 text-white shadow-md">Dashboard</button>
+                <button id="nav-videos" role="tab" aria-selected="false" aria-controls="view-videos" tabindex="-1" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">Crash Course</button>
+                <button id="nav-research" role="tab" aria-selected="false" aria-controls="view-research" tabindex="-1" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">Research Design</button>
+                <button id="nav-neuro" role="tab" aria-selected="false" aria-controls="view-neuro" tabindex="-1" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">Axon Signaling</button>
+                <button id="nav-conditioning" role="tab" aria-selected="false" aria-controls="view-conditioning" tabindex="-1" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">Conditioning</button>
+                <button id="nav-memory" role="tab" aria-selected="false" aria-controls="view-memory" tabindex="-1" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">Memory Systems</button>
+                <button id="nav-clinical" role="tab" aria-selected="false" aria-controls="view-clinical" tabindex="-1" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">Clinical Intake</button>
+                <button id="nav-tutor" role="tab" aria-selected="false" aria-controls="view-tutor" tabindex="-1" class="px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50">AI Tutor</button>
             </div>
         </div>
 
-        <!-- MODULE 1: Chart Auditor -->
-        <section id="view-auditor" class="fade-in bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sm:p-8 mb-6">
-            <div class="flex items-center gap-4 mb-6">
-                <div class="w-12 h-12 rounded-full bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
-                    <i class="fa-solid fa-magnifying-glass-chart text-xl"></i>
+        <!-- Dashboard View -->
+        <section id="view-dashboard" class="fade-in space-y-6">
+            <!-- Welcome banner -->
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 md:p-6 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 opacity-10 text-[120px] text-purple-400 select-none">
+                    <i class="fa-solid fa-brain"></i>
                 </div>
-                <div>
-                    <h2 class="text-2xl font-extrabold text-gray-800">Chart Auditor</h2>
-                    <p class="text-sm font-medium text-gray-500 mt-1">Identify hidden clinical "red flags" before interacting with the patient.</p>
+                <div class="space-y-2 max-w-xl z-10">
+                    <span class="text-[10px] font-mono font-bold tracking-widest text-purple-400 uppercase bg-purple-900/20 px-2.5 py-1 rounded border border-purple-900/30">PSY201Z College Curriculum</span>
+                    <h2 class="text-xl md:text-2xl font-black text-slate-100">Introduction to the Science of Psychology</h2>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Master theoretical perspectives, biological neural mechanisms, developmental transitions, cognitive systems, abnormal diagnostic pathways, and clinical treatment models. Clear all 36 lessons to qualify for final accreditation.
+                    </p>
                 </div>
-            </div>
-
-            <div class="bg-gray-50 border border-gray-200 rounded-2xl p-6 mb-6 shadow-inner relative">
-                <div class="absolute top-4 right-4 text-xs font-bold text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm">Requisition</div>
-                <h3 class="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-4 border-b border-gray-200 pb-2">Patient History & Orders</h3>
-                
-                <div id="chart-content" class="text-lg text-gray-700 leading-loose font-medium">
-                    <!-- Populated by JS -->
-                    Loading chart...
-                </div>
-            </div>
-
-            <div class="flex items-center justify-between mt-4">
-                <p class="text-sm text-gray-500 font-medium"><i class="fa-solid fa-hand-pointer mr-2 text-purple-500"></i> Click text spans to highlight red flags.</p>
-                <button id="btn-submit-chart" class="px-6 py-3 rounded-xl font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">Proceed to Patient</button>
-            </div>
-        </section>
-
-        <!-- MODULE 2: Jargon Filter -->
-        <section id="view-jargon" class="hidden-tab fade-in bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sm:p-8 mb-6">
-            <div class="flex items-center gap-4 mb-6">
-                <div class="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                    <i class="fa-solid fa-language text-xl"></i>
-                </div>
-                <div>
-                    <h2 class="text-2xl font-extrabold text-gray-800">Jargon Filter</h2>
-                    <p class="text-sm font-medium text-gray-500 mt-1">Explain the procedure without using terrifying medical jargon.</p>
+                <div class="flex items-center space-x-3 w-full md:w-auto z-10">
+                    <a href="coursework.html" class="flex-1 md:flex-none text-center px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-bold text-white uppercase tracking-wider transition hover:scale-[1.02] duration-150 shadow-md">
+                        Start Learning <i class="fa-solid fa-graduation-cap ml-1"></i>
+                    </a>
+                    <a href="assignments.html" class="flex-1 md:flex-none text-center px-5 py-2.5 bg-slate-900 border border-slate-800 hover:border-purple-900/30 rounded text-xs font-bold text-slate-300 uppercase tracking-wider transition">
+                        Homework Binder <i class="fa-solid fa-clipboard-list ml-1 text-purple-400"></i>
+                    </a>
                 </div>
             </div>
 
-            <div class="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 rounded-2xl p-5 mb-6">
-                <p id="jargon-prompt" class="text-sm text-gray-700 dark:text-gray-300 font-medium mb-2"></p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Draft an explanation. Avoid blacklist words (e.g. tumor, radiation) and use comforting whitelist words.</p>
-            </div>
-
-            <div class="relative mb-6">
-                <textarea id="jargon-input" rows="5" class="w-full bg-white border-2 border-gray-200 rounded-2xl px-5 py-4 text-gray-800 text-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-y shadow-sm" placeholder="Type your explanation here..."></textarea>
-            </div>
-
-            <div id="jargon-feedback" class="hidden bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-6">
-                <h4 class="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">Analysis</h4>
-                <div id="jargon-rendered-text" class="text-lg leading-relaxed text-gray-700 p-4 bg-white rounded-xl border border-gray-200 shadow-sm"></div>
-                <div class="mt-4 flex gap-4">
-                    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex-1 text-center">
-                        <p class="text-2xl font-bold text-emerald-600" id="jargon-score">0</p>
-                        <p class="text-xs text-emerald-600 uppercase tracking-wider font-bold mt-1">Empathy Score</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex justify-end">
-                <div class="flex gap-4">
-                    <button id="btn-submit-jargon" class="px-6 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all text-lg flex-1">Analyze My Response</button>
-                    <button id="btn-next-jargon" class="px-6 py-3 rounded-xl font-bold text-white bg-slate-800 hover:bg-slate-700 shadow-lg shadow-slate-800/20 transition-all text-lg hidden">Next Scenario <i class="fa-solid fa-arrow-right ml-2"></i></button>
-                </div>
-            </div>
-        </section>
-
-        <!-- MODULE 3: Timed De-escalation -->
-        <section id="view-deescalation" class="hidden-tab fade-in bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sm:p-8 mb-6 relative overflow-hidden">
-            <!-- Stress indicator background -->
-            <div id="stress-bg" class="absolute inset-0 bg-red-500/5 opacity-0 transition-opacity duration-1000 pointer-events-none"></div>
-            
-            <div class="flex items-center justify-between mb-6 relative z-10">
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 animate-pulse">
-                        <i class="fa-solid fa-heart-pulse text-xl"></i>
-                    </div>
+            <section class="recommended-next-step-card bg-gradient-to-r from-purple-500/20 via-slate-900 to-violet-500/15 rounded-xl shadow-sm border border-purple-800/60 p-5 md:p-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <div>
-                        <h2 class="text-2xl font-extrabold text-gray-800">Crisis De-escalation</h2>
-                        <p class="text-sm font-medium text-rose-500 mt-1">Immediate intervention required.</p>
+                        <p class="text-[11px] font-black uppercase tracking-wider text-purple-300">Recommended Next Step</p>
+                        <h3 class="text-xl font-extrabold text-slate-100 mt-1">Continue Crash Course Path</h3>
+                        <p id="dashboard-video-summary" class="text-sm text-slate-300 mt-2">Pick your next psychology episode, then lock in concepts with a 3-question micro-quiz.</p>
+                        <p id="dashboard-video-progress" class="text-xs font-semibold text-slate-400 mt-1">0 of 41 episodes complete</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 shrink-0">
+                        <button id="btn-dashboard-open-videos" class="px-4 py-2.5 rounded-xl font-bold text-white bg-purple-600 hover:bg-purple-500 transition-colors shadow-sm">Open Crash Course</button>
+                        <button id="btn-dashboard-open-tutor" class="px-4 py-2.5 rounded-xl font-bold text-purple-100 bg-slate-900 hover:bg-slate-800 border border-purple-700/50 hover:border-purple-500/70 transition-colors">Ask Tutor First</button>
                     </div>
                 </div>
-                
-                <!-- Timer Bar -->
-                <div class="flex flex-col items-end w-32 sm:w-48">
-                    <span class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1" id="timer-text">10.0s</span>
-                    <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden border border-gray-200">
-                        <div id="timer-bar" class="h-full bg-rose-500 rounded-full w-full"></div>
-                    </div>
+            </section>
+
+            <!-- Stats Matrix Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-slate-900 border border-purple-900/25 p-4 rounded-xl shadow-sm text-center">
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Mastered Lessons</span>
+                    <div class="text-2xl font-extrabold text-purple-400 mt-1" id="stat-mastered">0</div>
+                    <span class="text-[9px] text-slate-550 block font-mono">Quizzes Scored >=80%</span>
+                </div>
+                <div class="bg-slate-900 border border-purple-900/25 p-4 rounded-xl shadow-sm text-center">
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Theory Cleared</span>
+                    <div class="text-2xl font-extrabold text-blue-400 mt-1" id="stat-theory">0</div>
+                    <span class="text-[9px] text-slate-550 block font-mono">Socratic + Sandboxes</span>
+                </div>
+                <div class="bg-slate-900 border border-purple-900/25 p-4 rounded-xl shadow-sm text-center">
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Progress Percentage</span>
+                    <div class="text-2xl font-extrabold text-emerald-400 mt-1" id="stat-percent">0%</div>
+                    <span class="text-[9px] text-slate-550 block font-mono">Overall Curriculum</span>
+                </div>
+                <div class="bg-slate-900 border border-purple-900/25 p-4 rounded-xl shadow-sm text-center">
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Bypass Status</span>
+                    <div class="text-xs font-bold text-slate-300 mt-2.5 uppercase font-mono" id="stat-bypass">Inactive</div>
+                    <span class="text-[9px] text-slate-550 block font-mono">Curriculum Bypass</span>
                 </div>
             </div>
 
-            <div class="bg-gray-50 border-l-4 border-rose-500 rounded-r-2xl p-6 mb-8 shadow-sm relative z-10">
-                <p id="deesc-prompt" class="text-xl text-gray-800 font-medium leading-relaxed">
-                    Patient suddenly stands up, tears out their IV, and yells, "I'm not letting you do this to me!"
-                </p>
-            </div>
-
-            <div id="deesc-tactics" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 relative z-10">
-                <button class="bg-white border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 p-4 rounded-2xl text-left transition-all group shadow-sm">
-                    <h4 class="font-bold text-indigo-600 mb-1">Acknowledge & Validate</h4>
-                    <p class="text-xs text-gray-500 font-medium">Focus on their immediate emotion before rules.</p>
-                </button>
-                <button class="bg-white border-2 border-gray-200 hover:border-rose-400 hover:bg-rose-50 p-4 rounded-2xl text-left transition-all group shadow-sm">
-                    <h4 class="font-bold text-rose-600 mb-1">Assert Authority</h4>
-                    <p class="text-xs text-gray-500 font-medium">Command them to sit down for their safety.</p>
-                </button>
-                <button class="bg-white border-2 border-gray-200 hover:border-amber-400 hover:bg-amber-50 p-4 rounded-2xl text-left transition-all group shadow-sm">
-                    <h4 class="font-bold text-amber-600 mb-1">Deflect & Ignore</h4>
-                    <p class="text-xs text-gray-500 font-medium">Continue preparing equipment quietly.</p>
-                </button>
-            </div>
-
-            <div id="deesc-verbal" class="hidden relative z-10 bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 fade-in">
-                <label class="block text-sm font-bold text-indigo-700 uppercase tracking-widest mb-3">What EXACTLY do you say?</label>
-                
-                <div id="deesc-input-container" class="flex gap-3">
-                    <input type="text" id="deesc-input" class="w-full bg-white border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-indigo-500 transition-all shadow-sm" placeholder="e.g., 'I can see you are very upset...' " autocomplete="off">
-                    <button id="btn-submit-deesc" class="px-6 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all shrink-0">Speak</button>
-                </div>
-
-                <!-- Inline Feedback Area -->
-                <div id="deesc-ai-feedback" class="hidden mt-4 bg-white rounded-xl p-4 border shadow-sm">
-                    <div class="flex items-start gap-4">
-                        <div id="deesc-result-icon" class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-2"></div>
-                        <div class="flex-1">
-                            <h3 id="deesc-result-title" class="text-lg font-bold mb-1"></h3>
-                            <p id="deesc-result-msg" class="text-sm font-medium"></p>
+            <!-- Gamification Engine UI -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left: Level/XP and Daily Quests -->
+                <div class="lg:col-span-1 flex flex-col space-y-4">
+                    <!-- Level & XP Progress Card -->
+                    <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-bold font-mono uppercase tracking-wider text-purple-400"><i class="fa-solid fa-ranking-star mr-1"></i> Progression</span>
+                            <span id="xp-display" class="text-[10px] font-mono text-slate-400">0 / 100 XP</span>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-lg text-sm font-black" id="xp-level-badge">Lvl 1</div>
+                            <div class="flex-grow min-w-0">
+                                <span class="block text-xs font-bold text-slate-200 truncate" id="xp-level-title">Behavioral Apprentice</span>
+                                <span class="block text-[10px] text-slate-500 mt-0.5">Title Rank in Course</span>
+                            </div>
+                        </div>
+                        <!-- ProgressBar -->
+                        <div class="w-full bg-slate-950 rounded-full h-2 border border-slate-800 overflow-hidden">
+                            <div id="xp-progress-bar" class="bg-purple-500 h-full w-0 transition-all duration-500"></div>
                         </div>
                     </div>
-                    <div class="mt-4 flex justify-end">
-                        <button id="btn-next-deesc" class="px-6 py-2 rounded-xl font-bold transition-all shadow-sm"></button>
+
+                    <!-- Daily Quests Card -->
+                    <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm flex-grow space-y-3">
+                        <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-400 border-b border-slate-850 pb-1.5 flex items-center justify-between">
+                            <span><i class="fa-solid fa-bullseye text-emerald-400 mr-1.5"></i> Daily Study Quests</span>
+                            <span class="text-[9px] text-slate-550 font-normal font-mono" id="quests-date-lbl">Today</span>
+                        </h3>
+                        <div id="quests-list-container" class="space-y-2.5">
+                            <div class="text-slate-555 text-xs text-center py-4">Loading daily tasks...</div>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Right 2 columns: Achievements Grid -->
+                <div class="lg:col-span-2 bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-4">
+                    <div class="flex justify-between items-center border-b border-slate-850 pb-1.5">
+                        <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-400"><i class="fa-solid fa-trophy text-amber-500 mr-1.5"></i> Psychological Achievements</h3>
+                        <span class="text-[10px] font-mono text-purple-400 font-bold" id="achievement-unlocked-count">0/10 Unlocked</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto max-h-[220px] pr-1.5" id="achievements-showcase-grid">
+                        <div class="text-slate-555 text-xs text-center py-10 col-span-2">Loading achievements map...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coursework Map - Full Width -->
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-4">
+                <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-400 border-b border-slate-800 pb-2"><i class="fa-solid fa-map mr-1 text-purple-400"></i> Course Modules</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3" id="dashboard-modules">
+                    <!-- Injected dynamically by logic -->
                 </div>
             </div>
         </section>
 
-        <!-- MODULE 4: EHR Legal Auditor -->
-        <section id="view-ehr" class="hidden-tab fade-in bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sm:p-8 mb-6">
-            <div class="flex items-center gap-4 mb-6">
-                <div class="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-                    <i class="fa-solid fa-scale-balanced text-xl"></i>
-                </div>
-                <div>
-                    <h2 class="text-2xl font-extrabold text-gray-800">EHR Legal Auditor</h2>
-                    <p class="text-sm font-medium text-gray-500 mt-1">Write an objective post-incident report for the patient chart.</p>
-                </div>
-            </div>
 
-            <!-- Expert Guide Accordion -->
-            <details class="group mb-6 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden transition-all">
-                <summary class="flex items-center gap-3 p-4 cursor-pointer font-bold text-gray-700 dark:text-gray-300 select-none hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
-                    <div class="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                        <i class="fa-solid fa-book-medical"></i>
+        <!-- Research Design Simulator View -->
+        <section id="view-research" class="hidden-tab fade-in space-y-6">
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-flask text-purple-400"></i> Research Design Variable Architect
+                        </h2>
+                        <p class="text-xs text-slate-450 mt-1">Determine variables, select operational definitions, and evaluate causal claims.</p>
                     </div>
-                    Expert Guide: Rules of Defensible Charting
-                    <i class="fa-solid fa-chevron-down ml-auto text-gray-400 transition-transform group-open:rotate-180"></i>
-                </summary>
-                <div class="p-5 pt-2 border-t border-gray-100 dark:border-slate-700 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                    <p class="mb-4"><strong class="text-gray-800 dark:text-gray-200 text-base">The Golden Rule:</strong> <em class="text-indigo-600 dark:text-indigo-400">If it wasn't documented, it wasn't done.</em> Your electronic health record (EHR) is a legal document. It must be strictly objective, factual, and free of personal bias.</p>
-                    
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <div class="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800/50 rounded-xl p-4">
-                            <h4 class="font-bold text-rose-700 dark:text-rose-400 mb-2"><i class="fa-solid fa-xmark mr-1"></i> Poor (Subjective)</h4>
-                            <p class="italic mb-2">"The patient was acting crazy and got very angry about their medication. They rudely refused to take it."</p>
-                            <ul class="list-disc pl-4 space-y-1 text-rose-600 dark:text-rose-300 text-xs">
-                                <li>"Crazy" and "Angry" are emotional assumptions.</li>
-                                <li>"Rudely" is a personal judgment.</li>
-                            </ul>
-                        </div>
-                        <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50 rounded-xl p-4">
-                            <h4 class="font-bold text-emerald-700 dark:text-emerald-400 mb-2"><i class="fa-solid fa-check mr-1"></i> Excellent (Objective)</h4>
-                            <p class="italic mb-2">"Patient paced the room, speaking in a loud volume. Patient stated, 'I am not taking that poison!' and swatted the medication cup away."</p>
-                            <ul class="list-disc pl-4 space-y-1 text-emerald-600 dark:text-emerald-300 text-xs">
-                                <li>Documents specific behaviors (pacing, swatting).</li>
-                                <li>Uses direct quotes for exact context.</li>
-                            </ul>
-                        </div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-research-next" class="px-3.5 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md">
+                            New Scenario <i class="fa-solid fa-shuffle"></i>
+                        </button>
                     </div>
                 </div>
-            </details>
 
-            <div class="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-5 mb-6 flex gap-4 items-start">
-                <i class="fa-solid fa-circle-info text-emerald-600 mt-1"></i>
-                <div>
-                    <p id="ehr-prompt" class="text-sm text-gray-700 font-medium"></p>
-                </div>
-            </div>
-
-            <div class="relative mb-6">
-                <textarea id="ehr-input" rows="6" class="w-full bg-white border-2 border-gray-200 rounded-2xl px-5 py-4 text-gray-800 text-lg font-mono focus:outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-y shadow-sm" placeholder="Patient arrived in department at 14:00..."></textarea>
-            </div>
-            
-            <div id="ehr-feedback" class="hidden bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-6">
-                <h4 class="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3 border-b border-gray-200 pb-2">Legal Review</h4>
-                <!-- AI Feedback Container -->
-                <div id="ehr-ai-feedback" class="mt-4 p-4 rounded-xl text-sm"></div>
-                <!-- Mini Chat Container -->
-                <div id="ehr-chat-container" class="mt-4 hidden border-t border-gray-200 pt-4">
-                    <div id="ehr-chat-history" class="overflow-y-auto max-h-48 space-y-3 mb-3 text-sm pr-2"></div>
-                    <div class="flex gap-2">
-                        <input type="text" id="ehr-chat-input" class="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" placeholder="Ask the tutor why this failed...">
-                        <button id="ehr-chat-send" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-colors"><i class="fa-solid fa-paper-plane"></i></button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex justify-end items-center">
-                <div class="flex justify-end gap-4 w-full">
-                    <button id="btn-next-ehr" class="px-6 py-3 rounded-xl font-bold text-white bg-slate-800 hover:bg-slate-700 shadow-lg shadow-slate-800/20 transition-all text-lg hidden w-full sm:w-auto text-center justify-center">Next Chart <i class="fa-solid fa-arrow-right ml-2"></i></button>
-                    <button id="btn-submit-ehr" class="px-8 py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 transition-all text-lg w-full sm:w-auto">Sign Chart</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- MODULE 5: AI Tutor -->
-        <section id="view-tutor" class="hidden-tab fade-in">
-            <!-- Header -->
-            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-500">
-                            <i class="fa-solid fa-robot text-lg"></i>
-                        </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Hypothesis Card -->
+                    <div class="lg:col-span-1 bg-slate-950 p-4 rounded-lg border border-slate-850 space-y-4 flex flex-col justify-between">
                         <div>
-                            <h2 class="text-xl font-extrabold text-gray-800">Psychology Tutor</h2>
-                            <div class="flex items-center gap-1.5 mt-0.5">
-                                <span id="chat-status-dot" class="inline-block w-2 h-2 rounded-full bg-gray-300"></span>
-                                <span id="chat-status-text" class="text-xs font-medium text-gray-400">Checking local AI...</span>
+                            <span class="text-[9px] font-mono font-bold text-purple-400 uppercase tracking-widest block mb-1">Active Hypothesis Study</span>
+                            <div id="research-study-text" class="text-sm font-semibold text-slate-200 leading-relaxed italic bg-slate-900/40 p-3.5 border border-slate-900 rounded-lg">
+                                Loaded research scenario details...
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-900 mt-4">
+                            <button id="btn-research-tutor" class="w-full py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded text-xs font-bold text-purple-400 uppercase tracking-wider transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-robot"></i> Ask Tutor for Hint
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Variables Classifier Card -->
+                    <div class="lg:col-span-2 bg-slate-950 p-5 rounded-lg border border-slate-850 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Independent Variable (IV)</label>
+                                <select id="select-research-iv" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-250 focus:outline-none focus:border-purple-600"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Dependent Variable (DV)</label>
+                                <select id="select-research-dv" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-250 focus:outline-none focus:border-purple-600"></select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Operational Definition of DV</label>
+                            <select id="select-research-operational" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-250 focus:outline-none focus:border-purple-600"></select>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                            <div>
+                                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Design Type (Random Assignment?)</label>
+                                <select id="select-research-type" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600">
+                                    <option value="experimental">Yes &rarr; Experimental</option>
+                                    <option value="correlational">No &rarr; Correlational</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Sampling (Random Selection?)</label>
+                                <select id="select-research-sampling" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600">
+                                    <option value="random-selection">Yes &rarr; Random Selection (Generalizable)</option>
+                                    <option value="convenience-selection">No &rarr; Convenience (Non-Generalizable)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Feasibility of Causal Claim</label>
+                                <select id="select-research-causal" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-205 focus:outline-none focus:border-purple-600">
+                                    <option value="allowed">Allowed (Causation supported)</option>
+                                    <option value="error">Correlation Error (Only association)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 flex justify-end gap-3 items-center">
+                            <span id="research-feedback" class="text-xs font-semibold mr-auto"></span>
+                            <button id="btn-research-check" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-bold text-white uppercase tracking-wider transition shadow-md">
+                                Verify Design
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Axon Signaling View -->
+        <section id="view-neuro" class="hidden-tab fade-in space-y-6">
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-circle-nodes text-purple-400"></i> Axon Signaling &amp; Synaptic Cleave
+                        </h2>
+                        <p class="text-xs text-slate-450 mt-1">Study impulse thresholds, all-or-none frequency, and neurotransmitter mappings.</p>
+                    </div>
+                    <button id="btn-neuro-reset" class="px-3.5 py-1.5 rounded bg-slate-950 border border-slate-850 hover:bg-slate-900 text-slate-450 hover:text-slate-200 text-xs font-bold uppercase transition flex items-center gap-1.5">
+                        Reset Sandbox <i class="fa-solid fa-arrow-rotate-left"></i>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Axon Membrane potential slider sandbox -->
+                    <div class="bg-slate-950 p-5 rounded-lg border border-slate-850 space-y-4">
+                        <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5"><i class="fa-solid fa-bolt mr-1"></i> Axon Membrane Voltage Simulator</h3>
+                        
+                        <div class="py-4 space-y-6">
+                            <div class="flex justify-between items-center text-xs text-slate-350">
+                                <span>Resting (-70mV)</span>
+                                <span class="text-base font-extrabold font-mono text-purple-400" id="lbl-membrane-mv">-70 mV</span>
+                                <span>Peak (+40mV)</span>
+                            </div>
+                            
+                            <input type="range" id="slider-membrane" min="-70" max="40" value="-70" class="w-full accent-purple-500 bg-slate-900 rounded-lg appearance-none h-2 cursor-pointer">
+
+                            <!-- Visual indicator panel -->
+                            <div class="bg-slate-900/60 p-4 border border-slate-850 rounded-lg text-center space-y-2">
+                                <div id="axon-status-glow" class="w-4 h-4 rounded-full bg-slate-800 shadow-md mx-auto transition-all duration-300"></div>
+                                <span id="lbl-axon-status" class="block text-xs font-bold uppercase tracking-wider text-slate-400">Axon Inactive (Resting)</span>
+                                <p id="lbl-axon-explain" class="text-[10px] text-slate-500">Stimulate the cell by sliding to depolarize toward threshold (-55 mV).</p>
+                            </div>
+                        </div>
+
+                        <!-- All or None Demonstration -->
+                        <div class="bg-slate-900/30 p-3 rounded-lg border border-slate-900 flex justify-between items-center text-xs">
+                            <div class="leading-relaxed">
+                                <span class="font-bold text-slate-300 block">All-or-None Law Monitor</span>
+                                <span id="lbl-axon-firing-rate" class="text-[10px] text-slate-500 block font-mono">Spike Frequency: 0 Hz</span>
+                            </div>
+                            <div class="flex gap-1.5" id="container-axon-spikes">
+                                <!-- Spark lines / indicators -->
+                                <div class="w-1.5 bg-slate-800 h-6 rounded-full"></div>
+                                <div class="w-1.5 bg-slate-800 h-6 rounded-full"></div>
+                                <div class="w-1.5 bg-slate-800 h-6 rounded-full"></div>
+                                <div class="w-1.5 bg-slate-800 h-6 rounded-full"></div>
                             </div>
                         </div>
                     </div>
-                    <button id="chat-btn-clear" title="Clear conversation" class="text-xs font-bold text-gray-400 hover:text-rose-500 flex items-center gap-1.5 transition-colors px-3 py-1.5 rounded-full hover:bg-rose-50">
-                        <i class="fa-solid fa-trash-can"></i>
-                        <span class="hidden sm:inline">Clear</span>
+
+                    <!-- Synaptic Receptor Matching Card -->
+                    <div class="bg-slate-950 p-5 rounded-lg border border-slate-850 space-y-4 flex flex-col justify-between">
+                        <div class="space-y-4">
+                            <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5"><i class="fa-solid fa-puzzle-piece mr-1"></i> Neurotransmitter Pathology Mapping</h3>
+                            
+                            <div class="space-y-3.5" id="neuro-matching-grid">
+                                <!-- Instantiated dynamically -->
+                            </div>
+
+                            <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5 pt-2"><i class="fa-solid fa-capsules mr-1"></i> Agonist vs. Antagonist Drug Classification</h3>
+                            
+                            <div class="space-y-3.5" id="neuro-drug-grid">
+                                <!-- Instantiated dynamically -->
+                            </div>
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-900 mt-4 flex items-center justify-between">
+                            <button id="btn-neuro-tutor" class="py-2 px-4 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded text-xs font-bold text-purple-400 uppercase tracking-wider transition-all flex items-center gap-2">
+                                <i class="fa-solid fa-robot"></i> Ask Tutor
+                            </button>
+                            <div class="flex items-center gap-3">
+                                <span id="neuro-feedback" class="text-xs font-semibold"></span>
+                                <button id="btn-neuro-check" class="px-5 py-2 bg-purple-600 hover:bg-purple-500 rounded text-xs font-bold text-white uppercase tracking-wider transition shadow-md">
+                                    Verify Pathology
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Conditioning View -->
+        <section id="view-conditioning" class="hidden-tab fade-in space-y-6">
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-dog text-purple-400"></i> Conditioning Dissector
+                        </h2>
+                        <p class="text-xs text-slate-450 mt-1">Classify Classical stimuli or dissect the Operant conditioning reinforcement/punishment quadrants.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-cond-next" class="px-3.5 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md">
+                            New Scenario <i class="fa-solid fa-shuffle"></i>
+                        </button>
+                        <div class="inline-flex bg-slate-950 p-1 border border-slate-850 rounded-lg gap-1" role="group">
+                            <button id="btn-cond-classical-mode" class="px-3 py-1 text-xs font-bold rounded bg-purple-600 text-white transition">Classical</button>
+                            <button id="btn-cond-operant-mode" class="px-3 py-1 text-xs font-bold rounded text-slate-400 hover:text-slate-200 transition">Operant</button>
+                            <button id="btn-cond-schedules-mode" class="px-3 py-1 text-xs font-bold rounded text-slate-400 hover:text-slate-200 transition">Schedules</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Scenario display -->
+                    <div class="lg:col-span-1 bg-slate-950 p-4 rounded-lg border border-slate-850 flex flex-col justify-between space-y-4">
+                        <div>
+                            <span class="text-[9px] font-mono font-bold text-purple-400 uppercase tracking-widest block mb-1">Learning Case Scenario</span>
+                            <div id="cond-scenario-text" class="text-sm font-semibold text-slate-250 leading-relaxed italic bg-slate-900/40 p-3.5 border border-slate-900 rounded-lg">
+                                Loading behavioral conditioning story details...
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-900">
+                            <button id="btn-cond-tutor" class="w-full py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded text-xs font-bold text-purple-400 uppercase tracking-wider transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-robot"></i> Ask Tutor
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Dissector -->
+                    <div class="lg:col-span-2 bg-slate-950 p-5 rounded-lg border border-slate-850">
+                        <!-- Classical panel layout -->
+                        <div id="panel-cond-classical" class="space-y-4">
+                            <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5">Classical Stimulus &amp; Response Mapping</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1">Unconditioned Stimulus (UCS)</label>
+                                    <select id="select-cond-ucs" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600"></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1">Unconditioned Response (UCR)</label>
+                                    <select id="select-cond-ucr" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600"></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1">Conditioned Stimulus (CS)</label>
+                                    <select id="select-cond-cs" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600"></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1">Conditioned Response (CR)</label>
+                                    <select id="select-cond-cr" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600"></select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Operant panel layout -->
+                        <div id="panel-cond-operant" class="hidden space-y-4">
+                            <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5">Operant Conditioning Quadrant Wizard</h3>
+                            
+                            <div class="space-y-4">
+                                <div class="bg-slate-900/60 p-4 border border-slate-850 rounded-lg">
+                                    <span class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-2">Step 1: Effect on Target Behavior</span>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="operant-behavior" value="reinforce" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Behavior Increases</span>
+                                                <span class="text-[9px] text-slate-500">Reinforcement</span>
+                                            </div>
+                                        </label>
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="operant-behavior" value="punish" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Behavior Decreases</span>
+                                                <span class="text-[9px] text-slate-550">Punishment</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="bg-slate-900/60 p-4 border border-slate-850 rounded-lg">
+                                    <span class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-2">Step 2: Action regarding Stimulus</span>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="operant-stimulus" value="positive" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Stimulus Introduced</span>
+                                                <span class="text-[9px] text-slate-500">Positive (+)</span>
+                                            </div>
+                                        </label>
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="operant-stimulus" value="negative" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Stimulus Removed</span>
+                                                <span class="text-[9px] text-slate-555">Negative (-)</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Schedules panel layout -->
+                        <div id="panel-cond-schedules" class="hidden space-y-4">
+                            <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5">Schedules of Reinforcement</h3>
+                            
+                            <div class="space-y-4">
+                                <div class="bg-slate-900/60 p-4 border border-slate-850 rounded-lg">
+                                    <span class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-2">Identify the correct Reinforcement Schedule</span>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="schedule-type" value="FR" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Fixed-Ratio (FR)</span>
+                                                <span class="text-[9px] text-slate-500">Constant number of responses</span>
+                                            </div>
+                                        </label>
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="schedule-type" value="VR" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Variable-Ratio (VR)</span>
+                                                <span class="text-[9px] text-slate-500">Unpredictable number of responses</span>
+                                            </div>
+                                        </label>
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="schedule-type" value="FI" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Fixed-Interval (FI)</span>
+                                                <span class="text-[9px] text-slate-500">Constant time period elapsed</span>
+                                            </div>
+                                        </label>
+                                        <label class="flex items-center gap-2 p-3 border border-slate-850 rounded bg-slate-950 cursor-pointer hover:border-purple-900/50 transition">
+                                            <input type="radio" name="schedule-type" value="VI" class="accent-purple-500">
+                                            <div class="leading-tight">
+                                                <span class="text-xs font-bold block text-slate-200">Variable-Interval (VI)</span>
+                                                <span class="text-[9px] text-slate-500">Unpredictable time period elapsed</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-6 flex justify-end items-center gap-3 border-t border-slate-900 mt-6">
+                            <span id="cond-feedback" class="text-xs font-semibold mr-auto"></span>
+                            <button id="btn-cond-check" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-bold text-white uppercase tracking-wider transition shadow-md">
+                                Verify Learning
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Memory Systems View -->
+        <section id="view-memory" class="hidden-tab fade-in space-y-6">
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-microchip text-purple-400"></i> Memory Storage &amp; Interference Analyzer
+                        </h2>
+                        <p class="text-xs text-slate-450 mt-1">Diagnose retrieval blockers (retroactive vs proactive), amnesias, and test chunking encoding.</p>
+                    </div>
+                    <div class="inline-flex bg-slate-950 p-1 border border-slate-850 rounded-lg gap-1" role="group">
+                        <button id="btn-mem-diag-mode" class="px-3 py-1 text-xs font-bold rounded bg-purple-600 text-white transition">Interference &amp; Amnesia</button>
+                        <button id="btn-mem-chunk-mode" class="px-3 py-1 text-xs font-bold rounded text-slate-400 hover:text-slate-200 transition">Chunking Sandbox</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Memory Case Card -->
+                    <div class="lg:col-span-1 bg-slate-950 p-4 rounded-lg border border-slate-850 flex flex-col justify-between space-y-4">
+                        <div>
+                            <span class="text-[9px] font-mono font-bold text-purple-400 uppercase tracking-widest block mb-1">Retrieval / Amnesia Case File</span>
+                            <div id="mem-scenario-text" class="text-sm font-semibold text-slate-250 leading-relaxed italic bg-slate-900/40 p-3.5 border border-slate-900 rounded-lg">
+                                Loading clinical memory amnesia file...
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-900">
+                            <button id="btn-memory-tutor" class="w-full py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded text-xs font-bold text-purple-400 uppercase tracking-wider transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-robot"></i> Ask Tutor
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Work Area -->
+                    <div class="lg:col-span-2 bg-slate-950 p-5 rounded-lg border border-slate-850">
+                        <!-- Diagnostics View -->
+                        <div id="panel-mem-diag" class="space-y-4">
+                            <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5">Forgetting &amp; Amnesia Diagnosis</h3>
+                            
+                            <div class="grid grid-cols-1 gap-4">
+                                <div>
+                                    <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Identify Forgetting / Amnesia Pathology</label>
+                                    <select id="select-mem-diag" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600">
+                                        <option value="proactive">Proactive Interference (Old blocks new)</option>
+                                        <option value="retroactive">Retroactive Interference (New blocks old)</option>
+                                        <option value="anterograde">Anterograde Amnesia (Cannot form new LTM)</option>
+                                        <option value="retrograde">Retrograde Amnesia (Cannot retrieve past LTM)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chunking view -->
+                        <div id="panel-mem-chunk" class="hidden space-y-4">
+                            <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5">Cognitive Chunking Active Test</h3>
+                            
+                            <div class="space-y-3.5">
+                                <p class="text-xs text-slate-350">We will flash 12 random letters. Try to remember and type them. Click below to experience how chunking doubles working memory success rate.</p>
+                                
+                                <div class="bg-slate-900/60 p-5 border border-slate-850 rounded-lg text-center">
+                                    <span id="lbl-chunk-display" class="text-2xl font-black font-mono tracking-widest text-purple-450 block h-8 leading-none">A R E U O U T O F M I N D</span>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <button id="btn-chunk-flash-raw" class="py-2.5 bg-slate-900 border border-slate-800 text-slate-250 hover:bg-slate-850 rounded text-xs font-bold uppercase transition">Test 1: Rote Rehearsal</button>
+                                    <button id="btn-chunk-flash-grouped" class="py-2.5 bg-purple-900/20 border border-purple-900/30 text-purple-300 hover:bg-purple-900/35 rounded text-xs font-bold uppercase transition">Test 2: Chunked (ARE U OUT OF MIND)</button>
+                                </div>
+
+                                <div class="pt-2 flex gap-2">
+                                    <input type="text" id="input-chunk-verify" placeholder="Type what was flashed..." class="flex-grow bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 placeholder-slate-550 focus:outline-none focus:border-purple-600" disabled>
+                                    <button id="btn-chunk-verify" class="px-4 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-bold uppercase transition shadow" disabled>Verify Recall</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-6 flex justify-end items-center gap-3 border-t border-slate-900 mt-6" id="container-mem-action-bar">
+                            <span id="mem-feedback" class="text-xs font-semibold mr-auto"></span>
+                            <button id="btn-mem-check" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-bold text-white uppercase tracking-wider transition shadow-md">
+                                Verify Memory Path
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Clinical Intake View -->
+        <section id="view-clinical" class="hidden-tab fade-in space-y-6">
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-hospital-user text-purple-400"></i> Clinical Intake &amp; Biopsychosocial Formulation
+                        </h2>
+                        <p class="text-xs text-slate-450 mt-1">Map client etiology columns (biological, psychological, social), match DSM diagnosis, and plan treatment.</p>
+                    </div>
+                    <button id="btn-clinical-next" class="px-3.5 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md">
+                        Next Case file <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Case study Intake file card -->
+                    <div class="lg:col-span-1 bg-slate-950 p-4 rounded-lg border border-slate-850 flex flex-col justify-between space-y-4">
+                        <div>
+                            <span class="text-[9px] font-mono font-bold text-purple-400 uppercase tracking-widest block mb-1">Intake Clinician Summary</span>
+                            <div id="clinical-study-text" class="text-xs text-slate-300 leading-relaxed italic bg-slate-900/40 p-3.5 border border-slate-900 rounded-lg max-h-[300px] overflow-y-auto">
+                                Loading clinical details and intake symptoms...
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-900">
+                            <button id="btn-clinical-tutor" class="w-full py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded text-xs font-bold text-purple-400 uppercase tracking-wider transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-robot"></i> Ask Tutor
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Columns & Formulation -->
+                    <div class="lg:col-span-2 bg-slate-950 p-5 rounded-lg border border-slate-850 space-y-4">
+                        <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider border-b border-slate-900 pb-1.5"><i class="fa-solid fa-list-check mr-1"></i> Biopsychosocial Categorization Mapping</h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <!-- Biological -->
+                            <div class="p-3 bg-slate-900 border border-slate-850 rounded-lg space-y-2">
+                                <span class="text-[9px] font-mono font-bold text-red-400 uppercase tracking-wider block">1. Biological Factors</span>
+                                <div id="container-clinical-bio" class="space-y-1.5 min-h-[80px]"></div>
+                            </div>
+                            <!-- Psychological -->
+                            <div class="p-3 bg-slate-900 border border-slate-850 rounded-lg space-y-2">
+                                <span class="text-[9px] font-mono font-bold text-purple-400 uppercase tracking-wider block">2. Psychological Factors</span>
+                                <div id="container-clinical-psych" class="space-y-1.5 min-h-[80px]"></div>
+                            </div>
+                            <!-- Social -->
+                            <div class="p-3 bg-slate-900 border border-slate-850 rounded-lg space-y-2">
+                                <span class="text-[9px] font-mono font-bold text-blue-400 uppercase tracking-wider block">3. Social/Cultural Factors</span>
+                                <div id="container-clinical-social" class="space-y-1.5 min-h-[80px]"></div>
+                            </div>
+                        </div>
+
+                        <!-- Diathesis-Stress Monitor Panel -->
+                        <div class="bg-slate-900 border border-slate-850 rounded-lg p-3 space-y-2">
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="font-bold text-slate-300 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-gauge-high text-purple-400"></i> Diathesis-Stress Model Threshold Monitor
+                                </span>
+                                <span id="lbl-diathesis-stress-status" class="font-mono text-[9px] text-emerald-400 font-bold uppercase tracking-wider bg-emerald-950/40 border border-emerald-900/30 px-1.5 py-0.5 rounded">Safe Range</span>
+                            </div>
+                            <div class="w-full bg-slate-950 rounded-full h-3.5 border border-slate-850 overflow-hidden flex">
+                                <div id="diathesis-bar" class="bg-purple-600/80 transition-all duration-300" style="width: 0%"></div>
+                                <div id="stress-bar" class="bg-amber-600/80 transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-[8px] font-mono text-slate-500">
+                                <span>0% (No Vulnerability)</span>
+                                <span>Trigger Threshold (70%)</span>
+                                <span>100% (Clinical Onset)</span>
+                            </div>
+                        </div>
+
+                        <!-- Dropdowns for diagnosis and treatment -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-900">
+                            <div>
+                                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">DSM-5 Clinical Diagnosis</label>
+                                <select id="select-clinical-diagnosis" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-purple-600"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-450 mb-1.5">Primary Treatment Plan Selection</label>
+                                <select id="select-clinical-treatment" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-205 focus:outline-none focus:border-purple-600"></select>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 flex justify-end gap-3 items-center border-t border-slate-900 mt-4">
+                            <span id="clinical-feedback" class="text-xs font-semibold mr-auto"></span>
+                            <button id="btn-clinical-check" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-bold text-white uppercase tracking-wider transition shadow-md">
+                                Verify Intake &amp; Plan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Inline Tutor Template -->
+        <template id="inline-tutor-template">
+            <div class="inline-tutor-widget w-full fade-in z-10 relative mt-4">
+                <div class="bg-slate-900 rounded-2xl border border-purple-900/40 shadow-sm overflow-hidden">
+                    <div class="flex items-center justify-between px-4 py-2.5 bg-purple-950/45 border-b border-purple-900/40">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-brain text-[10px] text-white"></i>
+                            </div>
+                            <span class="text-xs font-bold text-purple-200">PsychTutor</span>
+                            <span class="tutor-status text-[10px] text-purple-400 font-medium"></span>
+                        </div>
+                        <button class="tutor-close w-7 h-7 rounded-full flex items-center justify-center text-purple-300 hover:text-purple-100 hover:bg-purple-900/40 transition-colors" title="Close">
+                            <i class="fa-solid fa-xmark text-sm"></i>
+                        </button>
+                    </div>
+                    <div class="tutor-messages px-4 py-3 space-y-3 max-h-44 overflow-y-auto"></div>
+                    <div class="border-t border-purple-900/30 p-3 flex gap-2 bg-slate-950/70">
+                        <input type="text" placeholder="Ask for a hint..." class="tutor-input flex-1 text-sm px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-colors" />
+                        <button class="tutor-send w-9 h-9 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center transition-colors shadow-sm shrink-0">
+                            <i class="fa-solid fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <section id="view-videos" class="hidden-tab fade-in relative overflow-hidden bg-slate-900 border border-purple-900/30 rounded-3xl p-6 sm:p-8 shadow-sm max-w-4xl mx-auto w-full">
+            <div class="flex items-start justify-between gap-4 mb-4">
+                <div>
+                    <h3 class="text-xl font-extrabold text-slate-100">Crash Course Psychology Videos</h3>
+                    <p class="text-sm text-slate-300 mt-1">Watch one episode, mark completion, then launch a concept-targeted micro-quiz with PsychTutor.</p>
+                </div>
+                <div id="video-completion-pill" class="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-full bg-emerald-950/40 text-emerald-300 border border-emerald-900/40">
+                    0 / 41 Complete
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6">
+                <aside class="min-w-0">
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3">
+                        <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Episode Playlist</p>
+                        <div id="video-episode-list" class="max-h-[64vh] overflow-y-auto space-y-2"></div>
+                    </div>
+                </aside>
+
+                <div class="rounded-2xl border border-dashed border-purple-900/45 bg-slate-950/60 px-4 py-3">
+                    <p class="text-xs font-semibold text-slate-300">Tap any episode to open the full video popup with Learning Journey actions.</p>
+                </div>
+            </div>
+
+            <section id="video-support-tribute" class="cc-support-card mt-5" aria-label="Crash Course support tribute">
+                <h4 class="cc-support-title">Deep Gratitude to Complexly &amp; Crash Course</h4>
+                <p class="cc-support-note">
+                    This interactive study suite is an unofficial, non-commercial companion to Crash Course Psychology. Huge thanks to Hank Green and the Complexly team for keeping high-quality psychology education free and accessible for learners worldwide.
+                </p>
+                <div class="cc-support-actions">
+                    <a class="cc-support-btn cc-support-btn-primary" href="https://complexly.org/support" target="_blank" rel="noopener noreferrer" aria-label="Donate to Complexly in a new tab">Donate to Complexly</a>
+                    <a class="cc-support-btn cc-support-btn-secondary" href="https://www.patreon.com/crashcourse" target="_blank" rel="noopener noreferrer" aria-label="Support on Patreon in a new tab">Support on Patreon</a>
+                </div>
+            </section>
+
+            <div id="video-episode-modal" class="hidden absolute inset-0 z-[120]" aria-hidden="true">
+                <div id="video-episode-modal-backdrop" class="absolute inset-0 bg-black/70"></div>
+                <div class="relative h-full flex items-start justify-center p-0">
+                    <section role="dialog" aria-modal="true" aria-labelledby="video-modal-title" class="video-modal-dialog bg-slate-900 rounded-none sm:rounded-3xl border border-purple-900/40 shadow-2xl">
+                        <div class="sticky top-0 z-10 bg-slate-900 backdrop-blur border-b border-purple-900/40 px-4 py-3">
+                            <div class="flex items-center justify-between">
+                                <h4 id="video-modal-title" class="text-sm sm:text-base font-extrabold text-slate-100">Crash Course Episode</h4>
+                                <button id="btn-video-modal-close" type="button" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors" aria-label="Close episode popup">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <button id="btn-video-mark-complete" class="px-4 py-2 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors">Mark Watched</button>
+                                <button id="btn-video-start-quiz" class="px-4 py-2 rounded-xl text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 transition-colors">Start 3-Question Micro-Quiz</button>
+                                <button id="btn-video-prev-episode" class="px-3 py-2 rounded-xl text-xs font-bold text-white bg-slate-700 hover:bg-slate-600 transition-colors">Play Previous Video</button>
+                                <button id="btn-video-next-episode" class="px-3 py-2 rounded-xl text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 transition-colors">Play Next Episode</button>
+                            </div>
+                        </div>
+
+                        <div class="video-modal-content px-4 sm:px-6 py-4 sm:py-5">
+                            <div class="video-modal-player-shell rounded-2xl border border-slate-700 overflow-hidden bg-black">
+                                <iframe id="psych-video-player" class="w-full h-full" src="" title="Crash Course Psychology video" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                                <div id="video-quiz-overlay" class="video-quiz-overlay hidden" aria-hidden="true">
+                                    <div class="video-quiz-overlay-shell">
+                                        <div class="video-quiz-overlay-header">
+                                            <p class="text-xs font-black tracking-wider uppercase">Psychology Quiz Chat</p>
+                                            <button id="btn-video-quiz-overlay-close" type="button" class="w-7 h-7 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700/70 transition-colors" aria-label="Close quiz overlay">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        </div>
+                                        <div id="video-quiz-overlay-host" class="video-quiz-overlay-host"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="video-empty-warning" class="hidden mt-3 rounded-xl border border-amber-900/40 bg-amber-950/30 px-3 py-2 text-xs font-semibold text-amber-200">
+                                This episode does not yet have a YouTube ID in the schema. You can still mark it complete and run the micro-quiz.
+                            </div>
+
+                            <div class="mt-4">
+                                <h4 id="video-active-title" class="text-lg font-bold text-slate-100">Select an episode</h4>
+                                <div id="video-concept-chips" class="mt-2 flex flex-wrap gap-2"></div>
+                            </div>
+
+                            <div class="mt-4 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-4">
+                                <p class="text-[11px] font-black uppercase tracking-wider text-purple-300">Learning Journey</p>
+                                <p id="video-outcome-text" class="text-sm text-purple-100 mt-1">Choose an episode to see what you should be able to explain after watching.</p>
+                                <div class="mt-3 flex flex-wrap items-center gap-2">
+                                    <span id="video-prev-title" class="text-xs font-semibold text-slate-200 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1">Previous episode: not set</span>
+                                    <span id="video-next-title" class="text-xs font-semibold text-slate-200 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1">Next episode: not set</span>
+                                </div>
+                            </div>
+
+                            <div id="video-tutor-anchor" class="hidden" aria-hidden="true"></div>
+                        </div>
+                    </section>
+                </div>
+
+                <div id="video-quiz-mobile" class="video-quiz-mobile hidden" aria-hidden="true">
+                    <div class="video-quiz-mobile-header">
+                        <p class="text-xs font-black tracking-wider uppercase">Psychology Quiz Chat</p>
+                        <button id="btn-video-quiz-mobile-close" type="button" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700/70 transition-colors" aria-label="Close full screen quiz">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div id="video-quiz-mobile-host" class="video-quiz-mobile-host"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI Tutor View -->
+        <section id="view-tutor" class="hidden-tab fade-in space-y-4">
+            <!-- Header -->
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl p-4 sm:p-5 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-purple-950/50 border border-purple-900/30 flex items-center justify-center text-purple-400">
+                            <i class="fa-solid fa-brain text-lg"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-slate-200 uppercase tracking-wide">PsychTutor AI</h2>
+                            <div class="flex items-center space-x-1.5 mt-0.5">
+                                <span id="chat-status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                                <span id="chat-status-text" class="text-[10px] font-mono text-slate-400">Connecting...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="chat-btn-clear" title="Clear conversation" class="text-xs font-mono font-bold text-slate-500 hover:text-red-400 flex items-center space-x-1.5 transition-colors px-3 py-1.5 rounded bg-slate-950 border border-slate-850">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                        <span>Clear Chat</span>
                     </button>
                 </div>
             </div>
             
-            <!-- Messages -->
-            <div id="chat-messages" class="overflow-y-auto space-y-4 mb-4 px-1" style="min-height:300px;max-height:55vh">
-                <div id="chat-empty-state" class="flex flex-col items-center justify-center text-center py-8">
-                    <div class="w-16 h-16 rounded-full bg-violet-50 flex items-center justify-center mb-4 border border-violet-100">
-                        <i class="fa-solid fa-robot text-2xl text-violet-400"></i>
+            <!-- Messages & Input container -->
+            <div class="bg-slate-900 border border-purple-900/25 rounded-xl flex flex-col h-[500px] shadow-sm overflow-hidden">
+                <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-3 flex flex-col justify-start">
+                    <div id="chat-empty-state" class="flex flex-col items-center justify-center h-full text-center p-4">
+                        <i class="fa-solid fa-graduation-cap text-slate-700 text-3xl mb-2"></i>
+                        <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Study Companion Active</h4>
+                        <p class="text-[10px] text-slate-555 max-w-xs">Ask general questions about psychological concepts, history, and theories.</p>
                     </div>
-                    <p class="text-gray-500 font-medium mb-5 text-sm">Ask me to explain any clinical communication concept or de-escalation tactic!</p>
                 </div>
-            </div>
-        
-            <!-- Input area -->
-            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 p-3 sm:p-4">
-                <div class="flex items-end gap-3">
-                    <textarea id="chat-input" rows="1" placeholder="Why is 'tumor' considered a terrifying word for a patient?" class="flex-1 bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-base font-medium focus:outline-none focus:ring-4 focus:ring-violet-500/20 focus:border-violet-500 transition-all resize-none leading-relaxed"></textarea>
-                    <button id="chat-btn-send" class="w-12 h-12 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white flex items-center justify-center shadow-lg shadow-violet-600/30 transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
-                        <i class="fa-solid fa-paper-plane text-sm"></i>
-                    </button>
+                <!-- Input area -->
+                <div class="p-3 border-t border-purple-900/20 bg-slate-950 flex space-x-2">
+                    <input type="text" id="chat-input" placeholder="Ask your study companion..." class="flex-grow bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 placeholder-slate-550 focus:outline-none focus:border-purple-600">
+                    <button id="chat-btn-send" class="px-4 bg-purple-600 hover:bg-purple-500 rounded text-white transition"><i class="fa-solid fa-paper-plane text-xs"></i></button>
                 </div>
-                <p class="text-[11px] text-gray-400 mt-2 px-1">Enter to send &nbsp;&middot;&nbsp; Shift+Enter for new line</p>
             </div>
         </section>
+
     </main>
 
+    <footer class="max-w-7xl mx-auto mt-2 mb-16 lg:mb-8 border-t border-slate-900 pt-6 px-4 text-center">
+        <p class="text-xs text-slate-500 font-medium">
+            <i class="fa-solid fa-brain text-purple-500 mr-1"></i>
+            Educational psychology practice module for clinical communication readiness.
+        </p>
+    </footer>
+
     <!-- Bottom tab navigation (mobile only) -->
-    <nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-gray-200 z-40 bnav-safe">
-        <div class="flex overflow-x-auto no-scrollbar">
-            <button id="bnav-auditor" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2 min-w-0" onclick="activatePsychTab('auditor')">
-                <i class="bnav-icon fa-solid fa-file-medical text-lg text-gray-400 transition-colors"></i>
-                <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-gray-400 transition-colors">Chart</span>
-            </button>
-            <button id="bnav-jargon" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2 min-w-0" onclick="activatePsychTab('jargon')">
-                <i class="bnav-icon fa-solid fa-language text-lg text-gray-400 transition-colors"></i>
-                <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-gray-400 transition-colors">Jargon</span>
-            </button>
-            <button id="bnav-deescalation" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2 min-w-0" onclick="activatePsychTab('deescalation')">
-                <i class="bnav-icon fa-solid fa-stopwatch text-lg text-gray-400 transition-colors"></i>
-                <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-gray-400 transition-colors">Crisis</span>
-            </button>
-            <button id="bnav-ehr" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2 min-w-0" onclick="activatePsychTab('ehr')">
-                <i class="bnav-icon fa-solid fa-scale-balanced text-lg text-gray-400 transition-colors"></i>
-                <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-gray-400 transition-colors">Legal</span>
-            </button>
-            <button id="bnav-tutor" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2 min-w-0" onclick="activatePsychTab('tutor')">
-                <i class="bnav-icon fa-solid fa-robot text-lg text-gray-400 transition-colors"></i>
-                <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-gray-400 transition-colors">Tutor</span>
-            </button>
+    <nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 z-50 bnav-safe" role="tablist" aria-label="Psychology mobile sections">
+        <div class="relative w-full overflow-hidden">
+            <div id="bnav-fade-left" class="absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-slate-950 to-transparent pointer-events-none z-10 transition-opacity duration-300 opacity-0"></div>
+
+            <div id="bnav-scroll-container" class="flex overflow-x-auto no-scrollbar scroll-smooth">
+                <button id="bnav-dashboard" role="tab" aria-selected="true" aria-controls="view-dashboard" tabindex="0" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-house text-lg text-purple-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-purple-400 transition-colors">Home</span>
+                </button>
+                <button id="bnav-videos" role="tab" aria-selected="false" aria-controls="view-videos" tabindex="-1" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-play text-lg text-slate-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-slate-400 transition-colors">Videos</span>
+                </button>
+                <button id="bnav-research" role="tab" aria-selected="false" aria-controls="view-research" tabindex="-1" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-flask text-lg text-slate-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-slate-400 transition-colors">Research</span>
+                </button>
+                <button id="bnav-neuro" role="tab" aria-selected="false" aria-controls="view-neuro" tabindex="-1" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-circle-nodes text-lg text-slate-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-slate-400 transition-colors">Axon</span>
+                </button>
+                <button id="bnav-conditioning" role="tab" aria-selected="false" aria-controls="view-conditioning" tabindex="-1" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-dog text-lg text-slate-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-slate-400 transition-colors">Cond.</span>
+                </button>
+                <button id="bnav-memory" role="tab" aria-selected="false" aria-controls="view-memory" tabindex="-1" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-microchip text-lg text-slate-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-slate-400 transition-colors">Memory</span>
+                </button>
+                <button id="bnav-clinical" role="tab" aria-selected="false" aria-controls="view-clinical" tabindex="-1" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-hospital-user text-lg text-slate-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-slate-400 transition-colors">Clinical</span>
+                </button>
+                <button id="bnav-tutor" role="tab" aria-selected="false" aria-controls="view-tutor" tabindex="-1" class="flex flex-col items-center justify-center min-w-[64px] flex-1 py-2">
+                    <i class="bnav-icon fa-solid fa-robot text-lg text-slate-400 transition-colors"></i>
+                    <span class="bnav-label text-[9px] font-bold mt-0.5 tracking-wide text-slate-400 transition-colors">Tutor</span>
+                </button>
+            </div>
+
+            <div id="bnav-fade-right" class="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-slate-950 to-transparent pointer-events-none z-10 transition-opacity duration-300 opacity-100"></div>
         </div>
     </nav>
 
-    <script src="data.js"></script>
-    <script>
-        // Very basic tab switching for the shell. The complex logic will be in app.js
-        function activatePsychTab(tabId) {
-            // Hide all sections
-            document.querySelectorAll('main section').forEach(sec => sec.classList.add('hidden-tab'));
-            // Show target
-            document.getElementById('view-' + tabId).classList.remove('hidden-tab');
-            
-            // Update desktop nav
-            document.querySelectorAll('div[role="group"] button').forEach(btn => {
-                btn.classList.remove('bg-white', 'text-purple-700', 'shadow');
-                btn.classList.add('text-gray-500', 'hover:text-gray-800', 'hover:bg-gray-100/50');
-            });
-            const activeDesktop = document.getElementById('nav-' + tabId);
-            if(activeDesktop) {
-                activeDesktop.classList.remove('text-gray-500', 'hover:text-gray-800', 'hover:bg-gray-100/50');
-                activeDesktop.classList.add('bg-white', 'text-purple-700', 'shadow');
-            }
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-purple-900/40 rounded-xl p-5 w-full max-w-md shadow-2xl relative">
+            <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="text-sm font-bold text-slate-200 font-mono tracking-wide uppercase border-b border-slate-800 pb-2 mb-4"><i class="fa-solid fa-gears mr-1.5"></i> Course Options</h3>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-slate-400 font-semibold mb-1">Select Local LLM Model</label>
+                    <select id="model-select" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200 focus:outline-none focus:border-purple-600"></select>
+                </div>
+                <div class="flex items-center justify-between border-t border-slate-800 pt-3">
+                    <div>
+                        <span class="block font-semibold text-slate-300">Curriculum Bypass</span>
+                        <span class="block text-[10px] text-slate-500">Unlocks access to all coursework lessons and quizzes without clearing prerequisites.</span>
+                    </div>
+                    <button id="bypass-toggle-btn" class="px-3 py-1 bg-slate-800 border border-slate-700 rounded font-semibold text-[10px] uppercase text-slate-300 hover:bg-slate-750 transition">DISABLED</button>
+                </div>
+                <div class="border-t border-slate-800 pt-4 flex space-x-2">
+                    <button onclick="confirmAndResetPsychologyProgress()" class="flex-1 px-4 py-2 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 font-bold rounded transition text-center"><i class="fa-solid fa-trash-can mr-1"></i> RESET MODULE PROGRESS</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            // Update mobile nav
-            document.querySelectorAll('.bnav-icon, .bnav-label').forEach(el => {
-                el.classList.remove('text-purple-600');
-                el.classList.add('text-gray-400');
-            });
-            const activeMobileBtn = document.getElementById('bnav-' + tabId);
-            if(activeMobileBtn) {
-                activeMobileBtn.querySelector('.bnav-icon').classList.add('text-purple-600');
-                activeMobileBtn.querySelector('.bnav-icon').classList.remove('text-gray-400');
-                activeMobileBtn.querySelector('.bnav-label').classList.add('text-purple-600');
-                activeMobileBtn.querySelector('.bnav-label').classList.remove('text-gray-400');
+    <!-- Stats Modal -->
+    <div id="stats-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto" aria-hidden="true">
+        <div class="bg-slate-900 border border-purple-900/40 rounded-xl p-5 w-full max-w-lg shadow-2xl relative mx-auto mt-16 sm:mt-24">
+            <button onclick="closePsychologyStatsModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200" aria-label="Close stats modal"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="text-sm font-bold text-slate-200 font-mono tracking-wide uppercase border-b border-slate-800 pb-2 mb-4"><i class="fa-solid fa-chart-simple mr-1.5 text-emerald-400"></i> Stats & Achievements</h3>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                    <p class="text-[10px] text-slate-400 font-mono uppercase tracking-wide">Level</p>
+                    <p id="stats-modal-level" class="text-sm font-bold text-purple-300 mt-1">Lvl 1</p>
+                </div>
+                <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                    <p class="text-[10px] text-slate-400 font-mono uppercase tracking-wide">XP</p>
+                    <p id="stats-modal-xp" class="text-sm font-bold text-purple-300 mt-1">0 / 100 XP</p>
+                </div>
+                <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                    <p class="text-[10px] text-slate-400 font-mono uppercase tracking-wide">Streak</p>
+                    <p id="stats-modal-streak" class="text-sm font-bold text-amber-300 mt-1">0 days</p>
+                </div>
+                <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                    <p class="text-[10px] text-slate-400 font-mono uppercase tracking-wide">Achievements</p>
+                    <p id="stats-modal-achievements" class="text-sm font-bold text-emerald-300 mt-1">0 unlocked</p>
+                </div>
+            </div>
+
+            <div class="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                <p class="text-[10px] text-slate-400 font-mono uppercase tracking-wide mb-2">Daily Quests</p>
+                <div id="stats-modal-quests" class="space-y-2 text-xs text-slate-300">
+                    <p class="text-slate-500">No quest data available.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graduation Certificate Modal -->
+    <div id="certificate-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-purple-500 rounded-xl p-8 max-w-2xl w-full text-center space-y-6 shadow-2xl relative overflow-hidden">
+            <div class="absolute -right-20 -top-20 opacity-5 text-[240px] text-purple-400 select-none"><i class="fa-solid fa-graduation-cap"></i></div>
+            <button onclick="document.getElementById('certificate-modal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-450 hover:text-slate-200"><i class="fa-solid fa-xmark text-lg"></i></button>
+            
+            <div class="text-purple-400 text-5xl mb-2"><i class="fa-solid fa-award animate-bounce"></i></div>
+            <h2 class="text-xs font-bold font-mono tracking-widest text-purple-450 uppercase">Gnosys AI Universal College Suite</h2>
+            <h3 class="text-2xl font-black text-slate-100 tracking-tight">CERTIFICATE OF CURRICULUM COMPLETION</h3>
+            
+            <div class="py-4 border-y border-purple-900/30 my-4 max-w-md mx-auto">
+                <p class="text-xs text-slate-400 italic">This document certifies that the student</p>
+                <div class="flex items-center justify-center space-x-1.5 border-b border-purple-500/20 max-w-xs mx-auto py-1">
+                    <span contenteditable="true" class="text-lg font-black text-purple-300 tracking-wide outline-none focus:text-purple-250 cursor-text" id="cert-student-name">Andrew J. Green</span>
+                    <i class="fa-solid fa-pen text-[9px] text-purple-400/40"></i>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">has successfully completed all requirements of</p>
+                <p class="text-sm font-bold text-slate-200 uppercase font-mono mt-1">PSY201Z: Introduction to Psychology</p>
+            </div>
+            
+            <p class="text-[11px] text-slate-550 max-w-lg mx-auto">
+                Demonstrated full understanding across 36 core scientific lectures, successfully cleared 36 custom dialectic dialogues, validated 36 laboratory sandboxes, and achieved master scores on all accredited homework sheets.
+            </p>
+            
+            <div class="pt-4 flex justify-center space-x-6 text-[10px] font-mono text-slate-400">
+                <div>
+                    <span class="block border-b border-slate-700 px-4 pb-1">Gnosys AI Educator</span>
+                    <span class="block text-purple-500/80 mt-1">Gnosys LLM System</span>
+                </div>
+                <div>
+                    <span class="block border-b border-slate-700 px-4 pb-1">Accreditation Date</span>
+                    <span class="block text-slate-500 mt-1" id="cert-date">June 2026</span>
+                </div>
+            </div>
+            <div class="pt-2">
+                <button onclick="window.print()" class="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-bold uppercase text-white transition"><i class="fa-solid fa-print mr-1"></i> Print Certificate</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="mastery.js"></script>
+    <script src="../assets/llm-router.js?v=1.1.2"></script>
+    <script src="../assets/ollama-launcher.js"></script>
+    <script src="tutor.js"></script>
+    <script src="video_data.js"></script>
+    <script src="gamification.js"></script>
+    <script src="skills-lab.js"></script>
+    <script src="video-controller.js"></script>
+    <script>
+        function toggleMobileHeaderMenu() {
+            const dropdown = document.getElementById('mobile-menu-dropdown');
+            if (dropdown) dropdown.classList.toggle('hidden');
+        }
+
+        function openPsychologySettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+        }
+
+        function closePsychologyStatsModal() {
+            const modal = document.getElementById('stats-modal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        function renderPsychologyStatsModal() {
+            const game = window.PsychGamification;
+            if (!game) return;
+
+            const xpData = game.getXPData();
+            const streakData = game.getStreakData();
+            const achievementsData = game.getAchievementsData();
+            const achievementsList = game.getAchievementsList();
+            const questsData = game.getQuestsData();
+            const levels = game.getLevels();
+            const activeLvl = levels[Math.max(0, xpData.level - 1)];
+            const nextLvl = levels[xpData.level] || activeLvl;
+
+            const levelEl = document.getElementById('stats-modal-level');
+            const xpEl = document.getElementById('stats-modal-xp');
+            const streakEl = document.getElementById('stats-modal-streak');
+            const achEl = document.getElementById('stats-modal-achievements');
+            const questsEl = document.getElementById('stats-modal-quests');
+
+            if (levelEl) levelEl.textContent = `Lvl ${xpData.level} - ${activeLvl?.title || 'Apprentice'}`;
+            if (xpEl) xpEl.textContent = `${xpData.total} / ${nextLvl?.xpRequired ?? xpData.total} XP`;
+            if (streakEl) streakEl.textContent = `${streakData.count || 0} day${(streakData.count || 0) === 1 ? '' : 's'}`;
+            if (achEl) achEl.textContent = `${achievementsData.unlocked.length} of ${achievementsList.length} unlocked`;
+
+            if (questsEl) {
+                questsEl.innerHTML = '';
+                const active = Array.isArray(questsData.active) ? questsData.active : [];
+                if (active.length === 0) {
+                    questsEl.innerHTML = '<p class="text-slate-500">No quest data available.</p>';
+                } else {
+                    active.forEach(q => {
+                        const row = document.createElement('div');
+                        row.className = 'flex items-center justify-between rounded bg-slate-900 border border-slate-800 px-2.5 py-2';
+                        row.innerHTML = `<span class="truncate mr-2 ${q.completed ? 'text-emerald-300' : 'text-slate-300'}">${q.label}</span><span class="font-mono text-[10px] ${q.completed ? 'text-emerald-400' : 'text-slate-500'}">${q.current}/${q.target}</span>`;
+                        questsEl.appendChild(row);
+                    });
+                }
             }
         }
-        
-        // Initialize first tab
-        document.addEventListener('DOMContentLoaded', () => {
-            activatePsychTab('auditor');
-            
-            // Dark mode toggle
-            const btnDark = document.getElementById('btn-darkmode');
-            if (btnDark) {
-                btnDark.addEventListener('click', () => {
-                    document.documentElement.classList.toggle('dark');
-                    localStorage.setItem('psych_darkmode', document.documentElement.classList.contains('dark'));
+
+        function openPsychologyStatsModal() {
+            renderPsychologyStatsModal();
+            const modal = document.getElementById('stats-modal');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        const tabs = ['dashboard', 'research', 'neuro', 'conditioning', 'memory', 'clinical', 'videos', 'tutor'];
+        window.activatePsychTab = (tabId) => {
+            const requestedTab = tabs.includes(tabId) ? tabId : 'dashboard';
+            tabs.forEach(id => {
+                const view = document.getElementById(`view-${id}`);
+                if (view) {
+                    view.classList.add('hidden-tab');
+                    view.setAttribute('aria-hidden', 'true');
+                }
+                const btn = document.getElementById(`nav-${id}`);
+                if (btn) {
+                    btn.className = "px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50";
+                    btn.setAttribute('aria-selected', 'false');
+                    btn.setAttribute('tabindex', '-1');
+                }
+
+                const bBtn = document.getElementById(`bnav-${id}`);
+                if (bBtn) {
+                    const icon = bBtn.querySelector('.bnav-icon');
+                    const label = bBtn.querySelector('.bnav-label');
+                    if (icon) {
+                        icon.classList.remove('text-purple-400');
+                        icon.classList.add('text-slate-400');
+                    }
+                    if (label) {
+                        label.classList.remove('text-purple-400');
+                        label.classList.add('text-slate-400');
+                    }
+                    bBtn.setAttribute('aria-selected', 'false');
+                    bBtn.setAttribute('tabindex', '-1');
+                }
+            });
+            const activeView = document.getElementById(`view-${requestedTab}`);
+            if (activeView) {
+                activeView.classList.remove('hidden-tab');
+                activeView.setAttribute('aria-hidden', 'false');
+            }
+            if (requestedTab === 'videos') {
+                const supportCard = document.getElementById('video-support-tribute');
+                if (supportCard) {
+                    supportCard.classList.remove('fade-in');
+                    void supportCard.offsetWidth;
+                    supportCard.classList.add('fade-in');
+                }
+            }
+            const activeBtn = document.getElementById(`nav-${requestedTab}`);
+            if (activeBtn) {
+                activeBtn.className = "px-6 py-2.5 text-sm font-bold rounded-full transition-all duration-300 bg-purple-600 text-white shadow-md";
+                activeBtn.setAttribute('aria-selected', 'true');
+                activeBtn.setAttribute('tabindex', '0');
+            }
+
+            const activeBBtn = document.getElementById(`bnav-${requestedTab}`);
+            if (activeBBtn) {
+                const icon = activeBBtn.querySelector('.bnav-icon');
+                const label = activeBBtn.querySelector('.bnav-label');
+                if (icon) {
+                    icon.classList.add('text-purple-400');
+                    icon.classList.remove('text-slate-400');
+                }
+                if (label) {
+                    label.classList.add('text-purple-400');
+                    label.classList.remove('text-slate-400');
+                }
+                activeBBtn.setAttribute('aria-selected', 'true');
+                activeBBtn.setAttribute('tabindex', '0');
+                activeBBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            window.addEventListener('click', function(e) {
+                const dropdown = document.getElementById('mobile-menu-dropdown');
+                const trigger = document.getElementById('btn-mobile-menu');
+                if (dropdown && trigger && !trigger.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+
+            document.getElementById('stats-modal')?.addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) closePsychologyStatsModal();
+            });
+
+            // Register Tab click listeners
+            tabs.forEach(id => {
+                document.getElementById(`nav-${id}`)?.addEventListener('click', () => window.activatePsychTab(id));
+                document.getElementById(`bnav-${id}`)?.addEventListener('click', () => window.activatePsychTab(id));
+            });
+            window.activatePsychTab('dashboard');
+
+            (function() {
+                const scrollContainer = document.getElementById('bnav-scroll-container');
+                const fadeLeft = document.getElementById('bnav-fade-left');
+                const fadeRight = document.getElementById('bnav-fade-right');
+                if (!scrollContainer || !fadeLeft || !fadeRight) return;
+
+                function updateFadeIndicators() {
+                    const scrollLeft = scrollContainer.scrollLeft;
+                    const maxScrollLeft = scrollContainer.scrollWidth - scrollContainer.clientWidth;
+                    if (scrollLeft > 5) {
+                        fadeLeft.classList.remove('opacity-0');
+                        fadeLeft.classList.add('opacity-100');
+                    } else {
+                        fadeLeft.classList.remove('opacity-100');
+                        fadeLeft.classList.add('opacity-0');
+                    }
+
+                    if (scrollLeft < maxScrollLeft - 5) {
+                        fadeRight.classList.remove('opacity-0');
+                        fadeRight.classList.add('opacity-100');
+                    } else {
+                        fadeRight.classList.remove('opacity-100');
+                        fadeRight.classList.add('opacity-0');
+                    }
+                }
+
+                scrollContainer.addEventListener('scroll', updateFadeIndicators);
+                window.addEventListener('resize', updateFadeIndicators);
+                setTimeout(updateFadeIndicators, 150);
+            })();
+
+            const syllabus = await window.loadSyllabus();
+            if (!syllabus) return;
+
+            const matrix = window.initMasteryMatrix(syllabus);
+            const bypass = window.isCurriculumBypassEnabled();
+
+            // Populate Stats
+            let total = 0;
+            let mastered = 0;
+            let theory = 0;
+
+            syllabus.modules.forEach(mod => {
+                syllabus.lessonsByModule[mod.id].forEach(l => {
+                    total++;
+                    const st = matrix[l.id] ? matrix[l.id].state : 0;
+                    if (st >= 2) theory++;
+                    if (st === 3) mastered++;
+                });
+            });
+
+            document.getElementById('stat-mastered').textContent = mastered;
+            document.getElementById('stat-theory').textContent = theory;
+            document.getElementById('stat-percent').textContent = total > 0 ? Math.round((mastered / total) * 100) + "%" : "0%";
+            document.getElementById('stat-bypass').textContent = bypass ? "Enabled" : "Inactive";
+            document.getElementById('stat-bypass').className = bypass 
+                ? "text-xs font-bold text-purple-400 mt-2.5 uppercase font-mono" 
+                : "text-xs font-bold text-slate-450 mt-2.5 uppercase font-mono";
+
+            // Render Modules Cards
+            const modulesContainer = document.getElementById('dashboard-modules');
+            if (modulesContainer) {
+                modulesContainer.innerHTML = '';
+                syllabus.modules.forEach(mod => {
+                    const lessons = syllabus.lessonsByModule[mod.id];
+                    let modMastered = 0;
+                    let modTotal = 0;
+
+                    lessons.forEach(l => {
+                        modTotal++;
+                        const st = matrix[l.id] ? matrix[l.id].state : 0;
+                        if (st === 3) modMastered++;
+                    });
+
+                    const card = document.createElement('div');
+                    card.className = "bg-slate-950 p-3.5 rounded-lg border border-slate-850 flex items-center justify-between hover:border-purple-900/30 transition shadow-inner";
+                    card.innerHTML = `
+                        <div class="min-w-0 mr-3">
+                            <span class="text-[9px] font-mono font-bold text-purple-450 uppercase block">Module ${mod.number}</span>
+                            <span class="text-xs font-semibold block text-slate-200 truncate leading-snug">${mod.title}</span>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <span class="text-xs font-bold font-mono block ${modMastered === modTotal ? 'text-emerald-400' : 'text-slate-400'}">${modMastered}/${modTotal}</span>
+                            <span class="text-[8px] uppercase font-mono block text-slate-500">Mastered</span>
+                        </div>
+                    `;
+                    modulesContainer.appendChild(card);
+                });
+            }
+
+            // Sync Gamification Dashboard Panels
+            const game = window.PsychGamification;
+            if (game) {
+                const xpData = game.getXPData();
+                const questsData = game.getQuestsData();
+                const achievementsData = game.getAchievementsData();
+                const levels = game.getLevels();
+                const achievementsList = game.getAchievementsList();
+
+                const activeLvl = levels[xpData.level - 1];
+                const nextLvl = levels[xpData.level] || activeLvl;
+                
+                const curXP = xpData.total - activeLvl.xpRequired;
+                const reqXP = nextLvl.xpRequired - activeLvl.xpRequired;
+                const xpPercent = reqXP > 0 ? Math.min(100, Math.round((curXP / reqXP) * 100)) : 100;
+
+                // XP display
+                document.getElementById('xp-display').textContent = `${xpData.total} / ${nextLvl.xpRequired} XP`;
+                document.getElementById('xp-level-badge').textContent = `Lvl ${xpData.level}`;
+                document.getElementById('xp-level-title').textContent = activeLvl.title;
+                document.getElementById('xp-progress-bar').style.width = `${xpPercent}%`;
+
+                // Quests
+                const questsContainer = document.getElementById('quests-list-container');
+                questsContainer.innerHTML = '';
+                document.getElementById('quests-date-lbl').textContent = questsData.date;
+                questsData.active.forEach(q => {
+                    const box = document.createElement('div');
+                    box.className = "flex items-center justify-between p-2 rounded bg-slate-950/60 border border-slate-850 text-[11px]";
+                    box.innerHTML = `
+                        <div class="flex items-center space-x-2 truncate">
+                            <i class="fa-solid ${q.completed ? 'fa-circle-check text-emerald-400' : 'fa-circle text-slate-700'} shrink-0"></i>
+                            <span class="truncate ${q.completed ? 'line-through text-slate-500' : 'text-slate-350'}">${q.label}</span>
+                        </div>
+                        <span class="font-mono text-[9px] shrink-0 text-slate-500 font-bold ml-1">${q.current}/${q.target}</span>
+                    `;
+                    questsContainer.appendChild(box);
+                });
+
+                // Achievements showcase
+                const achContainer = document.getElementById('achievements-showcase-grid');
+                achContainer.innerHTML = '';
+                document.getElementById('achievement-unlocked-count').textContent = `${achievementsData.unlocked.length}/${achievementsList.length} Unlocked`;
+                
+                achievementsList.forEach(a => {
+                    const unlocked = achievementsData.unlocked.includes(a.id);
+                    const item = document.createElement('div');
+                    item.className = `p-2.5 rounded-lg border bg-slate-950 text-left flex items-start space-x-3 transition ${unlocked ? 'border-purple-900/35 hover:border-purple-900/60' : 'locked-badge border-slate-850'}`;
+                    item.innerHTML = `
+                        <div class="p-2 rounded-full shrink-0 text-slate-900 text-xs mt-0.5" style="background-color: ${unlocked ? a.color : '#475569'}">
+                            <i class="${a.icon}"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <span class="block text-xs font-extrabold text-slate-200 truncate leading-tight">${a.label}</span>
+                            <span class="block text-[9px] text-slate-450 leading-relaxed mt-0.5">${a.desc}</span>
+                            <span class="inline-block text-[8px] font-mono font-bold mt-1 px-1 bg-slate-900 border border-slate-800 text-purple-400 rounded leading-none">+${a.xp} XP</span>
+                        </div>
+                    `;
+                    achContainer.appendChild(item);
+                });
+
+                // Graduation certificate trigger if mastered = 36
+                if (mastered >= 36) {
+                    setTimeout(() => {
+                        const cert = document.getElementById('certificate-modal');
+                        if (cert) {
+                            cert.classList.remove('hidden');
+                            document.getElementById('cert-date').textContent = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        }
+                    }, 1500);
+                }
+            }
+
+            // LLM options populate
+            const modelSelect = document.getElementById('model-select');
+            if (modelSelect) {
+                const savedModel = localStorage.getItem('psychology_llm') || 'gemma';
+                const endpoint = localStorage.getItem("psychology_ollama_endpoint") || "http://localhost:11434";
+                const cleanEndpoint = endpoint.replace('/api/chat', '').replace('/api/generate', '');
+                
+                if (typeof window.populateModelSelector === 'function') {
+                    window.populateModelSelector(modelSelect, savedModel, cleanEndpoint, {
+                        moduleKey: 'psychology_llm',
+                        onStatusChange: (status) => {
+                            console.log('[Psychology Dashboard Model Select]', status.message);
+                        }
+                    });
+                } else {
+                    const opt1 = document.createElement('option');
+                    opt1.value = 'gemma';
+                    opt1.textContent = 'Gnosys Gemma (Default Local)';
+                    opt1.selected = (savedModel === 'gemma');
+                    modelSelect.appendChild(opt1);
+                    
+                    const opt2 = document.createElement('option');
+                    opt2.value = 'llama';
+                    opt2.textContent = 'Gnosys Llama (Local)';
+                    opt2.selected = (savedModel === 'llama');
+                    modelSelect.appendChild(opt2);
+                    
+                    modelSelect.addEventListener('change', () => {
+                        localStorage.setItem('psychology_llm', modelSelect.value);
+                    });
+                }
+            }
+
+            // Bypass toggle in modal
+            const bypassBtn = document.getElementById('bypass-toggle-btn');
+            if (bypassBtn) {
+                const updateBypassBtn = () => {
+                    const enabled = window.isCurriculumBypassEnabled();
+                    bypassBtn.textContent = enabled ? "ENABLED" : "DISABLED";
+                    bypassBtn.className = enabled 
+                        ? "px-3 py-1 bg-purple-600 text-white rounded font-bold text-[10px] uppercase transition"
+                        : "px-3 py-1 bg-slate-800 border border-slate-700 rounded font-semibold text-[10px] uppercase text-slate-350 hover:bg-slate-750 transition";
+                };
+                updateBypassBtn();
+                bypassBtn.addEventListener('click', () => {
+                    window.toggleCurriculumBypass();
+                    updateBypassBtn();
+                    
+                    // Update stats bypass label dynamically
+                    const currentBypass = window.isCurriculumBypassEnabled();
+                    document.getElementById('stat-bypass').textContent = currentBypass ? "Enabled" : "Inactive";
+                    document.getElementById('stat-bypass').className = currentBypass 
+                        ? "text-xs font-bold text-purple-400 mt-2.5 uppercase font-mono" 
+                        : "text-xs font-bold text-slate-450 mt-2.5 uppercase font-mono";
+                });
+            }
+
+            // Sync and save Certificate Student Name
+            const nameField = document.getElementById('cert-student-name');
+            if (nameField) {
+                const savedName = localStorage.getItem('psychology_student_name') || 'Andrew J. Green';
+                nameField.textContent = savedName;
+                nameField.addEventListener('blur', () => {
+                    localStorage.setItem('psychology_student_name', nameField.textContent.trim() || 'Andrew J. Green');
+                });
+                nameField.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        nameField.blur();
+                    }
                 });
             }
         });
     </script>
-    <script src="../assets/llm-router.js?v=1.1.2"></script>
-    <script src="app.js"></script>
-    <script src="tutor.js"></script>
+    <script src="../assets/js/pomodoro.js" defer></script>
 </body>
 </html>

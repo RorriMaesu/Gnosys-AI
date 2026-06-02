@@ -1082,6 +1082,9 @@
                     localStorage.setItem('gnosys_ondevice_selected_model', modelId);
                     localStorage.setItem('gnosys_active_llm', val);
                     localStorage.setItem('chemistry_llm', val);
+                    if (options.moduleKey) {
+                        localStorage.setItem(options.moduleKey, val);
+                    }
 
                     setActionStatus('working', `Opening Smart LLM Setup for ${modelLabel}...`);
                     await window.GnosysLLM?.init?.();
@@ -1105,6 +1108,9 @@
                 localStorage.setItem('gnosys_llm_route_mode', 'desktop-ollama');
                 localStorage.setItem('gnosys_active_llm', val);
                 localStorage.setItem('chemistry_llm', val);
+                if (options.moduleKey) {
+                    localStorage.setItem(options.moduleKey, val);
+                }
                 await window.GnosysLLM?.init?.();
                 if (isInstalled) {
                     setActionStatus('success', `${modelLabel} is now active.`);
