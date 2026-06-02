@@ -111,12 +111,12 @@ A full psychology learning system spanning dashboard, Crash Course, coursework, 
 
 <table width="100%">
   <tr>
-    <td width="50%"><img src="./assets/screenshots/psychContextAuditorScreenshot.jpg" alt="Psychology Skills Workspace"></td>
-    <td width="50%"><img src="./assets/screenshots/psychDeescalationScreenshot.jpg" alt="Psychology Scenario Practice"></td>
+    <td width="50%"><img src="./assets/screenshots/psychDashboardScreenshot.jpg" alt="Psychology Dashboard"></td>
+    <td width="50%"><img src="./assets/screenshots/psychCrashCourseScreenshot.jpg" alt="Psychology Crash Course"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="./assets/screenshots/psychJargonFilterScreenshot.jpg" alt="Psychology Learning Flow"></td>
-    <td width="50%"><img src="./assets/screenshots/psychTutorScreenshot.jpg" alt="Psychology Tutor Chat"></td>
+    <td width="50%"><img src="./assets/screenshots/psychCourseworkScreenshot.jpg" alt="Psychology Coursework"></td>
+    <td width="50%"><img src="./assets/screenshots/psychHomeworkBinderScreenshot.jpg" alt="Psychology Homework Binder"></td>
   </tr>
 </table>
 
