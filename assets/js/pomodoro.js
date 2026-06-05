@@ -218,6 +218,541 @@
                     z-index: 260 !important;
                 }
             }
+
+            /* Reset/Fallback styles when loaded inside OpenWord (where Tailwind is absent) */
+            .in-openword #floating-timer-widget {
+                position: fixed !important;
+                bottom: 52px !important; /* Offset above OpenWord's bottom status bar */
+                left: 24px !important;
+                right: auto !important;
+                z-index: 250 !important;
+                display: flex !important;
+                flex-direction: column-reverse !important;
+                align-items: flex-start !important;
+                gap: 12px !important;
+                font-family: 'Inter', sans-serif !important;
+                pointer-events: auto !important;
+            }
+
+            .in-openword #timer-toggle-btn {
+                width: 56px !important;
+                height: 56px !important;
+                border-radius: 50% !important;
+                background: rgba(15, 23, 42, 0.95) !important;
+                border: 1px solid rgba(99, 102, 241, 0.3) !important;
+                color: #ffffff !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3) !important;
+                backdrop-filter: blur(12px) !important;
+                -webkit-backdrop-filter: blur(12px) !important;
+                cursor: pointer !important;
+                transition: transform 0.2s ease, border-color 0.2s ease !important;
+                position: relative !important;
+            }
+            .in-openword #timer-toggle-btn:hover {
+                transform: scale(1.05) !important;
+                border-color: rgba(99, 102, 241, 0.6) !important;
+            }
+            .in-openword #timer-toggle-btn i {
+                font-size: 20px !important;
+                color: #818cf8 !important;
+                transition: transform 0.2s ease !important;
+            }
+            .in-openword #timer-toggle-btn:hover i {
+                transform: rotate(12deg) !important;
+            }
+
+            .in-openword #timer-badge {
+                position: absolute !important;
+                top: -4px !important;
+                right: -4px !important;
+                padding: 2px 6px !important;
+                border-radius: 10px !important;
+                background: #4f46e5 !important;
+                font-size: 9px !important;
+                font-weight: 800 !important;
+                color: #ffffff !important;
+            }
+            .in-openword #timer-badge.hidden {
+                display: none !important;
+            }
+
+            .in-openword #timer-expanded-panel {
+                background: rgba(8, 10, 15, 0.96) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                border-radius: 16px !important;
+                padding: 20px !important;
+                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5) !important;
+                width: 320px !important;
+                max-width: 320px !important;
+                backdrop-filter: blur(16px) !important;
+                -webkit-backdrop-filter: blur(16px) !important;
+                display: flex !important;
+                flex-direction: column !important;
+            }
+            .in-openword #timer-expanded-panel.hidden {
+                display: none !important;
+            }
+
+            /* Inner panel styling */
+            .in-openword #timer-expanded-panel .flex {
+                display: flex !important;
+            }
+            .in-openword #timer-expanded-panel .justify-between {
+                justify-content: space-between !important;
+            }
+            .in-openword #timer-expanded-panel .items-center {
+                align-items: center !important;
+            }
+            .in-openword #timer-expanded-panel .mb-3 {
+                margin-bottom: 12px !important;
+            }
+            .in-openword #timer-expanded-panel h3 {
+                font-size: 11px !important;
+                font-weight: 800 !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.1em !important;
+                color: #94a3b8 !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 6px !important;
+                margin: 0 !important;
+            }
+            .in-openword #timer-expanded-panel h3 i {
+                color: #818cf8 !important;
+            }
+            .in-openword #timer-close-panel-btn {
+                background: transparent !important;
+                border: none !important;
+                color: #64748b !important;
+                cursor: pointer !important;
+                font-size: 14px !important;
+                padding: 4px !important;
+                transition: color 0.15s ease !important;
+            }
+            .in-openword #timer-close-panel-btn:hover {
+                color: #ffffff !important;
+            }
+
+            .in-openword .timer-panel-body-wrapper {
+                display: flex !important;
+                align-items: center !important;
+                gap: 16px !important;
+                padding: 8px 0 !important;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+                margin-bottom: 12px !important;
+            }
+            .in-openword .timer-progress-container {
+                position: relative !important;
+                width: 80px !important;
+                height: 80px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                flex-shrink: 0 !important;
+            }
+            .in-openword .timer-progress-container svg {
+                position: absolute !important;
+                width: 100% !important;
+                height: 100% !important;
+                transform: rotate(-90deg) !important;
+            }
+            .in-openword #timer-display {
+                font-size: 16px !important;
+                font-weight: 900 !important;
+                color: #ffffff !important;
+                letter-spacing: -0.02em !important;
+                z-index: 10 !important;
+            }
+            .in-openword .timer-info-container {
+                flex-grow: 1 !important;
+            }
+            .in-openword #timer-mode-indicator {
+                font-size: 9px !important;
+                font-weight: 800 !important;
+                color: #818cf8 !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.1em !important;
+                display: block !important;
+                margin-bottom: 4px !important;
+            }
+            .in-openword #timer-course-select {
+                width: 100% !important;
+                background: #0f172a !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                border-radius: 8px !important;
+                padding: 6px 10px !important;
+                font-size: 12px !important;
+                font-weight: 700 !important;
+                color: #cbd5e1 !important;
+                outline: none !important;
+                cursor: pointer !important;
+                transition: border-color 0.15s ease !important;
+            }
+            .in-openword #timer-course-select:focus {
+                border-color: #6366f1 !important;
+            }
+
+            .in-openword .timer-buttons-container {
+                display: flex !important;
+                gap: 8px !important;
+            }
+            .in-openword #timer-play, .in-openword #timer-pause {
+                flex: 1 !important;
+                padding: 10px !important;
+                border-radius: 8px !important;
+                border: none !important;
+                font-weight: 700 !important;
+                font-size: 12px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 6px !important;
+                cursor: pointer !important;
+                transition: background-color 0.15s ease, transform 0.1s ease !important;
+            }
+            .in-openword #timer-play {
+                background: #4f46e5 !important;
+                color: #ffffff !important;
+                box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2) !important;
+            }
+            .in-openword #timer-play:hover {
+                background: #6366f1 !important;
+            }
+            .in-openword #timer-pause {
+                background: #334155 !important;
+                color: #cbd5e1 !important;
+                border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            }
+            .in-openword #timer-pause:hover {
+                background: #475569 !important;
+            }
+            .in-openword #timer-play.hidden, .in-openword #timer-pause.hidden {
+                display: none !important;
+            }
+            .in-openword #timer-reset {
+                padding: 10px 16px !important;
+                border-radius: 8px !important;
+                background: #0f172a !important;
+                border: 1px solid rgba(255, 255, 255, 0.05) !important;
+                color: #94a3b8 !important;
+                cursor: pointer !important;
+                transition: color 0.15s ease, background-color 0.15s ease !important;
+            }
+            .in-openword #timer-reset:hover {
+                color: #ffffff !important;
+                background: #1e293b !important;
+            }
+
+            /* Floating Stats Button Container styling */
+            .in-openword #floating-stats-btn-container {
+                position: fixed !important;
+                bottom: 52px !important; /* Offset above status bar */
+                right: 24px !important;
+                left: auto !important;
+                z-index: 250 !important;
+                pointer-events: auto !important;
+            }
+            .in-openword #stats-modal-trigger-btn {
+                width: 56px !important;
+                height: 56px !important;
+                border-radius: 50% !important;
+                background: rgba(15, 23, 42, 0.95) !important;
+                border: 1px solid rgba(20, 184, 166, 0.3) !important;
+                color: #ffffff !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3) !important;
+                backdrop-filter: blur(12px) !important;
+                -webkit-backdrop-filter: blur(12px) !important;
+                cursor: pointer !important;
+                transition: transform 0.2s ease, border-color 0.2s ease !important;
+            }
+            .in-openword #stats-modal-trigger-btn:hover {
+                transform: scale(1.05) !important;
+                border-color: rgba(20, 184, 166, 0.6) !important;
+            }
+            .in-openword #stats-modal-trigger-btn i {
+                font-size: 20px !important;
+                color: #2dd4bf !important;
+                transition: transform 0.2s ease !important;
+            }
+            .in-openword #stats-modal-trigger-btn:hover i {
+                transform: scale(1.1) !important;
+            }
+
+            /* Modal Stats Overlay styling */
+            .in-openword #modal-stats {
+                display: none !important;
+                position: fixed !important;
+                inset: 0 !important;
+                z-index: 400 !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 16px !important;
+            }
+            .in-openword #modal-stats.flex {
+                display: flex !important;
+            }
+            .in-openword #stats-modal-backdrop {
+                position: absolute !important;
+                inset: 0 !important;
+                background: rgba(0, 0, 0, 0.65) !important;
+                backdrop-filter: blur(4px) !important;
+                -webkit-backdrop-filter: blur(4px) !important;
+            }
+            .in-openword .glass-card-pomo {
+                background: rgba(15, 23, 42, 0.95) !important;
+                backdrop-filter: blur(16px) !important;
+                -webkit-backdrop-filter: blur(16px) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                width: 100% !important;
+                max-width: 448px !important;
+                border-radius: 24px !important;
+                padding: 24px !important;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+                position: relative !important;
+                z-index: 10 !important;
+                max-height: 90vh !important;
+                overflow-y: auto !important;
+                font-family: 'Inter', sans-serif !important;
+                color: #ffffff !important;
+            }
+
+            .in-openword .stats-modal-header {
+                display: flex !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                margin-bottom: 24px !important;
+            }
+            .in-openword .stats-modal-header h2 {
+                font-size: 20px !important;
+                font-weight: 800 !important;
+                margin: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 8px !important;
+            }
+            .in-openword .stats-modal-header h2 i {
+                color: #2dd4bf !important;
+            }
+            .in-openword #stats-modal-close-btn {
+                width: 32px !important;
+                height: 32px !important;
+                border-radius: 50% !important;
+                background: #0f172a !important;
+                border: 1px solid rgba(255, 255, 255, 0.05) !important;
+                color: #94a3b8 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                cursor: pointer !important;
+                transition: color 0.15s ease, background-color 0.15s ease !important;
+            }
+            .in-openword #stats-modal-close-btn:hover {
+                color: #ffffff !important;
+                background: #1e293b !important;
+            }
+
+            .in-openword .stats-modal-grid {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 16px !important;
+                margin-bottom: 24px !important;
+            }
+            .in-openword .stat-card {
+                background: rgba(8, 10, 15, 0.5) !important;
+                border: 1px solid rgba(255, 255, 255, 0.05) !important;
+                border-radius: 16px !important;
+                padding: 16px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                text-align: center !important;
+            }
+            .in-openword #stat-total-focus {
+                font-size: 24px !important;
+                font-weight: 900 !important;
+                color: #818cf8 !important;
+            }
+            .in-openword #stat-streak {
+                font-size: 24px !important;
+                font-weight: 900 !important;
+                color: #fbbf24 !important;
+            }
+            .in-openword .stat-label {
+                font-size: 9px !important;
+                font-weight: 700 !important;
+                color: #64748b !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.1em !important;
+                margin-top: 4px !important;
+            }
+
+            .in-openword .stats-section-title {
+                font-size: 11px !important;
+                font-weight: 800 !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.1em !important;
+                color: #94a3b8 !important;
+                margin-bottom: 12px !important;
+                margin-top: 0 !important;
+            }
+            .in-openword #stats-course-breakdown {
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 8px !important;
+            }
+            .in-openword .course-stat-row {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                padding: 12px !important;
+                border-radius: 12px !important;
+                background: rgba(15, 23, 42, 0.4) !important;
+                border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            }
+            .in-openword .course-stat-left {
+                display: flex !important;
+                align-items: center !important;
+                gap: 8px !important;
+            }
+            .in-openword .course-stat-left i {
+                color: #94a3b8 !important;
+            }
+            .in-openword .course-stat-name {
+                font-size: 12px !important;
+                font-weight: 600 !important;
+                color: #e2e8f0 !important;
+            }
+            .in-openword .course-stat-value {
+                font-size: 12px !important;
+                font-weight: 800 !important;
+                color: #818cf8 !important;
+            }
+
+            .in-openword .stats-modal-footer {
+                display: flex !important;
+                justify-content: flex-end !important;
+                margin-top: 24px !important;
+                padding-top: 16px !important;
+                border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+            }
+            .in-openword #stats-modal-close-btn-footer {
+                padding: 10px 20px !important;
+                border-radius: 12px !important;
+                background: #4f46e5 !important;
+                color: #ffffff !important;
+                font-weight: 700 !important;
+                font-size: 12px !important;
+                border: none !important;
+                cursor: pointer !important;
+                transition: background-color 0.15s ease !important;
+                box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2) !important;
+            }
+            .in-openword #stats-modal-close-btn-footer:hover {
+                background: #6366f1 !important;
+            }
+
+            /* Alarm Overlay Styling */
+            .in-openword #pomodoro-alarm-overlay {
+                position: fixed !important;
+                inset: 0 !important;
+                z-index: 9999 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 16px !important;
+                background: rgba(8, 10, 15, 0.8) !important;
+                backdrop-filter: blur(8px) !important;
+                -webkit-backdrop-filter: blur(8px) !important;
+            }
+            .in-openword .alarm-card {
+                background: rgba(15, 23, 42, 0.95) !important;
+                backdrop-filter: blur(16px) !important;
+                -webkit-backdrop-filter: blur(16px) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                width: 100% !important;
+                max-width: 448px !important;
+                border-radius: 24px !important;
+                padding: 32px !important;
+                text-align: center !important;
+                position: relative !important;
+                box-shadow: 0 0 50px rgba(99, 102, 241, 0.25) !important;
+                font-family: 'Inter', sans-serif !important;
+                color: #ffffff !important;
+            }
+            .in-openword .alarm-icon-container {
+                width: 80px !important;
+                height: 80px !important;
+                border-radius: 50% !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                margin: 0 auto 24px auto !important;
+                border: 4px solid rgba(255, 255, 255, 0.1) !important;
+            }
+            .in-openword .alarm-icon-container.focus {
+                background: linear-gradient(135deg, #f59e0b, #e11d48) !important;
+            }
+            .in-openword .alarm-icon-container.break {
+                background: linear-gradient(135deg, #6366f1, #14b8a6) !important;
+            }
+            .in-openword .alarm-icon-container i {
+                font-size: 30px !important;
+                color: #ffffff !important;
+            }
+            .in-openword .alarm-title {
+                font-size: 24px !important;
+                font-weight: 900 !important;
+                margin-bottom: 12px !important;
+                margin-top: 0 !important;
+            }
+            .in-openword .alarm-detail {
+                font-size: 14px !important;
+                color: #cbd5e1 !important;
+                line-height: 1.6 !important;
+                margin-bottom: 32px !important;
+                margin-top: 0 !important;
+            }
+            .in-openword #pomodoro-alarm-dismiss-btn {
+                width: 100% !important;
+                padding: 16px !important;
+                border-radius: 16px !important;
+                border: none !important;
+                font-weight: 900 !important;
+                font-size: 16px !important;
+                color: #ffffff !important;
+                cursor: pointer !important;
+                transition: transform 0.2s ease !important;
+            }
+            .in-openword #pomodoro-alarm-dismiss-btn:hover {
+                transform: scale(1.02) !important;
+            }
+            .in-openword #pomodoro-alarm-dismiss-btn.focus {
+                background: linear-gradient(90deg, #f59e0b, #e11d48) !important;
+            }
+            .in-openword #pomodoro-alarm-dismiss-btn.break {
+                background: linear-gradient(90deg, #6366f1, #14b8a6) !important;
+            }
+
+            /* Animations */
+            .in-openword #timer-pulse-ring {
+                position: absolute !important;
+                inset: 0 !important;
+                border-radius: 50% !important;
+                border: 1px solid rgba(99, 102, 241, 0.4) !important;
+                pointer-events: none !important;
+            }
+            .in-openword #timer-pulse-ring.animate-ping {
+                animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite !important;
+            }
+            @keyframes ping {
+                75%, 100% { transform: scale(1.4); opacity: 0; }
+            }
         `;
         document.head.appendChild(style);
     }
@@ -256,7 +791,7 @@
                 </button>
             </div>
             
-            <div class="flex items-center gap-4 py-2 border-b border-white/5 mb-3">
+            <div class="timer-panel-body-wrapper flex items-center gap-4 py-2 border-b border-white/5 mb-3">
                 <div class="relative w-20 h-20 flex items-center justify-center shrink-0">
                     <svg class="absolute w-full h-full -rotate-90">
                         <circle cx="40" cy="40" r="34" class="stroke-slate-800 fill-none" stroke-width="4"></circle>
@@ -272,7 +807,7 @@
                 </div>
             </div>
 
-            <div class="flex gap-2">
+            <div class="timer-buttons-container flex gap-2">
                 <button id="timer-play" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all">
                     <i class="fa-solid fa-play"></i> Start
                 </button>
@@ -316,7 +851,7 @@
             modal.innerHTML = `
                 <div id="stats-modal-backdrop" class="absolute inset-0 bg-black/65 backdrop-blur-sm"></div>
                 <div class="glass-card-pomo w-full max-w-md rounded-3xl p-6 sm:p-8 border border-white/10 shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto">
-                    <div class="flex justify-between items-center mb-6">
+                    <div class="stats-modal-header flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-extrabold text-white flex items-center gap-2">
                             <i class="fa-solid fa-chart-line text-teal-400"></i> Study Metrics
                         </h2>
@@ -325,23 +860,23 @@
                         </button>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 mb-6">
-                        <div class="bg-slate-950/50 border border-white/5 rounded-2xl p-4 flex flex-col items-center text-center shadow-inner">
+                    <div class="stats-modal-grid grid grid-cols-2 gap-4 mb-6">
+                        <div class="stat-card bg-slate-950/50 border border-white/5 rounded-2xl p-4 flex flex-col items-center text-center shadow-inner">
                             <span id="stat-total-focus" class="text-2xl font-black text-indigo-400">0.0 hrs</span>
                             <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Total Focus Time</span>
                         </div>
-                        <div class="bg-slate-950/50 border border-white/5 rounded-2xl p-4 flex flex-col items-center text-center shadow-inner">
+                        <div class="stat-card bg-slate-950/50 border border-white/5 rounded-2xl p-4 flex flex-col items-center text-center shadow-inner">
                             <span id="stat-streak" class="text-2xl font-black text-amber-400">3 Days</span>
                             <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Study Streak 🔥</span>
                         </div>
                     </div>
 
                     <div>
-                        <h3 class="text-xs uppercase tracking-widest text-slate-400 font-extrabold mb-3">Focus Hours by Module</h3>
+                        <h3 class="stats-section-title text-xs uppercase tracking-widest text-slate-400 font-extrabold mb-3">Focus Hours by Module</h3>
                         <div id="stats-course-breakdown" class="space-y-2"></div>
                     </div>
 
-                    <div class="flex justify-end mt-6 pt-4 border-t border-white/5">
+                    <div class="stats-modal-footer flex justify-end mt-6 pt-4 border-t border-white/5">
                         <button id="stats-modal-close-btn-footer" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-lg shadow-indigo-600/30">Close Stats</button>
                     </div>
                 </div>
@@ -528,17 +1063,17 @@
         overlay.id = 'pomodoro-alarm-overlay';
         overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-md bg-slate-950/80 fade-in';
         overlay.innerHTML = `
-            <div class="glass-card-pomo w-full max-w-md rounded-3xl p-8 border border-white/10 text-center relative overflow-hidden ${ringGlow} animate-pulse-slow">
+            <div class="alarm-card glass-card-pomo w-full max-w-md rounded-3xl p-8 border border-white/10 text-center relative overflow-hidden ${ringGlow} animate-pulse-slow">
                 <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
                 
-                <div class="w-20 h-20 rounded-full bg-gradient-to-br ${accentGradient} flex items-center justify-center mx-auto mb-6 border-4 border-white/10 shadow-lg">
+                <div class="alarm-icon-container ${mode} w-20 h-20 rounded-full bg-gradient-to-br ${accentGradient} flex items-center justify-center mx-auto mb-6 border-4 border-white/10 shadow-lg">
                     <i class="fa-solid ${icon} text-3xl text-white"></i>
                 </div>
                 
-                <h2 class="text-3xl font-black text-white mb-3 tracking-tight">${title}</h2>
-                <p class="text-slate-300 text-sm mb-8 leading-relaxed">${detail}</p>
+                <h2 class="alarm-title text-3xl font-black text-white mb-3 tracking-tight">${title}</h2>
+                <p class="alarm-detail text-slate-300 text-sm mb-8 leading-relaxed">${detail}</p>
                 
-                <button id="pomodoro-alarm-dismiss-btn" class="w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r ${accentGradient} hover:scale-[1.02] active:scale-[0.98] transition-all text-base shadow-lg shadow-indigo-600/20">
+                <button id="pomodoro-alarm-dismiss-btn" class="${mode} w-full py-4 rounded-2xl font-black text-white bg-gradient-to-r ${accentGradient} hover:scale-[1.02] active:scale-[0.98] transition-all text-base shadow-lg shadow-indigo-600/20">
                     ${button}
                 </button>
             </div>
@@ -863,6 +1398,19 @@
 
     // Initialize Timer widget
     function init() {
+        // Apply class helper if in OpenWord
+        if (detectCurrentCourse() === 'openword') {
+            document.body.classList.add('in-openword');
+        }
+
+        // Load FontAwesome dynamically if missing
+        if (!document.querySelector('link[href*="font-awesome"]') && !document.querySelector('link[href*="fontawesome"]')) {
+            const faLink = document.createElement('link');
+            faLink.rel = 'stylesheet';
+            faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
+            document.head.appendChild(faLink);
+        }
+
         injectStyles();
         injectHTML();
         setupListeners();
