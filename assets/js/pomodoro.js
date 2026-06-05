@@ -3,6 +3,90 @@
 // Includes expert-level loop-until-dismissed alarm suite (audio, tab title flash, fullscreen overlay, and haptics).
 
 (function() {
+    // ==========================================
+    // GLOBAL THEME SYNCHRONIZATION SUITE
+    // ==========================================
+    const THEME_KEYS = [
+        'openword_theme',
+        'syngnosia_darkmode',
+        'chemistry_darkmode',
+        'math_darkmode',
+        'psych_darkmode'
+    ];
+
+    function isDarkVal(key, val) {
+        if (key === 'openword_theme') return val === 'dark';
+        return val === 'true' || val === true;
+    }
+
+    const originalSetItem = localStorage.setItem;
+    
+    function syncThemeKeys(sourceKey, value) {
+        const isDark = isDarkVal(sourceKey, value);
+        const targetThemeStr = isDark ? 'dark' : 'light';
+        const targetBoolStr = isDark ? 'true' : 'false';
+
+        THEME_KEYS.forEach(k => {
+            const expected = (k === 'openword_theme') ? targetThemeStr : targetBoolStr;
+            if (localStorage.getItem(k) !== expected) {
+                originalSetItem.call(localStorage, k, expected);
+            }
+        });
+        
+        applyCurrentTheme(isDark);
+    }
+
+    function applyCurrentTheme(isDark) {
+        const themeClass = isDark ? 'dark' : '';
+        const targetThemeStr = isDark ? 'dark' : 'light';
+
+        // 1. Gnosys Tailwind class alignment
+        if (isDark) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        
+        // 2. OpenWord data-theme attribute alignment
+        document.documentElement.setAttribute('data-theme', targetThemeStr);
+
+        // 3. Trigger Periodic Table and other custom module events
+        window.dispatchEvent(new CustomEvent('chemistry-theme-changed', { detail: { isDark } }));
+        
+        // 4. Update checkbox toggles on active pages if present
+        const darkToggle = document.getElementById('modal-dark-toggle');
+        if (darkToggle && darkToggle.checked !== isDark) {
+            darkToggle.checked = isDark;
+            // Dispatch change event to let local module controller trigger updates (without infinite loop)
+            darkToggle.dispatchEvent(new Event('change'));
+        }
+    }
+
+    // Intercept localStorage.setItem
+    localStorage.setItem = function(key, value) {
+        originalSetItem.apply(this, arguments);
+        if (THEME_KEYS.includes(key)) {
+            syncThemeKeys(key, value);
+        }
+    };
+
+    // Cross-tab theme sync
+    window.addEventListener('storage', (e) => {
+        if (THEME_KEYS.includes(e.key) && e.newValue !== null) {
+            syncThemeKeys(e.key, e.newValue);
+        }
+    });
+
+    // Boot theme consensus immediately
+    (function initThemeConsensus() {
+        let consensusDark = true; // Default to dark mode
+        const activeKey = THEME_KEYS.find(k => localStorage.getItem(k) !== null);
+        if (activeKey) {
+            consensusDark = isDarkVal(activeKey, localStorage.getItem(activeKey));
+        }
+        syncThemeKeys(activeKey || 'openword_theme', consensusDark ? 'dark' : 'light');
+    })();
+
     const POMODORO_COURSES = [
         { id: 'medical-terminology', title: 'Medical Terminology', icon: 'fa-staff-snake' },
         { id: 'intro-to-chemistry', title: 'Intro to Chemistry', icon: 'fa-flask-vial' },
