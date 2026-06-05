@@ -186,7 +186,18 @@
         style.id = 'pomodoro-global-styles';
         style.textContent = `
             #floating-timer-widget {
-                font-family: 'Inter', sans-serif;
+                position: fixed !important;
+                bottom: 52px !important;
+                left: 24px !important;
+                right: auto !important;
+                z-index: 250 !important;
+                display: flex !important;
+                flex-direction: column-reverse !important;
+                align-items: flex-start !important;
+                gap: 12px !important;
+                font-family: 'Inter', sans-serif !important;
+                pointer-events: auto !important;
+                transition: all 0.3s ease !important;
             }
             .glass-card-pomo {
                 background: rgba(15, 23, 42, 0.9);
@@ -777,7 +788,7 @@
         // Container
         const container = document.createElement('div');
         container.id = 'floating-timer-widget';
-        container.className = 'fixed bottom-8 left-8 z-[250] flex flex-col-reverse items-start gap-3 transition-all duration-300 pointer-events-auto';
+        container.className = 'transition-all duration-300';
 
         // Collapsed Button
         const btn = document.createElement('button');
