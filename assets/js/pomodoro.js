@@ -477,9 +477,9 @@
             .in-openword #floating-stats-btn-container {
                 position: fixed !important;
                 bottom: 52px !important; /* Offset above status bar */
-                right: 24px !important;
-                left: auto !important;
-                z-index: 250 !important;
+                left: 92px !important;
+                right: auto !important;
+                z-index: 240 !important;
                 pointer-events: auto !important;
             }
             .in-openword #stats-modal-trigger-btn {
