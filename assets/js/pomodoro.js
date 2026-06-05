@@ -102,6 +102,9 @@
     let titleFlashInterval = null;
     let originalTitle = document.title;
     let timerExpanded = false;
+    let cooldownActive = false;
+    let cooldownTimeout = null;
+
 
     // Helper to determine relative paths for icon image or assets depending on depth
     function getRootPath() {
@@ -777,9 +780,56 @@
             @keyframes ping {
                 75%, 100% { transform: scale(1.4); opacity: 0; }
             }
+            #pomodoro-break-overlay {
+                position: fixed !important;
+                inset: 0 !important;
+                z-index: 9990 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 16px !important;
+                background: rgba(8, 10, 15, 0.85) !important;
+                backdrop-filter: blur(16px) !important;
+                -webkit-backdrop-filter: blur(16px) !important;
+            }
+            .in-openword #pomodoro-break-overlay .timer-progress-container {
+                width: 128px !important;
+                height: 128px !important;
+                margin: 0 auto 24px auto !important;
+            }
+            .in-openword #break-overlay-display {
+                font-size: 24px !important;
+                font-weight: 900 !important;
+                color: #ffffff !important;
+                z-index: 10 !important;
+            }
+            .in-openword #pomodoro-break-overlay .alarm-title {
+                font-size: 24px !important;
+                font-weight: 900 !important;
+                margin-bottom: 12px !important;
+            }
+            .in-openword #pomodoro-break-overlay .alarm-detail {
+                font-size: 12px !important;
+                color: #cbd5e1 !important;
+                line-height: 1.6 !important;
+                margin-bottom: 24px !important;
+            }
+            .in-openword #pomodoro-break-overlay .animate-ping {
+                animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite !important;
+            }
+            .in-openword #pomodoro-break-overlay .rounded-full {
+                border-radius: 50% !important;
+            }
+            .in-openword #pomodoro-break-overlay .border {
+                border: 1px solid rgba(99, 102, 241, 0.3) !important;
+            }
+            .in-openword #pomodoro-break-overlay .text-indigo-400 {
+                color: #818cf8 !important;
+            }
         `;
         document.head.appendChild(style);
     }
+
 
     // Construct and inject widget HTML
     function injectHTML() {
@@ -825,11 +875,10 @@
                 </div>
                 <div class="timer-info-container flex-grow">
                     <span id="timer-mode-indicator" class="text-[9px] font-extrabold text-indigo-400 uppercase tracking-widest block mb-1">Focus Session Active</span>
-                    <select id="timer-course-select" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-500 text-slate-300">
-                        <option value="general">General Focus</option>
-                    </select>
+                    <span id="timer-active-course-display" class="text-xs font-extrabold text-slate-300 block leading-tight">General Focus</span>
                 </div>
             </div>
+
 
             <div class="timer-buttons-container flex gap-2">
                 <button id="timer-play" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all">
@@ -846,13 +895,7 @@
         container.appendChild(panel);
         document.body.appendChild(container);
 
-        // Populate Select Option list
-        const select = document.getElementById('timer-course-select');
-        let options = '<option value="general">General Study Focus</option>';
-        POMODORO_COURSES.forEach(c => {
-            options += `<option value="${c.id}">${c.title}</option>`;
-        });
-        select.innerHTML = options;
+
 
         // Floating Stats Button
         if (!document.getElementById('floating-stats-btn-container')) {
@@ -917,7 +960,102 @@
         }
     }
 
+    function showBreakOverlay(state) {
+        if (state.mode !== 'break' || !state.isRunning) {
+            removeBreakOverlay();
+            return;
+        }
+        
+        let overlay = document.getElementById('pomodoro-break-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'pomodoro-break-overlay';
+            overlay.className = 'fade-in';
+            overlay.innerHTML = `
+                <div class="alarm-card glass-card-pomo w-full max-w-md rounded-3xl p-8 border border-white/10 text-center relative overflow-hidden shadow-[0_0_50px_rgba(99,102,241,0.2)] animate-pulse-slow animate-pulse-slow">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                    
+                    <div class="timer-progress-container relative w-32 h-32 flex items-center justify-center shrink-0 mx-auto mb-6">
+                        <svg class="absolute w-full h-full -rotate-90" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.05)" fill="none" stroke-width="4"></circle>
+                            <circle cx="50" cy="50" r="44" stroke="#6366f1" fill="none" stroke-width="4" stroke-dasharray="276" stroke-dashoffset="0" id="break-overlay-progress-ring" style="transition: stroke-dashoffset 0.3s ease;"></circle>
+                        </svg>
+                        <span id="break-overlay-display" class="text-2xl font-black text-white tracking-tight z-10">05:00</span>
+                    </div>
+                    
+                    <h2 class="alarm-title text-2xl font-black text-white mb-3 tracking-tight">Break In Progress ☕</h2>
+                    <p class="alarm-detail text-slate-300 text-xs mb-6 leading-relaxed">Step away from your screen. Stretch, rest your eyes, or grab some water.</p>
+                    
+                    <div class="flex justify-center items-center mt-4">
+                        <div class="w-10 h-10 rounded-full border border-indigo-500/30 flex items-center justify-center text-indigo-400 animate-ping">
+                            <i class="fa-solid fa-mug-hot"></i>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        }
+    }
+    
+    function removeBreakOverlay() {
+        const overlay = document.getElementById('pomodoro-break-overlay');
+        if (overlay) overlay.remove();
+    }
+
+    function activateCooldown() {
+        cooldownActive = true;
+        if (cooldownTimeout) clearTimeout(cooldownTimeout);
+        cooldownTimeout = setTimeout(() => {
+            cooldownActive = false;
+        }, 1500);
+    }
+
+    function handleUserActivity(e) {
+        if (cooldownActive) return;
+        
+        const state = getTimerState();
+        if (!state.isRunning && state.mode === 'focus' && !state.alarmActive) {
+            if (e && e.target) {
+                const isPomoClick = e.target.closest('#floating-timer-widget') || 
+                                     e.target.closest('#modal-stats') || 
+                                     e.target.closest('#pomodoro-alarm-overlay');
+                if (isPomoClick) return;
+            }
+            
+            handlePlay();
+            showAutoStartToast();
+        }
+    }
+
+    function showAutoStartToast() {
+        if (document.getElementById('pomodoro-autostart-toast')) return;
+        
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.id = 'pomodoro-autostart-toast';
+        toast.className = 'glass-card border border-indigo-500/20 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-[10px] text-slate-200 fade-in select-none';
+        toast.style.background = 'rgba(15, 23, 42, 0.9)';
+        toast.style.backdropFilter = 'blur(12px)';
+        toast.innerHTML = `
+            <div class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-play animate-pulse text-[10px]"></i>
+            </div>
+            <span>Timer started automatically. Time to focus! 🚀</span>
+        `;
+        container.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(10px)';
+            toast.style.transition = 'all 0.5s ease-out';
+            setTimeout(() => toast.remove(), 500);
+        }, 3000);
+    }
+
     // Toggle panel view
+
     function toggleFloatingTimer() {
         const panel = document.getElementById('timer-expanded-panel');
         const btn = document.getElementById('timer-toggle-btn');
@@ -1144,8 +1282,21 @@
         const state = getTimerState();
         state.alarmActive = false;
         state.alarmMode = null;
+        
+        // Auto-start break timer when transitioning to break mode
+        if (state.mode === 'break') {
+            state.isRunning = true;
+            state.targetTime = Date.now() + (state.timeLeft * 1000);
+        }
+        
         setTimerState(state);
+        activateCooldown();
+
+        if (state.isRunning) {
+            startTicker();
+        }
     }
+
 
     // Show HTML5 system browser notification
     function showBrowserNotification(title, message) {
@@ -1185,7 +1336,7 @@
         const badge = document.getElementById('timer-badge');
         const btnPlay = document.getElementById('timer-play');
         const btnPause = document.getElementById('timer-pause');
-        const select = document.getElementById('timer-course-select');
+        const courseDisplay = document.getElementById('timer-active-course-display');
         const pulse = document.getElementById('timer-pulse-ring');
         
         const globalDisplay = document.getElementById('pomo-timer-display');
@@ -1221,8 +1372,10 @@
             modeIndicator.textContent = state.mode === 'focus' ? 'Focus Session Active' : 'Break Time Active';
         }
 
-        if (select) {
-            select.value = state.selectedCourseId;
+        if (courseDisplay) {
+            const currentCourseId = detectCurrentCourse();
+            const course = POMODORO_COURSES.find(c => c.id === currentCourseId);
+            courseDisplay.textContent = course ? course.title : 'General Study Focus';
         }
 
         if (progressRing) {
@@ -1251,7 +1404,24 @@
             if (btnPause) btnPause.classList.add('hidden');
             if (pulse) pulse.classList.remove('animate-ping', 'opacity-100');
         }
+
+        const breakDisplay = document.getElementById('break-overlay-display');
+        const breakProgressRing = document.getElementById('break-overlay-progress-ring');
+        
+        if (breakDisplay) {
+            breakDisplay.textContent = timeStr;
+        }
+        if (breakProgressRing) {
+            const total = state.maxTime;
+            const progress = (total - secondsToShow) / total;
+            const offset = 276 - (progress * 276);
+            breakProgressRing.style.strokeDashoffset = offset;
+        }
+
+        // Ensure break overlay is rendered or removed based on state
+        showBreakOverlay(state);
     }
+
 
     // Handles ticking updates locally
     function startTicker() {
@@ -1259,6 +1429,13 @@
         
         localInterval = setInterval(() => {
             const state = getTimerState();
+            
+            // Anti-bypass DOM monitor
+            if (state.mode === 'break' && state.isRunning) {
+                if (!document.getElementById('pomodoro-break-overlay')) {
+                    showBreakOverlay(state);
+                }
+            }
             
             if (!state.isRunning) {
                 clearInterval(localInterval);
@@ -1298,12 +1475,13 @@
             } else {
                 // Tick and log study focus metric
                 if (state.mode === 'focus') {
-                    logFocusSecond(state.selectedCourseId);
+                    logFocusSecond(detectCurrentCourse());
                 }
                 updateTimerUI(state);
             }
         }, 1000);
     }
+
 
     // Event Actions
     function handlePlay() {
@@ -1340,23 +1518,19 @@
         state.timeLeft = state.mode === 'focus' ? 25 * 60 : 5 * 60;
         setTimerState(state);
 
+        activateCooldown();
         updateTimerUI(state);
         if (localInterval) clearInterval(localInterval);
     }
 
-    function handleCourseChange(e) {
-        const state = getTimerState();
-        state.selectedCourseId = e.target.value;
-        setTimerState(state);
-        updateTimerUI(state);
-    }
+
+
 
     // Hooks up interactions to DOM elements
     function setupListeners() {
         const btnPlay = document.getElementById('timer-play');
         const btnPause = document.getElementById('timer-pause');
         const btnReset = document.getElementById('timer-reset');
-        const select = document.getElementById('timer-course-select');
         const toggleBtn = document.getElementById('timer-toggle-btn');
         const closeBtn = document.getElementById('timer-close-panel-btn');
         const statsTrigger = document.getElementById('stats-modal-trigger-btn');
@@ -1368,9 +1542,15 @@
         if (btnPlay) btnPlay.addEventListener('click', handlePlay);
         if (btnPause) btnPause.addEventListener('click', handlePause);
         if (btnReset) btnReset.addEventListener('click', handleReset);
-        if (select) select.addEventListener('change', handleCourseChange);
         if (toggleBtn) toggleBtn.addEventListener('click', toggleFloatingTimer);
         if (closeBtn) closeBtn.addEventListener('click', toggleFloatingTimer);
+
+        // Register global user activity listeners
+        const events = ['keydown', 'click', 'pointerdown', 'touchstart', 'input'];
+        events.forEach(evt => {
+            window.addEventListener(evt, handleUserActivity, { passive: true });
+        });
+
 
         if (globalToggleBtn) {
             globalToggleBtn.addEventListener('click', () => {
