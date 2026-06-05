@@ -18,171 +18,532 @@
                 extend: {
                     colors: {
                         slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' },
-                        rose: { 650: '#e11d48', 750: '#be123c' }
+                        pink: { 650: '#db2777', 750: '#be185d' }
                     }
                 }
             }
         }
     </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="gamification.css" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #020617; }
         .glass-card { background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .bg-grid { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(244, 63, 94, 0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(244, 63, 94, 0.02) 1px, transparent 1px); }
+        .bg-grid { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(236, 72, 153, 0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(236, 72, 153, 0.02) 1px, transparent 1px); }
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .hidden-tab { display: none !important; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .video-modal-dialog { width: 100%; height: 100%; max-height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+        .video-modal-content { flex: 1; min-height: 0; overflow-y: auto; }
+        .video-modal-player-shell { position: relative; aspect-ratio: 16 / 9; }
+        .video-player-frame-hidden { visibility: hidden; pointer-events: none; }
+        .video-quiz-overlay { position: absolute; inset: 0; z-index: 25; background: rgba(15, 17, 23, 0.94); padding: 0.75rem; }
+        .video-quiz-overlay.hidden { display: none; }
+        .video-quiz-overlay-shell { width: 100%; height: 100%; display: flex; flex-direction: column; border-radius: 0.75rem; border: 1px solid rgba(236, 72, 153, 0.35); background: rgba(15, 23, 42, 0.96); overflow: hidden; }
+        .video-quiz-overlay-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(236, 72, 153, 0.3); color: #e2e8f0; }
+        .video-quiz-overlay-host { flex: 1; min-height: 0; overflow-y: auto; padding: 0.5rem; }
+        .video-quiz-mobile { position: absolute; inset: 0; z-index: 140; background: rgba(2, 6, 23, 0.98); padding: 0.75rem; display: flex; flex-direction: column; }
+        .video-quiz-mobile.hidden { display: none; }
+        .video-quiz-mobile-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(236, 72, 153, 0.35); background: rgba(30, 41, 59, 0.96); color: #e2e8f0; }
+        .video-quiz-mobile-host { flex: 1; min-height: 0; margin-top: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(236, 72, 153, 0.35); background: rgba(15, 23, 42, 0.96); overflow: hidden; padding: 0.5rem; }
+        .cc-support-card { border: 1px solid rgba(236, 72, 153, 0.35); background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(219, 39, 119, 0.2) 100%); border-radius: 1rem; padding: 1rem; }
+        #view-videos.video-active-flow > .grid { display: none !important; }
+        #view-videos.video-active-flow #video-episode-modal { position: relative !important; inset: auto !important; z-index: 10 !important; width: 100% !important; height: auto !important; display: block !important; }
+        #view-videos.video-active-flow #video-episode-modal-backdrop { display: none !important; }
+        #view-videos.video-active-flow #video-episode-modal > div { height: auto !important; }
+        #view-videos.video-active-flow .video-modal-dialog { border: none !important; box-shadow: none !important; background: transparent !important; height: auto !important; max-height: none !important; border-radius: 0 !important; padding: 0 !important; }
+        #view-videos.video-active-flow .video-modal-content { padding: 1.25rem 0 0 0 !important; }
+        #view-videos.video-active-flow .video-modal-dialog > div.sticky { position: relative !important; padding: 0 !important; background: transparent !important; border-bottom: none !important; }
+        @media (min-width: 1024px) {
+            .video-modal-player-shell { aspect-ratio: auto; height: clamp(21rem, 39vh, 30rem); }
+        }
     </style>
 </head>
-<body class="bg-grid text-slate-100 flex flex-col min-h-screen selection:bg-rose-500/30">
+<body class="bg-grid text-slate-100 flex flex-col min-h-screen selection:bg-pink-500/30">
 
     <!-- Header Navigation -->
-    <header class="bg-slate-955 border-b border-rose-950/40 px-6 py-4 flex items-center justify-between shadow-xl shrink-0">
-        <div class="flex items-center space-x-3 min-w-0">
-            <a href="../index.html" class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-450 hover:text-slate-200 border border-rose-955/40 transition-colors shadow-sm shrink-0" title="Back to Hub">
+    <header class="bg-slate-950 border-b border-pink-950/40 px-6 py-4 flex items-center justify-between shadow-xl shrink-0">
+        <div class="flex items-center space-x-3">
+            <a href="../index.html" class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-pink-950/40 transition-colors shadow-sm" title="Back to Hub">
                 <i class="fa-solid fa-arrow-left text-sm"></i>
             </a>
-            <div class="text-rose-455 font-extrabold text-lg flex items-center space-x-2 min-w-0">
+            <div class="text-pink-400 font-extrabold text-lg flex items-center space-x-2">
                 <i class="fa-solid fa-lungs"></i>
-                <span class="font-mono text-sm uppercase tracking-wider text-slate-200 truncate">Gnosys BI233Z</span>
+                <span class="font-mono text-sm uppercase tracking-wider text-slate-200">Gnosys BI233Z</span>
             </div>
             <span class="hidden lg:inline text-slate-500 font-mono text-xs border border-slate-800 rounded px-1.5 py-0.5 bg-slate-900/50">Dashboard</span>
         </div>
 
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-3">
             <!-- Streak Indicator -->
-            <div class="streak-indicator-container flex items-center space-x-1 bg-slate-900 border border-rose-950/30 text-rose-455 rounded-full px-3 py-1 text-xs font-semibold shadow-inner">
+            <div class="streak-indicator-container flex items-center space-x-1 bg-slate-900 border border-pink-950/30 text-pink-400 rounded-full px-3 py-1 text-xs font-semibold shadow-inner">
                 <i class="fa-solid fa-fire animate-pulse"></i>
                 <span id="header-streak-count">0</span>
             </div>
             <!-- Level Display -->
-            <div class="flex items-center space-x-2 bg-slate-900 border border-rose-950/30 rounded-full px-3 py-1 text-xs font-semibold shadow-inner">
-                <span id="header-level-badge" class="bg-rose-900/40 text-rose-350 rounded px-1 py-0.5 text-[10px] font-bold">Lvl 1</span>
-                <span id="header-level-title" class="text-slate-350 text-[10px]">Lymphatic Recruit</span>
+            <div class="flex items-center space-x-2 bg-slate-900 border border-pink-950/30 rounded-full px-3 py-1 text-xs font-semibold shadow-inner">
+                <span id="header-level-badge" class="bg-pink-900/40 text-pink-300 rounded px-1 py-0.5 text-[10px] font-bold">Lvl 1</span>
+                <span id="header-level-title" class="text-slate-300 text-[10px]">Somatic Adept</span>
             </div>
+            <!-- Settings Button -->
+            <button id="btn-settings" title="Settings & Reset" onclick="document.getElementById('settings-modal').classList.remove('hidden')" class="w-9 h-9 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-pink-950/40 flex items-center justify-center shadow-sm transition-colors shrink-0">
+                <i class="fa-solid fa-gear text-sm"></i>
+            </button>
         </div>
     </header>
 
-    <!-- Main Workspace -->
-    <main class="flex-grow max-w-7xl w-full mx-auto p-6 space-y-6 fade-in">
-        
-        <!-- Welcome Banner -->
-        <div class="bg-slate-900/80 border border-rose-950/30 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden glass-card">
-            <div class="absolute -right-10 -bottom-10 opacity-10 text-[120px] text-rose-500 select-none">
-                <i class="fa-solid fa-lungs"></i>
-            </div>
-            <div class="space-y-3 max-w-xl z-10">
-                <span class="text-[10px] font-mono font-bold tracking-widest text-rose-455 uppercase bg-rose-900/20 px-2.5 py-1 rounded border border-rose-955/30">BI 233Z College Curriculum</span>
-                <h2 class="text-2xl md:text-3xl font-black text-slate-100 leading-tight">Anatomy & Physiology III</h2>
-                <p class="text-xs text-slate-400 leading-relaxed">
-                    Master lymphatic immune defenses, respiratory gas transport Bohr shifts, cellular respiration metabolic pathways, glomerular net filtration pressures, ABG clinical panel interpretations, and synchronized reproductive endocrine cycles. Complete all 6 units to clear the practical lab workbook.
-                </p>
-            </div>
-            <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto z-10 shrink-0">
-                <a href="coursework.html" class="w-full sm:w-auto text-center px-6 py-3 bg-rose-600 hover:bg-rose-500 rounded-2xl text-xs font-bold text-white uppercase tracking-wider transition-all hover:scale-[1.02] shadow-lg shadow-rose-900/30">
-                    Coursework Board <i class="fa-solid fa-graduation-cap ml-1"></i>
-                </a>
-                <a href="assignments.html" class="w-full sm:w-auto text-center px-6 py-3 bg-slate-955 border border-slate-800 hover:border-rose-955/30 rounded-2xl text-xs font-bold text-slate-300 uppercase tracking-wider transition-colors">
-                    Homework Binder <i class="fa-solid fa-clipboard-list ml-1 text-rose-455"></i>
-                </a>
-            </div>
+    <!-- Desktop Sub Navigation (SPA tabs - Pink Theme) -->
+    <div class="hidden lg:flex px-0 py-3.5 justify-center overflow-x-auto scrollbar-none bg-slate-950 border-b border-pink-950/40">
+        <div class="inline-flex bg-slate-900 border border-pink-950/35 rounded-full p-1 shadow-inner gap-1 flex-nowrap shrink-0" role="tablist" aria-label="Anatomy learning sections">
+            <button id="nav-dashboard" role="tab" aria-selected="true" aria-controls="view-dashboard" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 bg-pink-600 text-white shadow-md" onclick="activateAnatomyTab('dashboard')">Dashboard</button>
+            <button id="nav-videos" role="tab" aria-selected="false" aria-controls="view-videos" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('videos')">Crash Course</button>
+            <button id="nav-lab-1" role="tab" aria-selected="false" aria-controls="view-lab-1" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-1')">Immunology</button>
+            <button id="nav-lab-2" role="tab" aria-selected="false" aria-controls="view-lab-2" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-2')">Bohr Effect</button>
+            <button id="nav-lab-3" role="tab" aria-selected="false" aria-controls="view-lab-3" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-3')">GI Layers</button>
+            <button id="nav-lab-4" role="tab" aria-selected="false" aria-controls="view-lab-4" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-4')">Glomerular</button>
+            <button id="nav-lab-5" role="tab" aria-selected="false" aria-controls="view-lab-5" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-5')">Acid-Base</button>
+            <button id="nav-lab-6" role="tab" aria-selected="false" aria-controls="view-lab-6" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-6')">Reproduction</button>
+            <button id="nav-tutor" role="tab" aria-selected="false" aria-controls="view-tutor" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('tutor')">AI Tutor</button>
         </div>
+    </div>
 
-        <!-- Stats Grid & Gamification -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <!-- Left: Progression & Backup -->
-            <div class="lg:col-span-1 flex flex-col space-y-6">
-                <!-- Level card -->
-                <div class="bg-slate-900 border border-rose-950/20 rounded-3xl p-6 shadow-xl space-y-4">
-                    <div class="flex justify-between items-center">
-                        <span class="text-xs font-bold font-mono uppercase tracking-wider text-rose-455"><i class="fa-solid fa-ranking-star mr-1"></i> Progression</span>
-                        <span id="header-xp-val" class="text-[10px] font-mono text-slate-400">0 / 100 XP</span>
+    <!-- Main Workspace -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 md:p-6 pb-24 lg:pb-8">
+
+        <!-- 1. Dashboard View -->
+        <section id="view-dashboard" class="fade-in space-y-6">
+            <!-- Welcome Banner -->
+            <div class="bg-slate-900/80 border border-pink-950/30 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden glass-card">
+                <div class="absolute -right-10 -bottom-10 opacity-10 text-[120px] text-pink-500 select-none">
+                    <i class="fa-solid fa-lungs"></i>
+                </div>
+                <div class="space-y-3 max-w-xl z-10">
+                    <span class="text-[10px] font-mono font-bold tracking-widest text-pink-400 uppercase bg-pink-900/20 px-2.5 py-1 rounded border border-pink-950/30">BI 233Z College Curriculum</span>
+                    <h2 class="text-2xl md:text-3xl font-black text-slate-100 leading-tight">Anatomy & Physiology III</h2>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Master maintaining functions and survival: lymphatic drainage loops, respiratory gas exchange curves, GI alimentary layering, glomerular renal filtration indices, ABG compensation chemistry, and reproductive endocrinology.
+                    </p>
+                </div>
+                <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto z-10 shrink-0">
+                    <a href="coursework.html" class="w-full sm:w-auto text-center px-6 py-3 bg-pink-600 hover:bg-pink-550 rounded-2xl text-xs font-bold text-white uppercase tracking-wider transition-all hover:scale-[1.02] shadow-lg shadow-pink-900/30">
+                        Coursework Board <i class="fa-solid fa-graduation-cap ml-1"></i>
+                    </a>
+                    <a href="assignments.html" class="w-full sm:w-auto text-center px-6 py-3 bg-slate-950 border border-slate-800 hover:border-pink-950/30 rounded-2xl text-xs font-bold text-slate-300 uppercase tracking-wider transition-colors">
+                        Homework Binder <i class="fa-solid fa-clipboard-list ml-1 text-pink-400"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Recommended Video Study Card -->
+            <section class="bg-gradient-to-r from-pink-950/30 via-slate-900 to-pink-900/20 rounded-3xl shadow-xl border border-pink-900/40 p-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div>
+                        <p class="text-[10px] font-mono font-bold uppercase tracking-wider text-pink-400"><i class="fa-solid fa-play mr-1"></i> Recommended Video Path</p>
+                        <h3 class="text-lg font-black text-slate-100 mt-2">Crash Course A&amp;P III Maintenance Chapters</h3>
+                        <p id="dashboard-video-summary" class="text-xs text-slate-300 mt-1">Select an episode on the Crash Course tab to watch coordinated Socratic video checkups.</p>
+                        <p id="dashboard-video-progress" class="text-[10px] font-mono text-slate-500 mt-0.5">0 of 10 episodes complete</p>
                     </div>
-                    <div class="flex items-center space-x-3">
-                        <div class="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-455 rounded-2xl text-xs font-black shadow-inner">BI 233Z</div>
-                        <div class="flex-grow min-w-0">
-                            <span class="block text-xs font-bold text-slate-200 truncate" id="level-title-display">Lymphatic Recruit</span>
-                            <span class="block text-[10px] text-slate-500 mt-0.5">Rank Title in Anatomy</span>
+                    <div class="flex flex-wrap gap-2 shrink-0">
+                        <button id="btn-dashboard-open-videos" class="px-4 py-2 bg-pink-600 hover:bg-pink-550 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition">Open Videos</button>
+                        <button id="btn-dashboard-open-tutor" class="px-4 py-2 bg-slate-950 border border-pink-950/30 hover:bg-slate-900 text-pink-400 font-bold rounded-xl text-xs uppercase tracking-wider transition">Consult Tutor</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Stats Grid & Gamification -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Left: Progression & Backup -->
+                <div class="lg:col-span-1 flex flex-col space-y-6">
+                    <!-- Level card -->
+                    <div class="bg-slate-900 border border-pink-950/20 rounded-3xl p-6 shadow-xl space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-bold font-mono uppercase tracking-wider text-pink-400"><i class="fa-solid fa-ranking-star mr-1"></i> Progression</span>
+                            <span id="header-xp-val" class="text-[10px] font-mono text-slate-400">0 / 100 XP</span>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <div class="p-3 bg-pink-500/10 border border-pink-500/20 text-pink-400 rounded-2xl text-xs font-black shadow-inner">BI 233Z</div>
+                            <div class="flex-grow min-w-0">
+                                <span class="block text-xs font-bold text-slate-200 truncate" id="level-title-display">Somatic Adept</span>
+                                <span class="block text-[10px] text-slate-500 mt-0.5">Rank Title in Anatomy</span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-950 rounded-full h-2.5 border border-slate-800 overflow-hidden shadow-inner">
+                            <div id="header-xp-bar" class="bg-pink-500 h-full w-0 transition-all duration-500"></div>
                         </div>
                     </div>
-                    <div class="w-full bg-slate-950 rounded-full h-2.5 border border-slate-800 overflow-hidden shadow-inner">
-                        <div id="header-xp-bar" class="bg-rose-500 h-full w-0 transition-all duration-500"></div>
+
+                    <!-- Backup restore utility -->
+                    <div class="bg-slate-900 border border-pink-950/20 rounded-3xl p-6 shadow-xl space-y-4">
+                        <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-pink-400"><i class="fa-solid fa-floppy-disk mr-1"></i> Data Safeguard & Backups</h3>
+                        <p class="text-[10px] text-slate-450 leading-relaxed">Save your progress file locally to prevent progression loss. Import it back to sync stats across other devices.</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="window.exportProgressionJSON()" class="py-2.5 bg-slate-950 hover:bg-slate-850 border border-slate-800 rounded-xl font-bold text-[10px] text-slate-300 transition uppercase tracking-wider shadow-sm">
+                                <i class="fa-solid fa-download mr-1"></i> Export
+                            </button>
+                            <label class="py-2.5 bg-slate-950 hover:bg-slate-850 border border-slate-800 rounded-xl font-bold text-[10px] text-slate-300 text-center cursor-pointer transition uppercase tracking-wider shadow-sm">
+                                <i class="fa-solid fa-upload mr-1"></i> Import
+                                <input type="file" accept=".json" onchange="window.importProgressionJSON(event)" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Daily quests -->
+                    <div class="bg-slate-900 border border-pink-950/20 rounded-3xl p-6 shadow-xl space-y-4">
+                        <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-pink-400"><i class="fa-solid fa-bullseye mr-1 text-emerald-400"></i> Daily Study Quests</h3>
+                        <div id="quests-list-container" class="space-y-3">
+                            <!-- Quests injected by JS -->
+                        </div>
                     </div>
                 </div>
 
-                <!-- Backup restore utility -->
-                <div class="bg-slate-900 border border-rose-955/20 rounded-3xl p-6 shadow-xl space-y-4">
-                    <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-rose-455"><i class="fa-solid fa-floppy-disk mr-1"></i> Data Safeguard & Backups</h3>
-                    <p class="text-[10px] text-slate-400 leading-relaxed">Save your progress file locally to prevent progression loss. Import it back to sync stats across other devices.</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button onclick="window.exportProgressionJSON()" class="py-2.5 bg-slate-955 hover:bg-slate-850 border border-slate-800 rounded-xl font-bold text-[10px] text-slate-300 transition uppercase tracking-wider shadow-sm">
-                            <i class="fa-solid fa-download mr-1"></i> Export
+                <!-- Right: Achievements -->
+                <div class="lg:col-span-2 bg-slate-900 border border-pink-950/20 rounded-3xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+                    <div>
+                        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                            <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-pink-400"><i class="fa-solid fa-trophy text-amber-500 mr-1.5"></i> Course Achievements</h3>
+                            <span class="text-[10px] font-mono text-pink-400 font-bold" id="achievement-unlocked-count">0/9 Unlocked</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 overflow-y-auto max-h-[300px] pr-2" id="achievements-showcase-grid">
+                            <!-- Achievements injected by JS -->
+                        </div>
+                    </div>
+                    
+                    <div class="border-t border-slate-800 pt-4 flex justify-between items-center">
+                        <button onclick="confirmAndResetAnatomyProgress()" class="text-slate-550 hover:text-red-400 text-[10px] font-semibold uppercase transition flex items-center">
+                            <i class="fa-solid fa-trash mr-1.5"></i> Reset Course Data
                         </button>
-                        <label class="py-2.5 bg-slate-955 hover:bg-slate-850 border border-slate-800 rounded-xl font-bold text-[10px] text-slate-300 text-center cursor-pointer transition uppercase tracking-wider shadow-sm">
-                            <i class="fa-solid fa-upload mr-1"></i> Import
-                            <input type="file" accept=".json" onchange="window.importProgressionJSON(event)" class="hidden">
-                        </label>
+                        <span class="text-[9px] text-slate-500 font-mono">Gnosys AI Study Suite v2026</span>
                     </div>
                 </div>
 
-                <!-- Daily quests -->
-                <div class="bg-slate-900 border border-rose-955/20 rounded-3xl p-6 shadow-xl space-y-4">
-                    <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-400"><i class="fa-solid fa-bullseye mr-1 text-emerald-400"></i> Daily Study Quests</h3>
-                    <div id="quests-list-container" class="space-y-3">
-                        <!-- Quests injected by JS -->
-                    </div>
-                </div>
             </div>
 
-            <!-- Right: Achievements -->
-            <div class="lg:col-span-2 bg-slate-900 border border-rose-955/20 rounded-3xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+            <!-- Course Modules Grid -->
+            <div class="bg-slate-900 border border-pink-950/20 rounded-3xl p-6 shadow-xl space-y-4">
+                <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-pink-400 border-b border-slate-800 pb-3"><i class="fa-solid fa-map-location mr-1 text-pink-400"></i> Curriculum Map</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="dashboard-modules">
+                    <!-- Modules injected dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Crash Course Video View -->
+        <section id="view-videos" class="hidden-tab fade-in relative overflow-hidden bg-slate-900 border border-pink-900/30 rounded-3xl p-4 sm:p-8 shadow-xl max-w-5xl mx-auto w-full">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-pink-900/30 pb-4">
                 <div>
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-                        <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-400"><i class="fa-solid fa-trophy text-amber-500 mr-1.5"></i> Course Achievements</h3>
-                        <span class="text-[10px] font-mono text-rose-455 font-bold" id="achievement-unlocked-count">0/9 Unlocked</span>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 overflow-y-auto max-h-[300px] pr-2" id="achievements-showcase-grid">
-                        <!-- Achievements injected by JS -->
+                    <h2 class="text-lg font-black text-slate-200 uppercase tracking-wide flex items-center gap-2">
+                        <i class="fa-solid fa-video text-pink-500"></i> Anatomy III Video Companion
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Watch A&amp;P III episodes and verify concepts with micro-quizzes.</p>
+                </div>
+                <div id="video-completion-pill" class="text-xs font-mono bg-pink-950/40 border border-pink-900/40 text-pink-300 px-3 py-1 rounded-full">0 / 10 Complete</div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                <!-- Video select list -->
+                <div class="lg:col-span-1 space-y-3 overflow-y-auto max-h-[500px] pr-2" id="video-episode-list">
+                    <!-- Loaded dynamically -->
+                </div>
+
+                <!-- Video support description -->
+                <div class="lg:col-span-2 space-y-4" id="video-support-tribute">
+                    <div class="cc-support-card">
+                        <h3 class="cc-support-title">Hank Green's A&amp;P III Videos</h3>
+                        <p class="cc-support-note">Select an episode on the left panel to load the synchronized Socratic playback viewer. Complete the micro-quiz to earn 30 XP.</p>
                     </div>
                 </div>
+            </div>
+
+            <!-- Video Player Modal Overlay -->
+            <div id="video-episode-modal" class="hidden mt-6 bg-slate-950/40 rounded-2xl border border-pink-900/35 overflow-hidden shadow-2xl relative">
+                <div id="video-episode-modal-backdrop" class="absolute inset-0 bg-slate-950/60 backdrop-blur-xs z-0"></div>
                 
-                <div class="border-t border-slate-800 pt-4 flex justify-between items-center">
-                    <button onclick="confirmAndResetAnatomyProgress()" class="text-slate-500 hover:text-red-400 text-[10px] font-semibold uppercase transition flex items-center">
-                        <i class="fa-solid fa-trash mr-1.5"></i> Reset Course Data
-                    </button>
-                    <span class="text-[9px] text-slate-500 font-mono">Gnosys AI Study Suite v2026</span>
+                <div class="relative z-10 p-4 space-y-4">
+                    <div class="sticky top-0 bg-slate-950/80 backdrop-blur-md border-b border-pink-900/20 py-2.5 px-3 flex justify-between items-center rounded-t-xl">
+                        <span class="text-xs font-bold font-mono text-pink-400">ACTIVE VIDEO VIEWER</span>
+                        <button id="btn-video-modal-close" class="text-xs font-mono font-bold text-slate-400 hover:text-pink-400 flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-circle-xmark"></i> Close Player
+                        </button>
+                    </div>
+
+                    <div class="video-modal-dialog">
+                        <div class="video-modal-content">
+                            <!-- Youtube Player Box -->
+                            <div class="video-modal-player-shell rounded-2xl border border-slate-700 overflow-hidden bg-black relative">
+                                <iframe id="anatomy-video-player" class="w-full h-full" src="" title="Crash Course Anatomy video" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                                
+                                <!-- Socratic quiz overlay -->
+                                <div id="video-quiz-overlay" class="video-quiz-overlay hidden">
+                                    <div class="video-quiz-overlay-shell">
+                                        <div class="video-quiz-overlay-header">
+                                            <p class="text-xs font-black tracking-wider uppercase text-pink-455">A&amp;P III Video Quiz Chat</p>
+                                            <button id="btn-video-quiz-overlay-close" type="button" class="w-7 h-7 rounded-full flex items-center justify-center text-slate-355 hover:text-white hover:bg-slate-700/70 transition-colors">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        </div>
+                                        <div id="video-quiz-overlay-host" class="video-quiz-overlay-host"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="video-empty-warning" class="hidden mt-3 rounded-xl border border-pink-900/40 bg-pink-950/30 px-3 py-2 text-xs font-semibold text-pink-200">
+                                This episode does not have a YouTube ID set in video_data.js.
+                            </div>
+
+                            <div class="mt-4">
+                                <h4 id="video-active-title" class="text-lg font-bold text-slate-100">Select an episode</h4>
+                                <div id="video-concept-chips" class="mt-2 flex flex-wrap gap-2"></div>
+                            </div>
+
+                            <div class="mt-4 rounded-2xl border border-pink-900/30 bg-pink-950/20 p-4">
+                                <p class="text-[10px] font-mono font-bold uppercase tracking-wider text-pink-400">Core Objectives</p>
+                                <p id="video-outcome-text" class="text-xs text-slate-300 mt-1">Select an episode to view outcome goals.</p>
+                                <div class="mt-3 flex flex-wrap items-center gap-2">
+                                    <span id="video-prev-title" class="text-[10px] text-slate-400 bg-slate-900 border border-slate-800 rounded px-2 py-0.5">Previous episode: not set</span>
+                                    <span id="video-next-title" class="text-[10px] text-slate-400 bg-slate-900 border border-slate-800 rounded px-2 py-0.5">Next episode: not set</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <button id="btn-video-prev-episode" class="px-4 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 rounded-xl text-xs font-bold text-slate-200 flex items-center gap-1.5 transition"><i class="fa-solid fa-arrow-left"></i> Previous</button>
+                                <button id="btn-video-next-episode" class="px-4 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 rounded-xl text-xs font-bold text-slate-200 flex items-center gap-1.5 transition">Next <i class="fa-solid fa-arrow-right"></i></button>
+                                <button id="btn-video-mark-complete" class="px-4 py-2 bg-slate-900 border border-pink-900/35 hover:bg-pink-950/20 text-pink-350 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ml-auto">Mark Watched</button>
+                                <button id="btn-video-start-quiz" class="px-5 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-pink-900/20">Launch Micro-Quiz <i class="fa-solid fa-circle-question"></i></button>
+                            </div>
+
+                            <div id="video-tutor-anchor" class="hidden"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-        </div>
-
-        <!-- Course Modules Grid -->
-        <div class="bg-slate-900 border border-rose-955/20 rounded-3xl p-6 shadow-xl space-y-4">
-            <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-400 border-b border-slate-800 pb-3"><i class="fa-solid fa-map-location mr-1 text-rose-455"></i> Curriculum Map</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="dashboard-modules">
-                <!-- Modules injected dynamically -->
+            <!-- Mobile full-screen quiz view -->
+            <div id="video-quiz-mobile" class="video-quiz-mobile hidden">
+                <div class="video-quiz-mobile-header">
+                    <p class="text-xs font-black tracking-wider uppercase text-pink-455">A&amp;P III Video Quiz Chat</p>
+                    <button id="btn-video-quiz-mobile-close" type="button" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-355 hover:text-white hover:bg-slate-700/70 transition-colors">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div id="video-quiz-mobile-host" class="video-quiz-mobile-host"></div>
             </div>
-        </div>
+        </section>
+
+        <!-- 3. AI Tutor View -->
+        <section id="view-tutor" class="hidden-tab fade-in space-y-4 max-w-3xl mx-auto w-full">
+            <div class="bg-slate-900 border border-pink-900/25 rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-pink-950/50 border border-pink-900/30 flex items-center justify-center text-pink-400">
+                            <i class="fa-solid fa-robot text-lg animate-pulse"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wide">AnatomyTutor AI</h2>
+                            <div class="flex items-center space-x-1.5 mt-0.5">
+                                <span id="chat-status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                                <span id="chat-status-text" class="text-[10px] font-mono text-slate-400">Connecting Route...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="chat-btn-clear" onclick="window.AnatomyTutor.clearChat()" title="Clear conversation" class="text-xs font-mono font-bold text-slate-500 hover:text-red-400 flex items-center space-x-1.5 transition-colors px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-850">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                        <span>Clear Chat</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="bg-slate-900 border border-pink-900/25 rounded-2xl flex flex-col h-[500px] shadow-2xl overflow-hidden">
+                <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-3 flex flex-col justify-start">
+                    <div id="chat-empty-state" class="flex flex-col items-center justify-center h-full text-center p-4">
+                        <i class="fa-solid fa-graduation-cap text-slate-700 text-3xl mb-2"></i>
+                        <h4 class="text-xs font-bold text-slate-355 uppercase tracking-wider mb-1">Study Companion Active</h4>
+                        <p class="text-[10px] text-slate-555 max-w-xs leading-relaxed">Ask general questions about lymphatic immunity, Bohr shifting kinetics, digestive histology, glomerular pressures, or ovarian cycles.</p>
+                    </div>
+                </div>
+                <!-- Input area -->
+                <div class="p-3 border-t border-pink-900/20 bg-slate-950 flex space-x-2">
+                    <input type="text" id="chat-input" placeholder="Ask your Socratic tutor..." class="flex-grow bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-pink-650">
+                    <button id="chat-btn-send" onclick="window.AnatomyTutor.sendMessage()" class="px-5 bg-pink-600 hover:bg-pink-500 rounded-xl text-white transition"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. Sandbox Tabs (Immunology) -->
+        <section id="view-lab-1" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-pink-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-pink-400">Lesson 3.1 Immunology Defense Game</h3>
+                <div id="sandbox-container-3_1" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 5. Sandbox Tabs (Bohr Effect) -->
+        <section id="view-lab-2" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-pink-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-pink-400">Lesson 3.2 Bohr Effect Simulator</h3>
+                <div id="sandbox-container-3_2" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 6. Sandbox Tabs (GI Layers) -->
+        <section id="view-lab-3" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-pink-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-pink-400">Lesson 3.3 Alimentary Layers &amp; Respiration</h3>
+                <div id="sandbox-container-3_3" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 7. Sandbox Tabs (Glomerular) -->
+        <section id="view-lab-4" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-pink-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-pink-400">Lesson 3.4 Glomerular Net Filtration</h3>
+                <div id="sandbox-container-3_4" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 8. Sandbox Tabs (Acid-Base) -->
+        <section id="view-lab-5" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-pink-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-pink-400">Lesson 3.5 Socratic ABG Interpreter</h3>
+                <div id="sandbox-container-3_5" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 9. Sandbox Tabs (Reproduction) -->
+        <section id="view-lab-6" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-pink-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-pink-400">Lesson 3.6 Menstrual Calendar Sync</h3>
+                <div id="sandbox-container-3_6" class="w-full flex justify-center"></div>
+            </div>
+        </section>
 
     </main>
 
     <!-- Footer -->
-    <footer class="text-center py-6 text-slate-500 text-xs border-t border-rose-955/20 mt-10">
+    <footer class="text-center py-6 text-slate-550 text-xs border-t border-pink-950/20 mt-10 mb-16 lg:mb-2">
         <p>&copy; 2026 Gnosys-AI. Built for Clinical Cohort Excellence.</p>
     </footer>
+
+    <!-- Bottom tab navigation (mobile only) -->
+    <nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 z-50 bnav-safe py-2" role="tablist" aria-label="Anatomy mobile sections">
+        <div class="flex overflow-x-auto no-scrollbar scroll-smooth justify-around">
+            <button id="bnav-dashboard" role="tab" aria-selected="true" aria-controls="view-dashboard" class="flex flex-col items-center justify-center py-1 flex-grow focus:outline-none" onclick="activateAnatomyTab('dashboard')">
+                <i class="fa-solid fa-house text-sm text-pink-500"></i>
+                <span class="text-[9px] font-bold mt-0.5 text-pink-500">Home</span>
+            </button>
+            <button id="bnav-videos" role="tab" aria-selected="false" aria-controls="view-videos" class="flex flex-col items-center justify-center py-1 flex-grow focus:outline-none" onclick="activateAnatomyTab('videos')">
+                <i class="fa-solid fa-play text-sm text-slate-400"></i>
+                <span class="text-[9px] font-bold mt-0.5 text-slate-400">Videos</span>
+            </button>
+            <button id="bnav-labs" role="tab" aria-selected="false" aria-controls="view-lab-1" class="flex flex-col items-center justify-center py-1 flex-grow focus:outline-none" onclick="activateAnatomyTab('lab-1')">
+                <i class="fa-solid fa-flask text-sm text-slate-400"></i>
+                <span class="text-[9px] font-bold mt-0.5 text-slate-400">Labs</span>
+            </button>
+            <button id="bnav-tutor" role="tab" aria-selected="false" aria-controls="view-tutor" class="flex flex-col items-center justify-center py-1 flex-grow focus:outline-none" onclick="activateAnatomyTab('tutor')">
+                <i class="fa-solid fa-robot text-sm text-slate-400"></i>
+                <span class="text-[9px] font-bold mt-0.5 text-slate-400">Tutor</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-pink-900/40 rounded-xl p-5 w-full max-w-md shadow-2xl relative">
+            <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 focus:outline-none"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="text-sm font-bold text-slate-200 font-mono tracking-wide uppercase border-b border-slate-800 pb-2 mb-4"><i class="fa-solid fa-gears mr-1.5"></i> Course Options</h3>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">Local AI Model Router</label>
+                    <select id="settings-model-select" onchange="saveAnatomySettings()" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-250 focus:outline-none focus:border-pink-650">
+                        <option value="llama3">Llama 3 (8B Local - High Speed)</option>
+                        <option value="gemini">Gemini Pro API (Cloud - Creative)</option>
+                        <option value="custom">Custom Endpoint (OpenAI-compatible)</option>
+                    </select>
+                </div>
+                <div class="pt-3 border-t border-slate-850 flex justify-between items-center">
+                    <span class="text-slate-400">Clear Course Progression</span>
+                    <button onclick="confirmAndResetAnatomyProgress(); document.getElementById('settings-modal').classList.add('hidden');" class="px-3.5 py-2 bg-red-950/40 hover:bg-red-900/20 text-red-400 border border-red-900/40 rounded-xl font-bold uppercase tracking-wider text-[10px] transition-colors">Reset progress</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Scripts -->
     <script src="mastery.js"></script>
     <script src="../assets/llm-router.js?v=1.1.2"></script>
     <script src="tutor.js"></script>
+    <script src="video_data.js"></script>
+    <script src="video-controller.js"></script>
+    <script src="skills-lab.js"></script>
     <script src="gamification.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             renderDailyQuests();
             renderAchievements();
             renderModulesGrid();
+            initSettings();
+            initGeneralTutor();
         });
+
+        // SPA Tab Toggling (Pink Theme)
+        window.activateAnatomyTab = function(tabId) {
+            document.querySelectorAll('section[id^="view-"]').forEach(sec => {
+                sec.classList.add('hidden-tab');
+            });
+            const target = document.getElementById('view-' + tabId);
+            if (target) target.classList.remove('hidden-tab');
+
+            // Update desktop button active class
+            document.querySelectorAll('button[id^="nav-"]').forEach(btn => {
+                btn.classList.remove('bg-pink-600', 'text-white', 'shadow-md');
+                btn.classList.add('text-slate-400', 'hover:text-slate-200', 'hover:bg-slate-800/50');
+            });
+            const activeBtn = document.getElementById('nav-' + tabId);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400', 'hover:text-slate-200', 'hover:bg-slate-800/50');
+                activeBtn.classList.add('bg-pink-600', 'text-white', 'shadow-md');
+            }
+
+            // Update mobile bottom nav highlights
+            document.querySelectorAll('button[id^="bnav-"]').forEach(btn => {
+                const icon = btn.querySelector('i');
+                const span = btn.querySelector('span');
+                if (icon) {
+                    icon.classList.remove('text-pink-500');
+                    icon.classList.add('text-slate-400');
+                }
+                if (span) {
+                    span.classList.remove('text-pink-500');
+                    span.classList.add('text-slate-400');
+                }
+            });
+            const activeMobile = document.getElementById('bnav-' + tabId) || (tabId.startsWith('lab-') ? document.getElementById('bnav-labs') : null);
+            if (activeMobile) {
+                const icon = activeMobile.querySelector('i');
+                const span = activeMobile.querySelector('span');
+                if (icon) {
+                    icon.classList.remove('text-slate-400');
+                    icon.classList.add('text-pink-500');
+                }
+                if (span) {
+                    span.classList.remove('text-slate-400');
+                    span.classList.add('text-pink-500');
+                }
+            }
+
+            // Draw lab sandbox if appropriate
+            if (tabId.startsWith('lab-')) {
+                const num = tabId.split('-')[1];
+                const container = document.getElementById('sandbox-container-3_' + num);
+                if (container && window.AnatomySkillsLab) {
+                    window.AnatomySkillsLab.renderSandboxWidget('lesson_3_' + num, container);
+                }
+            }
+            window.scrollTo(0, 0);
+        };
 
         function renderDailyQuests() {
             const container = document.getElementById('quests-list-container');
@@ -192,7 +553,7 @@
             container.innerHTML = data.active.map(q => `
                 <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-950 border border-slate-850">
                     <div class="space-y-0.5">
-                        <span class="block text-xs font-bold text-slate-350">${q.label}</span>
+                        <span class="block text-xs font-bold text-slate-355">${q.label}</span>
                         <span class="block text-[9px] text-slate-500 font-mono">Reward: +${q.xp} XP</span>
                     </div>
                     <div class="shrink-0 flex items-center space-x-2">
@@ -246,21 +607,49 @@
                 });
 
                 return `
-                    <div class="bg-slate-955 border border-slate-850 rounded-2xl p-4 flex flex-col justify-between h-full">
+                    <div class="bg-slate-950 border border-slate-850 rounded-2xl p-4 flex flex-col justify-between h-full">
                         <div class="space-y-1">
-                            <span class="text-[9px] font-mono text-rose-455 font-bold uppercase tracking-wider">Module ${mod.number}</span>
+                            <span class="text-[9px] font-mono text-pink-400 font-bold uppercase tracking-wider">Module ${mod.number}</span>
                             <h4 class="text-sm font-bold text-slate-200 leading-snug">${mod.title}</h4>
-                            <span class="block text-[10px] text-slate-500">${lessons.length} Lessons</span>
+                            <span class="block text-[10px] text-slate-550">${lessons.length} Lessons</span>
                         </div>
                         <div class="mt-4 pt-3 border-t border-slate-900 flex justify-between items-center">
                             <span class="text-[10px] font-mono text-slate-400">${mastered}/${lessons.length} Passed</span>
                             <div class="w-20 bg-slate-900 rounded-full h-1.5 overflow-hidden">
-                                <div class="bg-rose-500 h-full" style="width: ${(mastered/lessons.length)*100}%"></div>
+                                <div class="bg-pink-500 h-full" style="width: ${(mastered/lessons.length)*100}%"></div>
                             </div>
                         </div>
                     </div>
                 `;
             }).join('');
+        }
+
+        // Settings managers
+        function initSettings() {
+            const select = document.getElementById('settings-model-select');
+            if (!select) return;
+            const model = localStorage.getItem('syngnosia_tutor_model') || 'llama3';
+            select.value = model;
+        }
+
+        window.saveAnatomySettings = function() {
+            const select = document.getElementById('settings-model-select');
+            if (select) {
+                localStorage.setItem('syngnosia_tutor_model', select.value);
+            }
+        }
+
+        // Dedicated Tutor
+        function initGeneralTutor() {
+            const statusDot = document.getElementById('chat-status-dot');
+            const statusText = document.getElementById('chat-status-text');
+            if (statusDot && statusText) {
+                statusDot.className = "inline-block w-2.5 h-2.5 rounded-full bg-emerald-500";
+                statusText.textContent = "Companion Ready";
+            }
+            if (window.AnatomyTutor && typeof window.AnatomyTutor.initMainChat === 'function') {
+                window.AnatomyTutor.initMainChat();
+            }
         }
     </script>
 </body>
