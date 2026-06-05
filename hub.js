@@ -81,6 +81,23 @@ const COURSES = [
         status: 'active'
     },
     {
+        id: 'openword',
+        title: 'OpenWord Studio',
+        description: 'A premium, offline-first AI document editor. Draft study guides, summarize notes, and export to DOCX.',
+        link: openWordUrl,
+        category: 'Workspace',
+        icon: 'fa-file-signature',
+        color: 'from-indigo-500 to-violet-600',
+        iconWrapClass: 'bg-indigo-500/15 border-indigo-400/30',
+        iconClass: 'text-indigo-300',
+        iconWrapStyle: 'background: rgba(99, 102, 241, 0.18); border-color: rgba(129, 140, 248, 0.45);',
+        iconStyle: 'color: #818cf8;',
+        accentGlow: 'bg-indigo-500/10 group-hover:bg-indigo-500/20',
+        accentTitleHover: 'group-hover:text-indigo-200',
+        accentCta: 'text-indigo-400',
+        status: 'active'
+    },
+    {
         id: 'general-sound-physics',
         title: 'General & Sound Physics',
         description: 'Acoustics, wave mechanics, electromagnetism, and SPI instrumentation foundations.',
@@ -169,23 +186,6 @@ const COURSES = [
         icon: 'fa-heart-pulse',
         color: 'from-red-500 to-rose-600',
         status: 'planned'
-    },
-    {
-        id: 'openword',
-        title: 'OpenWord Studio',
-        description: 'A premium, offline-first AI document editor. Draft study guides, summarize notes, and export to DOCX.',
-        link: openWordUrl,
-        category: 'Workspace',
-        icon: 'fa-file-signature',
-        color: 'from-indigo-500 to-violet-600',
-        iconWrapClass: 'bg-indigo-500/15 border-indigo-400/30',
-        iconClass: 'text-indigo-300',
-        iconWrapStyle: 'background: rgba(99, 102, 241, 0.18); border-color: rgba(129, 140, 248, 0.45);',
-        iconStyle: 'color: #818cf8;',
-        accentGlow: 'bg-indigo-500/10 group-hover:bg-indigo-500/20',
-        accentTitleHover: 'group-hover:text-indigo-200',
-        accentCta: 'text-indigo-400',
-        status: 'active'
     }
 ];
 
