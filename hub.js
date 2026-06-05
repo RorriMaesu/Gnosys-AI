@@ -1,6 +1,9 @@
 // Hub Application Logic - Redesigned UI
 // Manages static course registry, category filtering, stats modals, and the floating Pomodoro timer.
 
+const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const openWordUrl = isLocalDev ? 'http://localhost:5173/' : '../OpenWord/';
+
 const COURSES = [
     {
         id: 'medical-terminology',
@@ -166,6 +169,23 @@ const COURSES = [
         icon: 'fa-heart-pulse',
         color: 'from-red-500 to-rose-600',
         status: 'planned'
+    },
+    {
+        id: 'openword',
+        title: 'OpenWord Studio',
+        description: 'A premium, offline-first AI document editor. Draft study guides, summarize notes, and export to DOCX.',
+        link: openWordUrl,
+        category: 'Workspace',
+        icon: 'fa-file-signature',
+        color: 'from-indigo-500 to-violet-600',
+        iconWrapClass: 'bg-indigo-500/15 border-indigo-400/30',
+        iconClass: 'text-indigo-300',
+        iconWrapStyle: 'background: rgba(99, 102, 241, 0.18); border-color: rgba(129, 140, 248, 0.45);',
+        iconStyle: 'color: #818cf8;',
+        accentGlow: 'bg-indigo-500/10 group-hover:bg-indigo-500/20',
+        accentTitleHover: 'group-hover:text-indigo-200',
+        accentCta: 'text-indigo-400',
+        status: 'active'
     }
 ];
 
@@ -196,6 +216,7 @@ function renderFilters() {
     const filters = [
         { id: 'all', label: 'All Modules' },
         { id: 'active', label: 'Active Study' },
+        { id: 'workspace', label: 'Workspace' },
         { id: 'sciences', label: 'Sciences' },
         { id: 'clinical', label: 'Clinical Core' },
         { id: 'humanities', label: 'Humanities' },
@@ -223,6 +244,8 @@ function renderCourseGrid() {
     let filtered = COURSES;
     if (activeFilter === 'active') {
         filtered = COURSES.filter(c => c.status === 'active');
+    } else if (activeFilter === 'workspace') {
+        filtered = COURSES.filter(c => c.category === 'Workspace');
     } else if (activeFilter === 'sciences') {
         filtered = COURSES.filter(c => c.category === 'Sciences');
     } else if (activeFilter === 'clinical') {

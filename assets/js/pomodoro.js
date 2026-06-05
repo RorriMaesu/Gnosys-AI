@@ -8,7 +8,8 @@
         { id: 'intro-to-chemistry', title: 'Intro to Chemistry', icon: 'fa-flask-vial' },
         { id: 'chemistry-math-refresher', title: 'Chemistry Math Refresher', icon: 'fa-square-root-variable' },
         { id: 'clinical-mathematics', title: 'Clinical Mathematics', icon: 'fa-square-root-variable' },
-        { id: 'psychology-care', title: 'Psychology & Care', icon: 'fa-brain' }
+        { id: 'psychology-care', title: 'Psychology & Care', icon: 'fa-brain' },
+        { id: 'openword', title: 'OpenWord Studio', icon: 'fa-file-signature' }
     ];
 
     // Local state tracking
@@ -20,18 +21,21 @@
 
     // Helper to determine relative paths for icon image or assets depending on depth
     function getRootPath() {
-        const path = window.location.pathname;
+        const path = window.location.pathname.toLowerCase();
         if (path.includes('/chemistry/math-refresher/')) {
             return '../../';
         } else if (path.includes('/syngnosia/') || path.includes('/chemistry/') || path.includes('/math/') || path.includes('/psychology/')) {
             return '../';
+        } else if (path.includes('/openword/') || window.location.port === '5173') {
+            const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            return isDev ? 'http://localhost:8000/' : '../Gnosys-AI/';
         }
         return './';
     }
 
     // Auto-detect current course based on URL path
     function detectCurrentCourse() {
-        const path = window.location.pathname;
+        const path = window.location.pathname.toLowerCase();
         if (path.includes('/syngnosia/')) {
             return 'medical-terminology';
         } else if (path.includes('/chemistry/math-refresher/')) {
@@ -42,6 +46,8 @@
             return 'clinical-mathematics';
         } else if (path.includes('/psychology/')) {
             return 'psychology-care';
+        } else if (path.includes('/openword/') || window.location.port === '5173' || document.title.toLowerCase().includes('openword')) {
+            return 'openword';
         }
         return 'general';
     }
