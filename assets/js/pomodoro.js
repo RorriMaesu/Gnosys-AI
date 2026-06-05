@@ -359,6 +359,17 @@
                 height: 100% !important;
                 transform: rotate(-90deg) !important;
             }
+            .in-openword .timer-progress-container circle {
+                fill: none !important;
+                stroke-width: 4px !important;
+            }
+            .in-openword .timer-progress-container circle:first-child {
+                stroke: rgba(255, 255, 255, 0.08) !important;
+            }
+            .in-openword .timer-progress-container circle:last-child {
+                stroke: #6366f1 !important;
+                transition: stroke-dashoffset 0.3s ease !important;
+            }
             .in-openword #timer-display {
                 font-size: 16px !important;
                 font-weight: 900 !important;
@@ -368,6 +379,8 @@
             }
             .in-openword .timer-info-container {
                 flex-grow: 1 !important;
+                display: flex !important;
+                flex-direction: column !important;
             }
             .in-openword #timer-mode-indicator {
                 font-size: 9px !important;
@@ -792,14 +805,14 @@
             </div>
             
             <div class="timer-panel-body-wrapper flex items-center gap-4 py-2 border-b border-white/5 mb-3">
-                <div class="relative w-20 h-20 flex items-center justify-center shrink-0">
+                <div class="timer-progress-container relative w-20 h-20 flex items-center justify-center shrink-0">
                     <svg class="absolute w-full h-full -rotate-90">
                         <circle cx="40" cy="40" r="34" class="stroke-slate-800 fill-none" stroke-width="4"></circle>
                         <circle cx="40" cy="40" r="34" class="stroke-indigo-500 fill-none transition-all duration-300" stroke-width="4" stroke-dasharray="213" stroke-dashoffset="0" id="timer-progress-ring"></circle>
                     </svg>
                     <span id="timer-display" class="text-base font-black text-white tracking-tight z-10">25:00</span>
                 </div>
-                <div class="flex-grow">
+                <div class="timer-info-container flex-grow">
                     <span id="timer-mode-indicator" class="text-[9px] font-extrabold text-indigo-400 uppercase tracking-widest block mb-1">Focus Session Active</span>
                     <select id="timer-course-select" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-500 text-slate-300">
                         <option value="general">General Focus</option>
