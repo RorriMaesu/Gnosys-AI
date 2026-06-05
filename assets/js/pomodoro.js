@@ -205,16 +205,16 @@
             }
             @media (max-width: 640px) {
                 #floating-timer-widget {
-                    bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
-                    left: 1rem !important;
+                    bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+                    left: 1.5rem !important;
                     right: auto !important;
                 }
                 #timer-expanded-panel {
-                    width: calc(100vw - 2rem) !important;
+                    width: calc(100vw - 3rem) !important;
                     max-width: 320px !important;
                     position: fixed !important;
-                    bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
-                    left: 1rem !important;
+                    bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px)) !important;
+                    left: 1.5rem !important;
                     z-index: 260 !important;
                 }
             }
@@ -777,7 +777,7 @@
         // Container
         const container = document.createElement('div');
         container.id = 'floating-timer-widget';
-        container.className = 'fixed bottom-6 left-6 z-[250] flex flex-col-reverse items-start gap-3 transition-all duration-300 pointer-events-auto';
+        container.className = 'fixed bottom-8 left-8 z-[250] flex flex-col-reverse items-start gap-3 transition-all duration-300 pointer-events-auto';
 
         // Collapsed Button
         const btn = document.createElement('button');
