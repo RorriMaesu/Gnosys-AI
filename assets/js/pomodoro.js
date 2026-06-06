@@ -93,6 +93,9 @@
         { id: 'chemistry-math-refresher', title: 'Chemistry Math Refresher', icon: 'fa-square-root-variable' },
         { id: 'clinical-mathematics', title: 'Clinical Mathematics', icon: 'fa-square-root-variable' },
         { id: 'psychology-care', title: 'Psychology & Care', icon: 'fa-brain' },
+        { id: 'anatomy-1', title: 'Anatomy & Physiology I', icon: 'fa-child-body' },
+        { id: 'anatomy-2', title: 'Anatomy & Physiology II', icon: 'fa-brain' },
+        { id: 'anatomy-3', title: 'Anatomy & Physiology III', icon: 'fa-lungs' },
         { id: 'openword', title: 'OpenWord Studio', icon: 'fa-file-signature' }
     ];
 
@@ -111,7 +114,7 @@
         const path = window.location.pathname.toLowerCase();
         if (path.includes('/chemistry/math-refresher/')) {
             return '../../';
-        } else if (path.includes('/syngnosia/') || path.includes('/chemistry/') || path.includes('/math/') || path.includes('/psychology/')) {
+        } else if (path.includes('/syngnosia/') || path.includes('/chemistry/') || path.includes('/math/') || path.includes('/psychology/') || path.includes('/anatomy1/') || path.includes('/anatomy2/') || path.includes('/anatomy3/')) {
             return '../';
         } else if (path.includes('/openword/') || window.location.port === '5173') {
             const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -133,6 +136,12 @@
             return 'clinical-mathematics';
         } else if (path.includes('/psychology/')) {
             return 'psychology-care';
+        } else if (path.includes('/anatomy1/')) {
+            return 'anatomy-1';
+        } else if (path.includes('/anatomy2/')) {
+            return 'anatomy-2';
+        } else if (path.includes('/anatomy3/')) {
+            return 'anatomy-3';
         } else if (path.includes('/openword/') || window.location.port === '5173' || document.title.toLowerCase().includes('openword')) {
             return 'openword';
         }

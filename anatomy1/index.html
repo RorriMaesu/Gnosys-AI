@@ -10,20 +10,7 @@
             if (pref === null || pref === 'true') document.documentElement.classList.add('dark');
         })();
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' },
-                        rose: { 650: '#e11d48', 750: '#be123c' }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="gamification.css" rel="stylesheet">
@@ -50,6 +37,15 @@
         .video-quiz-mobile-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(244, 63, 94, 0.35); background: rgba(30, 41, 59, 0.96); color: #e2e8f0; }
         .video-quiz-mobile-host { flex: 1; min-height: 0; margin-top: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(244, 63, 94, 0.35); background: rgba(15, 23, 42, 0.96); overflow: hidden; padding: 0.5rem; }
         .cc-support-card { border: 1px solid rgba(244, 63, 94, 0.35); background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(159, 18, 57, 0.2) 100%); border-radius: 1rem; padding: 1rem; }
+        .cc-support-title { font-size: 0.95rem; font-weight: 800; color: #f43f5e; letter-spacing: 0.01em; margin-bottom: 0.5rem; }
+        .cc-support-note { font-size: 0.86rem; line-height: 1.6; color: #cbd5e1; margin: 0; }
+        .cc-support-actions { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 0.85rem; }
+        .cc-support-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.25rem; padding: 0.5rem 0.875rem; border-radius: 0.75rem; font-size: 0.8rem; font-weight: 700; text-decoration: none; transition: all 0.2s ease; border: 1px solid transparent; }
+        .cc-support-btn-primary { color: #ffffff; background: #be123c; }
+        .cc-support-btn-primary:hover { background: #e11d48; transform: translateY(-1px); box-shadow: 0 8px 18px rgba(225, 29, 72, 0.2); }
+        .cc-support-btn-secondary { color: #fda4af; background: rgba(190, 18, 60, 0.25); border-color: rgba(244, 63, 94, 0.5); }
+        .cc-support-btn-secondary:hover { color: #ffe4e6; background: rgba(190, 18, 60, 0.38); transform: translateY(-1px); box-shadow: 0 8px 18px rgba(244, 63, 94, 0.18); }
+        .cc-support-btn:active { transform: translateY(0); }
         #view-videos.video-active-flow > .grid { display: none !important; }
         #view-videos.video-active-flow #video-episode-modal { position: relative !important; inset: auto !important; z-index: 10 !important; width: 100% !important; height: auto !important; display: block !important; }
         #view-videos.video-active-flow #video-episode-modal-backdrop { display: none !important; }
@@ -88,6 +84,16 @@
                 <span id="header-level-badge" class="bg-rose-900/40 text-rose-300 rounded px-1 py-0.5 text-[10px] font-bold">Lvl 1</span>
                 <span id="header-level-title" class="text-slate-300 text-[10px]">Somatic Novice</span>
             </div>
+            <!-- Pomodoro Timer -->
+            <div id="global-pomodoro-indicator" class="hidden xl:flex items-center space-x-2 bg-slate-900 border border-rose-950/30 text-rose-400 rounded-full px-3 py-1 text-xs font-semibold shadow-inner">
+                <i class="fa-solid fa-clock text-rose-455 animate-pulse"></i>
+                <span id="pomo-timer-display" class="font-mono font-semibold text-rose-200">25:00</span>
+                <button id="pomo-toggle-btn" class="hover:text-rose-300 transition-colors"><i class="fa-solid fa-play"></i></button>
+            </div>
+            <!-- Buy Me a Coffee -->
+            <a href="https://buymeacoffee.com/rorrimaesu" target="_blank" rel="noopener noreferrer" title="Support Gnosys-AI" class="w-9 h-9 rounded-full bg-yellow-50/95 border border-yellow-200 text-yellow-600 hover:bg-yellow-100 hover:border-yellow-400 hidden md:flex items-center justify-center shadow-sm transition-colors shrink-0">
+                <i class="fa-solid fa-mug-hot text-sm"></i>
+            </a>
             <!-- Settings Button -->
             <button id="btn-settings" title="Settings & Reset" onclick="document.getElementById('settings-modal').classList.remove('hidden')" class="w-9 h-9 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-rose-950/40 flex items-center justify-center shadow-sm transition-colors shrink-0">
                 <i class="fa-solid fa-gear text-sm"></i>
@@ -101,12 +107,19 @@
             <button id="nav-dashboard" role="tab" aria-selected="true" aria-controls="view-dashboard" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 bg-rose-600 text-white shadow-md" onclick="activateAnatomyTab('dashboard')">Dashboard</button>
             <button id="nav-videos" role="tab" aria-selected="false" aria-controls="view-videos" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('videos')">Crash Course</button>
             <button id="nav-lab-1" role="tab" aria-selected="false" aria-controls="view-lab-1" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-1')">Homeostasis</button>
-            <button id="nav-lab-2" role="tab" aria-selected="false" aria-controls="view-lab-2" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-2')">Membranes</button>
-            <button id="nav-lab-3" role="tab" aria-selected="false" aria-controls="view-lab-3" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-3')">Histology</button>
-            <button id="nav-lab-4" role="tab" aria-selected="false" aria-controls="view-lab-4" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-4')">Burn Tracker</button>
-            <button id="nav-lab-5" role="tab" aria-selected="false" aria-controls="view-lab-5" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-5')">Skeletal Tagger</button>
-            <button id="nav-lab-6" role="tab" aria-selected="false" aria-controls="view-lab-6" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-6')">Sarcomeres</button>
-            <button id="nav-lab-7" role="tab" aria-selected="false" aria-controls="view-lab-7" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-7')">Membrane AP</button>
+            <button id="nav-lab-2" role="tab" aria-selected="false" aria-controls="view-lab-2" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-2')">Chemistry</button>
+            <button id="nav-lab-3" role="tab" aria-selected="false" aria-controls="view-lab-3" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-3')">Biochemistry</button>
+            <button id="nav-lab-4" role="tab" aria-selected="false" aria-controls="view-lab-4" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-4')">Membranes</button>
+            <button id="nav-lab-5" role="tab" aria-selected="false" aria-controls="view-lab-5" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-5')">Histology</button>
+            <button id="nav-lab-6" role="tab" aria-selected="false" aria-controls="view-lab-6" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-6')">Integumentary</button>
+            <button id="nav-lab-7" role="tab" aria-selected="false" aria-controls="view-lab-7" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-7')">Bone Tissue</button>
+            <button id="nav-lab-8" role="tab" aria-selected="false" aria-controls="view-lab-8" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-8')">Axial Skeleton</button>
+            <button id="nav-lab-9" role="tab" aria-selected="false" aria-controls="view-lab-9" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-9')">Appendicular</button>
+            <button id="nav-lab-10" role="tab" aria-selected="false" aria-controls="view-lab-10" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-10')">Joints</button>
+            <button id="nav-lab-11" role="tab" aria-selected="false" aria-controls="view-lab-11" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-11')">Sarcomeres</button>
+            <button id="nav-lab-12" role="tab" aria-selected="false" aria-controls="view-lab-12" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-12')">Muscle Levers</button>
+            <button id="nav-lab-13" role="tab" aria-selected="false" aria-controls="view-lab-13" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-13')">Glial Cells</button>
+            <button id="nav-lab-14" role="tab" aria-selected="false" aria-controls="view-lab-14" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('lab-14')">Membrane AP</button>
             <button id="nav-tutor" role="tab" aria-selected="false" aria-controls="view-tutor" class="px-5 py-2 text-xs font-bold rounded-full transition-all duration-300 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50" onclick="activateAnatomyTab('tutor')">AI Tutor</button>
         </div>
     </div>
@@ -252,27 +265,40 @@
 
                 <!-- Video support description and tribute -->
                 <div class="lg:col-span-2 space-y-4" id="video-support-tribute">
-                    <div class="cc-support-card">
-                        <h3 class="cc-support-title">Hank Green's A&amp;P Curriculum</h3>
-                        <p class="cc-support-note">Select an episode on the left panel to load the synchronized Socratic playback viewer. Complete the micro-quiz to earn 30 XP.</p>
-                    </div>
+                    <section class="cc-support-card" aria-label="Crash Course support tribute">
+                        <h4 class="cc-support-title">🎓 Deep Gratitude to Complexly &amp; Crash Course</h4>
+                        <p class="cc-support-note">
+                            This interactive study suite was built out of a profound love for learning and a desire for deep, accessible science resources. Massive thanks to Hank Green and the entire team at Crash Course for making their world-class anatomy curriculum completely free to the public on YouTube. This application is an unofficial, non-commercial companion tool designed to help students reinforce these lessons using a local AI tutor. It is entirely fan-supported and independent.
+                        </p>
+                        <div class="cc-support-actions">
+                            <a class="cc-support-btn cc-support-btn-primary" href="https://complexly.org/support" target="_blank" rel="noopener noreferrer" aria-label="Donate to Complexly in a new tab">Donate to Complexly</a>
+                            <a class="cc-support-btn cc-support-btn-secondary" href="https://www.patreon.com/crashcourse" target="_blank" rel="noopener noreferrer" aria-label="Support on Patreon in a new tab">Support on Patreon</a>
+                        </div>
+                    </section>
                 </div>
             </div>
 
             <!-- Video Player Modal Overlay -->
-            <div id="video-episode-modal" class="hidden mt-6 bg-slate-950/40 rounded-2xl border border-rose-900/35 overflow-hidden shadow-2xl relative">
-                <div id="video-episode-modal-backdrop" class="absolute inset-0 bg-slate-950/60 backdrop-blur-xs z-0"></div>
-                
-                <div class="relative z-10 p-4 space-y-4">
-                    <div class="sticky top-0 bg-slate-950/80 backdrop-blur-md border-b border-rose-900/20 py-2.5 px-3 flex justify-between items-center rounded-t-xl">
-                        <span class="text-xs font-bold font-mono text-rose-400">ACTIVE VIDEO VIEWER</span>
-                        <button id="btn-video-modal-close" class="text-xs font-mono font-bold text-slate-400 hover:text-rose-400 flex items-center gap-1.5 transition">
-                            <i class="fa-solid fa-circle-xmark"></i> Close Player
-                        </button>
-                    </div>
+            <div id="video-episode-modal" class="hidden absolute inset-0 z-[120]" aria-hidden="true">
+                <div id="video-episode-modal-backdrop" class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs"></div>
+                <div class="relative h-full flex items-start justify-center p-0">
+                    <section role="dialog" aria-modal="true" aria-labelledby="video-modal-title" class="video-modal-dialog bg-slate-900 rounded-none sm:rounded-3xl border border-rose-900/30 shadow-2xl">
+                        <div class="sticky top-0 z-10 bg-slate-900 border-b border-rose-900/25 px-4 py-3">
+                            <div class="flex items-center justify-between">
+                                <h4 id="video-modal-title" class="text-sm sm:text-base font-extrabold text-slate-100">Crash Course Episode</h4>
+                                <button id="btn-video-modal-close" type="button" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors" aria-label="Close episode popup">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <button id="btn-video-mark-complete" class="px-4 py-2 bg-slate-950 border border-rose-900/35 hover:bg-rose-950/20 text-rose-300 rounded-xl text-xs font-bold transition">Mark Watched</button>
+                                <button id="btn-video-start-quiz" class="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-rose-900/20">Start 3-Question Micro-Quiz</button>
+                                <button id="btn-video-prev-episode" class="px-3 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-850 rounded-xl text-xs font-bold text-slate-200 transition">Play Previous Video</button>
+                                <button id="btn-video-next-episode" class="px-3 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-850 rounded-xl text-xs font-bold text-slate-200 transition">Play Next Episode</button>
+                            </div>
+                        </div>
 
-                    <div class="video-modal-dialog">
-                        <div class="video-modal-content">
+                        <div class="video-modal-content px-4 sm:px-6 py-4 sm:py-5">
                             <!-- Youtube Player Box -->
                             <div class="video-modal-player-shell rounded-2xl border border-slate-700 overflow-hidden bg-black relative">
                                 <iframe id="anatomy-video-player" class="w-full h-full" src="" title="Crash Course Anatomy video" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
@@ -301,24 +327,17 @@
                             </div>
 
                             <div class="mt-4 rounded-2xl border border-rose-900/30 bg-rose-950/20 p-4">
-                                <p class="text-[10px] font-mono font-bold uppercase tracking-wider text-rose-400">Core Objectives</p>
-                                <p id="video-outcome-text" class="text-xs text-slate-300 mt-1">Select an episode to view outcome goals.</p>
+                                <p class="text-[11px] font-black uppercase tracking-wider text-rose-400">Learning Journey</p>
+                                <p id="video-outcome-text" class="text-sm text-slate-300 mt-1">Select an episode to view outcome goals.</p>
                                 <div class="mt-3 flex flex-wrap items-center gap-2">
-                                    <span id="video-prev-title" class="text-[10px] text-slate-400 bg-slate-900 border border-slate-800 rounded px-2 py-0.5">Previous episode: not set</span>
-                                    <span id="video-next-title" class="text-[10px] text-slate-400 bg-slate-900 border border-slate-800 rounded px-2 py-0.5">Next episode: not set</span>
+                                    <span id="video-prev-title" class="text-xs font-semibold text-slate-400 bg-slate-900 border border-slate-800 rounded px-2 py-0.5">Previous episode: not set</span>
+                                    <span id="video-next-title" class="text-xs font-semibold text-slate-400 bg-slate-900 border border-slate-800 rounded px-2 py-0.5">Next episode: not set</span>
                                 </div>
-                            </div>
-
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button id="btn-video-prev-episode" class="px-4 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 rounded-xl text-xs font-bold text-slate-200 flex items-center gap-1.5 transition"><i class="fa-solid fa-arrow-left"></i> Previous</button>
-                                <button id="btn-video-next-episode" class="px-4 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 rounded-xl text-xs font-bold text-slate-200 flex items-center gap-1.5 transition">Next <i class="fa-solid fa-arrow-right"></i></button>
-                                <button id="btn-video-mark-complete" class="px-4 py-2 bg-slate-900 border border-rose-900/35 hover:bg-rose-950/20 text-rose-350 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ml-auto">Mark Watched</button>
-                                <button id="btn-video-start-quiz" class="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-rose-900/20">Launch Micro-Quiz <i class="fa-solid fa-circle-question"></i></button>
                             </div>
 
                             <div id="video-tutor-anchor" class="hidden"></div>
                         </div>
-                    </div>
+                    </section>
                 </div>
             </div>
 
@@ -350,7 +369,7 @@
                             </div>
                         </div>
                     </div>
-                    <button id="chat-btn-clear" onclick="window.AnatomyTutor.clearChat()" title="Clear conversation" class="text-xs font-mono font-bold text-slate-500 hover:text-red-400 flex items-center space-x-1.5 transition-colors px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-850">
+                    <button id="chat-btn-clear" title="Clear conversation" class="text-xs font-mono font-bold text-slate-500 hover:text-red-400 flex items-center space-x-1.5 transition-colors px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-850">
                         <i class="fa-solid fa-trash-can text-xs"></i>
                         <span>Clear Chat</span>
                     </button>
@@ -368,7 +387,7 @@
                 <!-- Input area -->
                 <div class="p-3 border-t border-rose-900/20 bg-slate-950 flex space-x-2">
                     <input type="text" id="chat-input" placeholder="Ask your Socratic tutor..." class="flex-grow bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-600">
-                    <button id="chat-btn-send" onclick="window.AnatomyTutor.sendMessage()" class="px-5 bg-rose-600 hover:bg-rose-500 rounded-xl text-white transition"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+                    <button id="chat-btn-send" class="px-5 bg-rose-600 hover:bg-rose-500 rounded-xl text-white transition"><i class="fa-solid fa-paper-plane text-xs"></i></button>
                 </div>
             </div>
         </section>
@@ -381,51 +400,107 @@
             </div>
         </section>
 
-        <!-- 5. Sandbox Tabs (Membranes) -->
+        <!-- 5. Sandbox Tabs (Chemistry) -->
         <section id="view-lab-2" class="hidden-tab fade-in max-w-xl mx-auto">
             <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
-                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.2 Membrane Transport Lab</h3>
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.2 General Chemistry Lab</h3>
                 <div id="sandbox-container-1_2" class="w-full flex justify-center"></div>
             </div>
         </section>
 
-        <!-- 6. Sandbox Tabs (Histology) -->
+        <!-- 6. Sandbox Tabs (Biochemistry) -->
         <section id="view-lab-3" class="hidden-tab fade-in max-w-xl mx-auto">
             <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
-                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.3 Histology Microscope</h3>
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.3 Biochemistry Lab</h3>
                 <div id="sandbox-container-1_3" class="w-full flex justify-center"></div>
             </div>
         </section>
 
-        <!-- 7. Sandbox Tabs (Burns) -->
+        <!-- 7. Sandbox Tabs (Membranes) -->
         <section id="view-lab-4" class="hidden-tab fade-in max-w-xl mx-auto">
             <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
-                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.4 Integumentary Burn Tracker</h3>
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.4 Membrane Transport Lab</h3>
                 <div id="sandbox-container-1_4" class="w-full flex justify-center"></div>
             </div>
         </section>
 
-        <!-- 8. Sandbox Tabs (Skeletal) -->
+        <!-- 8. Sandbox Tabs (Histology) -->
         <section id="view-lab-5" class="hidden-tab fade-in max-w-xl mx-auto">
             <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
-                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.5 Skeletal Bones &amp; Joints</h3>
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.5 Histology Microscope</h3>
                 <div id="sandbox-container-1_5" class="w-full flex justify-center"></div>
             </div>
         </section>
 
-        <!-- 9. Sandbox Tabs (Sarcomeres) -->
+        <!-- 9. Sandbox Tabs (Burns) -->
         <section id="view-lab-6" class="hidden-tab fade-in max-w-xl mx-auto">
             <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
-                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.6 Sarcomere Contraction Cycle</h3>
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.6 Integumentary Burn Tracker</h3>
                 <div id="sandbox-container-1_6" class="w-full flex justify-center"></div>
             </div>
         </section>
 
-        <!-- 10. Sandbox Tabs (AP Potential) -->
+        <!-- 10. Sandbox Tabs (Bone Tissue) -->
         <section id="view-lab-7" class="hidden-tab fade-in max-w-xl mx-auto">
             <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
-                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.7 Action Potential Ion Graph</h3>
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.7 Bone Calcium Loop</h3>
                 <div id="sandbox-container-1_7" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 11. Sandbox Tabs (Axial Skeleton) -->
+        <section id="view-lab-8" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.8 Axial Skeleton Practical</h3>
+                <div id="sandbox-container-1_8" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 12. Sandbox Tabs (Appendicular Skeleton) -->
+        <section id="view-lab-9" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.9 Appendicular Practical</h3>
+                <div id="sandbox-container-1_9" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 13. Sandbox Tabs (Joints) -->
+        <section id="view-lab-10" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.10 Joints &amp; Articulations Lab</h3>
+                <div id="sandbox-container-1_10" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 14. Sandbox Tabs (Sarcomeres) -->
+        <section id="view-lab-11" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.11 Sarcomere Contraction</h3>
+                <div id="sandbox-container-1_11" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 15. Sandbox Tabs (Muscle Levers) -->
+        <section id="view-lab-12" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.12 Muscle Lever Lab</h3>
+                <div id="sandbox-container-1_12" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 16. Sandbox Tabs (Glial Cells) -->
+        <section id="view-lab-13" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.13 Glial Cells Identification</h3>
+                <div id="sandbox-container-1_13" class="w-full flex justify-center"></div>
+            </div>
+        </section>
+
+        <!-- 17. Sandbox Tabs (AP Potential) -->
+        <section id="view-lab-14" class="hidden-tab fade-in max-w-xl mx-auto">
+            <div class="glass-card rounded-3xl p-6 border border-rose-950/20 shadow-xl space-y-4 flex flex-col items-center">
+                <h3 class="text-sm font-bold font-mono uppercase tracking-wider text-rose-400">Lesson 1.14 Action Potential Graph</h3>
+                <div id="sandbox-container-1_14" class="w-full flex justify-center"></div>
             </div>
         </section>
 
@@ -466,15 +541,22 @@
             <div class="space-y-4 text-xs">
                 <div>
                     <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">Local AI Model Router</label>
-                    <select id="settings-model-select" onchange="saveAnatomySettings()" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-250 focus:outline-none focus:border-rose-600">
-                        <option value="llama3">Llama 3 (8B Local - High Speed)</option>
-                        <option value="gemini">Gemini Pro API (Cloud - Creative)</option>
-                        <option value="custom">Custom Endpoint (OpenAI-compatible)</option>
-                    </select>
+                    <select id="model-select" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-250 focus:outline-none focus:border-rose-600"></select>
+                    <p id="settings-model-action-status" class="text-[10px] text-slate-450 mt-1.5 leading-normal">Ready to select or download models.</p>
+                </div>
+                <div class="flex items-center justify-between border-t border-slate-850 pt-3">
+                    <div>
+                        <span class="block font-bold text-slate-300">Curriculum Bypass</span>
+                        <span class="block text-[9px] text-slate-550 mt-0.5 leading-normal">Unlocks access to all lessons and quizzes.</span>
+                    </div>
+                    <button id="bypass-toggle-btn" class="px-3 py-1 bg-slate-800 border border-slate-700 rounded font-semibold text-[10px] uppercase text-slate-300 hover:bg-slate-750 transition-colors">DISABLED</button>
                 </div>
                 <div class="pt-3 border-t border-slate-850 flex justify-between items-center">
-                    <span class="text-slate-400">Clear Course Progression</span>
-                    <button onclick="confirmAndResetAnatomyProgress(); document.getElementById('settings-modal').classList.add('hidden');" class="px-3.5 py-2 bg-red-950/40 hover:bg-red-900/20 text-red-400 border border-red-900/40 rounded-xl font-bold uppercase tracking-wider text-[10px] transition-colors">Reset progress</button>
+                    <div>
+                        <span class="block font-bold text-slate-300">Clear Course Progression</span>
+                        <span class="block text-[9px] text-slate-550 mt-0.5 leading-normal">Erase all scores, streaking and progress.</span>
+                    </div>
+                    <button onclick="confirmAndResetAnatomyProgress(); document.getElementById('settings-modal').classList.add('hidden');" class="px-3.5 py-2 bg-red-950/40 hover:bg-red-900/20 text-red-400 border border-red-900/40 rounded-xl font-bold uppercase tracking-wider text-[10px] transition-colors shrink-0">Reset progress</button>
                 </div>
             </div>
         </div>
@@ -483,6 +565,8 @@
     <!-- Scripts -->
     <script src="mastery.js"></script>
     <script src="../assets/llm-router.js?v=1.1.2"></script>
+    <script src="../assets/ollama-launcher.js"></script>
+    <script src="../assets/js/pomodoro.js" defer></script>
     <script src="tutor.js"></script>
     <script src="video_data.js"></script>
     <script src="video-controller.js"></script>
@@ -635,16 +719,53 @@
 
         // Settings managers
         function initSettings() {
-            const select = document.getElementById('settings-model-select');
-            if (!select) return;
-            const model = localStorage.getItem('syngnosia_tutor_model') || 'llama3';
-            select.value = model;
-        }
+            const selectEl = document.getElementById('model-select');
+            const bypassToggle = document.getElementById('bypass-toggle-btn');
+            const actionStatusEl = document.getElementById('settings-model-action-status');
 
-        window.saveAnatomySettings = function() {
-            const select = document.getElementById('settings-model-select');
-            if (select) {
-                localStorage.setItem('syngnosia_tutor_model', select.value);
+            if (bypassToggle) {
+                const updateBypassBtn = () => {
+                    const enabled = window.isCurriculumBypassEnabled();
+                    bypassToggle.textContent = enabled ? "ENABLED" : "DISABLED";
+                    bypassToggle.className = enabled 
+                        ? "px-3 py-1 bg-rose-600 text-white rounded font-bold text-[10px] uppercase transition-colors"
+                        : "px-3 py-1 bg-slate-800 border border-slate-700 rounded font-semibold text-[10px] uppercase text-slate-355 hover:bg-slate-750 transition-colors";
+                };
+                updateBypassBtn();
+                bypassToggle.addEventListener('click', () => {
+                    if (typeof window.toggleCurriculumBypass === 'function') {
+                        window.toggleCurriculumBypass();
+                        updateBypassBtn();
+                    }
+                });
+            }
+
+            if (selectEl) {
+                const currentModel = window.getGnosysModel ? window.getGnosysModel('anatomy1_llm') : (localStorage.getItem('anatomy1_llm') || 'gemma4:e4b');
+                const endpoint = localStorage.getItem("anatomy1_ollama_endpoint") || "http://localhost:11434";
+                const cleanEndpoint = endpoint.replace('/api/chat', '').replace('/api/generate', '');
+
+                const setModelActionStatus = ({ state = 'idle', message = '' } = {}) => {
+                    if (!actionStatusEl) return;
+                    actionStatusEl.textContent = message || 'Ready to switch models or start download.';
+                    actionStatusEl.className = 'text-[10px] mt-1.5 leading-normal';
+                    if (state === 'working') {
+                        actionStatusEl.className += ' text-amber-500';
+                    } else if (state === 'success' || state === 'info') {
+                        actionStatusEl.className += ' text-emerald-400';
+                    } else if (state === 'error') {
+                        actionStatusEl.className += ' text-red-400';
+                    } else {
+                        actionStatusEl.className += ' text-slate-500';
+                    }
+                };
+
+                if (window.populateModelSelector) {
+                    window.populateModelSelector(selectEl, currentModel, cleanEndpoint, {
+                        moduleKey: 'anatomy1_llm',
+                        onStatusChange: setModelActionStatus
+                    });
+                }
             }
         }
 

@@ -45,7 +45,7 @@
         const modalEl = document.getElementById('video-episode-modal');
         const modalBackdropEl = document.getElementById('video-episode-modal-backdrop');
         const modalCloseBtn = document.getElementById('btn-video-modal-close');
-        const iframeEl = document.getElementById('anatomy-video-player');
+        let iframeEl = document.getElementById('anatomy-video-player');
         const warningEl = document.getElementById('video-empty-warning');
         const titleEl = document.getElementById('video-active-title');
         const chipsEl = document.getElementById('video-concept-chips');
@@ -189,6 +189,10 @@
             closeVideoQuiz();
             modalOpen = false;
 
+            if (lastTriggerEl && typeof lastTriggerEl.focus === 'function') {
+                lastTriggerEl.focus();
+            }
+
             const viewEl = document.getElementById('view-videos');
             if (viewEl) {
                 viewEl.classList.remove('video-active-flow');
@@ -197,10 +201,6 @@
             modalEl.classList.add('hidden');
             modalEl.setAttribute('aria-hidden', 'true');
             iframeEl.src = '';
-
-            if (lastTriggerEl && typeof lastTriggerEl.focus === 'function') {
-                lastTriggerEl.focus();
-            }
         }
 
         function updateDashboardCta() {
@@ -320,10 +320,16 @@
             }
 
             if (episode.youtubeId) {
-                iframeEl.src = `https://www.youtube.com/embed/${episode.youtubeId}?rel=0&modestbranding=1`;
+                const newIframe = iframeEl.cloneNode(true);
+                newIframe.src = `https://www.youtube.com/embed/${episode.youtubeId}?rel=0&modestbranding=1`;
+                iframeEl.parentNode.replaceChild(newIframe, iframeEl);
+                iframeEl = newIframe;
                 warningEl?.classList.add('hidden');
             } else {
-                iframeEl.src = '';
+                const newIframe = iframeEl.cloneNode(true);
+                newIframe.src = 'about:blank';
+                iframeEl.parentNode.replaceChild(newIframe, iframeEl);
+                iframeEl = newIframe;
                 warningEl?.classList.remove('hidden');
             }
 

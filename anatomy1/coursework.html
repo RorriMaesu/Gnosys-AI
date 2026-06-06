@@ -10,20 +10,7 @@
             if (pref === null || pref === 'true') document.documentElement.classList.add('dark');
         })();
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' },
-                        rose: { 650: '#e11d48', 750: '#be123c' }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Marked.js for markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -533,6 +520,10 @@
                                 <i class="fa-solid fa-arrows-rotate text-[9px]"></i>
                                 <span>Regenerate Active</span>
                             </button>
+                            <button id="btn-delete-lecture" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-455 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] font-semibold transition flex items-center space-x-1" title="Delete the active lecture variation">
+                                <i class="fa-solid fa-trash-can text-[9px]"></i>
+                                <span>Delete Active</span>
+                            </button>
                         </div>
                     </div>
                     
@@ -594,15 +585,6 @@
                         <div class="flex items-center justify-between text-xs text-slate-500 mb-1 px-1">
                             <div class="flex items-center space-x-2">
                                 <span id="input-instructions">Respond to Socratic Question...</span>
-                            </div>
-                            <div id="feynman-speech-controls" class="hidden items-center space-x-2">
-                                <button id="btn-toggle-input-mode" class="text-[10px] bg-slate-900 hover:bg-slate-800 px-2 py-0.5 rounded border border-slate-800 text-slate-350">
-                                    <i class="fa-solid fa-keyboard mr-1"></i> <span id="toggle-input-text">Switch to Speech API</span>
-                                </button>
-                                <span id="speech-indicator" class="text-[10px] text-red-500 hidden items-center space-x-1">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span>
-                                    <span>LISTENING</span>
-                                </span>
                             </div>
                         </div>
 
@@ -681,6 +663,7 @@
     </script>
     <script src="mastery.js"></script>
     <script src="../assets/llm-router.js?v=1.1.2"></script>
+    <script src="../assets/ollama-launcher.js"></script>
     <script src="tutor.js"></script>
     <script src="gamification.js"></script>
     <script src="skills-lab.js"></script>

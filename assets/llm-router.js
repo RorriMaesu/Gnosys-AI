@@ -1901,6 +1901,7 @@
                     if (statusEl) statusEl.textContent = '✓ Connected to Ollama successfully!';
                     setTimeout(() => {
                         overlay.remove();
+                        localStorage.setItem(STORAGE_KEYS.routeMode, 'desktop-ollama');
                         queueSmartSetupModal({ force: true });
                         state.provider = createOllamaProvider();
                         setProvider('desktop-ollama');

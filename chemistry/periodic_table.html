@@ -10,29 +10,7 @@
             if (pref === null || pref === 'true') document.documentElement.classList.add('dark');
         })();
     </script>
-    
-    <!-- Tailwind CSS & Custom Config -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    gridTemplateColumns: {
-                        // 18-column grid for standard Mendeleev layout
-                        '18': 'repeat(18, minmax(0, 1fr))'
-                    },
-                    gridTemplateRows: {
-                        '7': 'repeat(7, minmax(0, 1fr))',
-                        '10': 'repeat(10, minmax(0, 1fr))'
-                    },
-                    colors: {
-                        slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
 
     <!-- FontAwesome & Google Fonts -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">

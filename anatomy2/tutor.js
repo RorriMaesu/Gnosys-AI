@@ -6,7 +6,7 @@
 window.AnatomyTutor = (() => {
     function getAnatomyModel() {
         if (typeof window.getActiveModel === 'function') {
-            return window.getActiveModel('anatomy_llm');
+            return window.getActiveModel('anatomy2_llm');
         }
         return localStorage.getItem('anatomy2_llm') || localStorage.getItem('syngnosia_tutor_model') || 'gemma';
     }
@@ -108,6 +108,25 @@ window.AnatomyTutor = (() => {
                    .replace(/\n/g, '<br>');
     };
 
+    function appendBubble(msgsEl, role, text) {
+        const wrap = document.createElement("div");
+        const bubble = document.createElement("div");
+        
+        if (role === "user") {
+            wrap.className = "flex justify-end mt-2";
+            bubble.className = "max-w-[80%] bg-rose-600 text-white px-3 py-2 rounded-2xl rounded-tr-sm text-xs font-medium";
+            bubble.innerHTML = parseMD(text);
+        } else {
+            wrap.className = "flex justify-start mt-2";
+            bubble.className = "max-w-[85%] bg-slate-900 border border-slate-800 text-slate-200 px-3 py-2 rounded-2xl rounded-tl-sm text-xs font-medium";
+            if (text) bubble.innerHTML = parseMD(text);
+        }
+        wrap.appendChild(bubble);
+        msgsEl.appendChild(wrap);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+        return bubble;
+    }
+
     function parseModelJson(rawText) {
         const text = typeof rawText === 'string' ? rawText.trim() : '';
         if (!text) throw new Error('Empty model response');
@@ -160,6 +179,209 @@ When diagnosing stroke or CSF blocks, MRI scans verify that the ventricles are n
                     return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (cerebrum, cerebellum, spinothalamic, corticospinal, ventricles, cerebrospinal, csf) to detail the central nervous system." };
                 }
                 return { passed: false, feedback: `Your explanation is simple, but it is missing key anatomical/physiological terms. Please expand your explanation to include: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_2_2: {
+            lecture: `### 1. Real-World Case Study
+A patient presents to the emergency room with severe bradycardia (slow heart rate) and hypotension after an accidental overdose of beta-blockers, which block sympathetic norepinephrine binding to cardiac receptors. Conversely, a patient experiencing autonomic dysreflexia exhibits a massive, uncontrolled sympathetic discharge below a spinal cord lesion, triggering extreme hypertension, while parasympathetic reflexes cranial nerves attempt to compensate by slowing the heart.
+
+### 2. Core Physiological Principles
+The Peripheral Nervous System (PNS) and Autonomic Nervous System (ANS) govern unconscious body coordination:
+- **PNS Organization**: Includes 12 pairs of cranial nerves and 31 pairs of spinal nerves. Dermatomes map specific cutaneous regions to spinal cord levels.
+- **Autonomic Divisions**:
+  - **Sympathetic Division**: Flight-or-fight response. Preganglionic neurons release acetylcholine (ACh); postganglionic release norepinephrine (NE) to bind adrenergic alpha/beta receptors.
+  - **Parasympathetic Division**: Rest-and-digest. Both preganglionic and postganglionic neurons release acetylcholine to bind nicotinic and muscarinic receptors.
+- **Ganglionic Pathway Architecture**: Sympathetic has short preganglionic and long postganglionic axons; parasympathetic has long preganglionic and short postganglionic axons.
+
+### 3. Empirical & Methodological Frameworks
+Autonomic activity is evaluated by measuring sweat gland output, heart rate variability, or testing dermatomal sensation mapping.
+
+### 4. Clinical & Practical Application
+Beta-adrenergic antagonists (beta-blockers) decrease heart rate and contractility to manage hypertension, while anticholinergic drugs block parasympathetic vagal input to treat bradycardia.`,
+            socraticInit: "Let's explore Lesson 2.2: The Peripheral & Autonomic Nervous System. How do sympathetic and parasympathetic pathway structures differ in terms of their pre- and post-ganglionic neurotransmitters?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const sympatheticCheck = text.includes('sympathetic') && (text.includes('norepinephrine') || text.includes('ne') || text.includes('adrenergic'));
+                const parasympatheticCheck = text.includes('parasympathetic') && (text.includes('acetylcholine') || text.includes('ach') || text.includes('cholinergic'));
+                const preganglionicCheck = text.includes('preganglionic') || text.includes('both release acetylcholine');
+                if ((sympatheticCheck && parasympatheticCheck) || preganglionicCheck) {
+                    return { passed: true, feedback: "Splendid! You correctly noted that preganglionic fibers in both systems release acetylcholine, whereas sympathetic postganglionic fibers release norepinephrine and parasympathetic postganglionic release acetylcholine. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Recall that preganglionic neurons in both divisions release acetylcholine (ACh). Contrast this with the postganglionic neurotransmitters: norepinephrine (NE) for sympathetic vs. ACh for parasympathetic." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_2_2'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (cranial, dermatome, sympathetic, parasympathetic, ganglionic, receptors, norepinephrine) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_2_3: {
+            lecture: `### 1. Real-World Case Study
+A patient experiences numbness and tingling in the hand, especially in the thumb and index finger. A nerve conduction study confirms compression of the median nerve within the carpal tunnel, impairing sensory transduction in cutaneous mechanoreceptors (such as Meissner and Pacinian corpuscles). Under a different diagnostic evaluation, a patient with visual deficits is diagnosed with a pituitary tumor compressing the optic chiasm, blocking light transduction pathways driven by rhodopsin bleaching in photoreceptors.
+
+### 2. Core Physiological Principles
+Sensory systems convert physical stimuli into neural signals:
+- **Cutaneous Mechanoreceptors**: Meissner corpuscles detect light touch; Pacinian corpuscles detect deep pressure and vibration. Proprioceptors monitor joint position and muscle stretch.
+- **Sensory Pathway**: Sensory signals travel via three-neuron chains from peripheral receptors, through the spinal cord (e.g., dorsal columns), to the primary sensory cortex.
+- **Photoreception Transduction**: Light strikes rhodopsin in rod outer segments, causing **rhodopsin bleaching** (retinal dissociates from opsin), closing Na+ channels and hyperpolarizing the photoreceptor.
+- **Audition mechanics**: Sound waves enter the ear canal, vibrating the tympanic membrane, ossicles, and the fluid inside the cochlea. This bends hair cells on the basilar membrane, opening potassium channels to depolarize the sensory neuron.
+
+### 3. Empirical & Methodological Frameworks
+Two-point discrimination tests assess mechanoreceptive density. Pure-tone audiometry evaluates auditory threshold mechanics.
+
+### 4. Clinical & Practical Application
+Nerve compression syndromes (e.g., carpal tunnel) are managed by surgical decompression to restore sensory pathways. Visual field maps localize visual path lesions.`,
+            socraticInit: "Welcome to Lesson 2.3: Special & Somatic Senses. How do mechanical stimuli become electrical signals in the somatic senses, and what is rhodopsin bleaching in photoreception?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const mechanoCheck = text.includes('mechanoreceptor') || text.includes('meissner') || text.includes('pacinian') || text.includes('transduction') || text.includes('pressure') || text.includes('touch');
+                const photoCheck = text.includes('bleaching') || text.includes('rhodopsin') || text.includes('light') || text.includes('retinal') || text.includes('opsin');
+                if (mechanoCheck && photoCheck) {
+                    return { passed: true, feedback: "Outstanding! You explained that cutaneous mechanoreceptors transduce physical pressure into electrical signals, and you detailed how rhodopsin bleaching shifts light signals in photoreceptors. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Make sure to cover both somatic mechanoreceptive transduction (e.g. pressure/vibration converting to graded potentials) and photoreceptive rhodopsin bleaching (dissociation of retinal and opsin under light)." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_2_3'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (mechanoreceptors, Meissner, Pacinian, photoreception, rhodopsin, cochlea, proprioceptors) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_2_4: {
+            lecture: `### 1. Real-World Case Study
+A patient presents with weight loss, heat intolerance, and bulging eyes (exophthalmos). Blood tests reveal high thyroxine levels but very low thyroid-stimulating hormone (TSH), indicating hyperthyroidism (Graves' disease). The thyroid gland has escaped normal homeostatic feedback control due to thyroid-stimulating antibodies binding to TSH receptors. In contrast, a patient with Type 1 diabetes experiences insulin deficiency due to autoimmune destruction of pancreatic beta cells, impairing cellular glucose uptake.
+
+### 2. Core Physiological Principles
+The endocrine system regulates cellular metabolism via chemical messengers:
+- **Hypothalamic-Hypophyseal System**: The hypothalamus regulates the anterior pituitary via the hypophyseal portal system (vascular) and the posterior pituitary via the hypophyseal tract (neural).
+- **Hormone Classifications**:
+  - **Water-Soluble (Peptides/Amines)**: Bind extracellular receptors, activating G-proteins and second-messenger cascades (e.g., cAMP, IP3/DAG) to alter protein activity.
+  - **Lipid-Soluble (Steroids/Thyroid Hormones)**: Cross the membrane, bind intracellular receptors, and act as transcription factors to directly alter gene activation.
+- **Feedback Loops**: Endocrine axes (like the HPT or HPA axes) use negative feedback where target gland hormones inhibit hypothalamic and pituitary secretion to maintain homeostasis.
+
+### 3. Empirical & Methodological Frameworks
+Endocrine function is assessed via enzyme-linked immunosorbent assays (ELISA) measuring circulating hormone concentrations.
+
+### 4. Clinical & Practical Application
+TSH levels serve as the primary screening tool for thyroid dysfunction. Guided insulin therapy replaces pancreatic output in patients with Type 1 diabetes.`,
+            socraticInit: "Let's discuss Lesson 2.4: The Endocrine System. How do water-soluble and lipid-soluble hormones differ in their receptor locations and mechanisms of action?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const waterCheck = (text.includes('water') || text.includes('peptide')) && (text.includes('surface') || text.includes('extracellular') || text.includes('second messenger') || text.includes('camp'));
+                const lipidCheck = (text.includes('lipid') || text.includes('steroid') || text.includes('intracellular') || text.includes('gene') || text.includes('nucleus'));
+                if (waterCheck && lipidCheck) {
+                    return { passed: true, feedback: "Superb! You correctly identified that water-soluble hormones bind membrane-surface receptors and trigger second-messenger systems like cAMP, whereas lipid-soluble/steroid hormones bind intracellular receptors to alter gene transcription directly. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Contrast where their receptors are: membrane-surface for water-soluble (using second-messenger systems like cAMP) vs. intracellular/nuclear for lipid-soluble/steroids (regulating gene expression directly)." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_2_4'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (hypophyseal, feedback, endocrine, second-messenger, camp, steroid, peptide) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_2_5: {
+            lecture: `### 1. Real-World Case Study
+A patient receives a blood transfusion of Type A blood but is later found to have Type B blood. The mismatch triggers an acute hemolytic transfusion reaction, where antibodies in the patient's plasma bind to Type A antigens on the donor erythrocytes, causing complement-mediated hemolysis. In the hematology unit, another patient with deep vein thrombosis is treated with heparin to inhibit the coagulation cascade, preventing further clot growth and ensuring vascular hemostasis.
+
+### 2. Core Physiological Principles
+Blood transports nutrients and provides immediate clotting protection:
+- **Plasma Composition**: 92% water, containing proteins (albumin, globulins, fibrinogen) and electrolytes.
+- **Erythropoiesis**: The generation of red blood cells in red bone marrow, stimulated by erythropoietin (EPO) in response to tissue hypoxia.
+- **Blood Typing**: Based on A, B, and Rh (D) antigens on erythrocyte membranes. Compatibility requires that donor antigens do not match recipient antibodies.
+- **Hemostasis**:
+  1. *Vascular Spasm*: Immediate vasoconstriction.
+  2. *Platelet Plug*: Adhesion and aggregation of platelets at the injury site.
+  3. *Coagulation Cascade*: Intrinsic (activated by tissue damage) and extrinsic (activated by blood vessel damage) pathways converge to the common pathway, converting soluble fibrinogen into insoluble fibrin threads.
+
+### 3. Empirical & Methodological Frameworks
+Blood compatibility is tested via agglutination typing and cross-matching. Hemostasis is monitored via prothrombin time (PT) assays.
+
+### 4. Clinical & Practical Application
+Anticoagulants (heparin, warfarin) block clotting cascade enzymes to treat thrombosis. Erythropoietin injections treat anemia in chronic kidney disease.`,
+            socraticInit: "Welcome to Lesson 2.5: Cardiovascular Blood. Why does a blood transfusion mismatch lead to hemolysis, and what is the role of erythropoietin (EPO) in blood regulation?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const transfusionCheck = text.includes('antigen') || text.includes('antibody') || text.includes('immun') || text.includes('react') || text.includes('mismatch') || text.includes('hemolysis');
+                const epoCheck = text.includes('epo') || text.includes('erythropoietin') || text.includes('red blood cell') || text.includes('oxygen') || text.includes('hypoxia') || text.includes('erythropoiesis');
+                if (transfusionCheck && epoCheck) {
+                    return { passed: true, feedback: "Excellent explanation! You described how antibodies bind to mismatched antigens to trigger hemolysis, and you detailed EPO's role in regulating red blood cell production (erythropoiesis). CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Explain how mismatched blood antigens react with the recipient's plasma antibodies to cause hemolysis. Also, state how EPO stimulates red blood cell production (erythropoiesis)." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_2_5'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (plasma, erythropoiesis, erythropoietin, clotting, compatibility, transfusion, hemostasis) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_2_6: {
+            lecture: `### 1. Real-World Case Study
+A patient presents with dyspnea on exertion. Echocardiography reveals mitotic fusion of the mitral valve (mitral stenosis), altering pressure-volume lines on a Wiggers diagram. The stenosis blocks left ventricular filling, lowering cardiac output. Additionally, to manage the patient's blood pressure, the clinician calculates total peripheral resistance. According to Poiseuille's law, a minor drop in arteriole vessel radius significantly elevates resistance and blood pressure, requiring vaso-dilator interventions.
+
+### 2. Core Physiological Principles
+The heart acts as a dual-pump coordinating systemic and pulmonary circulation:
+- **Cardiac Conduction System**: Electrical signals originate at the SA node, travel to the AV node (introducing a delay), down the AV bundle and Purkinje fibers to depolarize the ventricles.
+- **Cardiac Cycle & ECG**: ECG waves correlate with electrical events: P wave (atrial depolarization), QRS complex (ventricular depolarization), and T wave (ventricular repolarization). These trigger mechanical contraction and relaxation phases.
+- **Hemodynamics**: Guided by Poiseuille's law:
+  $$\\text{Resistance} = \\frac{8\\eta L}{\\pi r^4}$$
+  Resistance is highly sensitive to vessel radius ($r$), blood viscosity ($\\eta$), and vessel length ($L$).
+- **Systemic Vessels**: Includes the celiac trunk (supplying upper GI organs) and the Circle of Willis (cerebral collateral circulation).
+
+### 3. Empirical & Methodological Frameworks
+ECGs map electrical vectors. The Wiggers diagram synthesizes pressure, volume, ECG, and heart sounds during a single heartbeat.
+
+### 4. Clinical & Practical Application
+Managing arterial diameter (vessel radius) with drugs like ACE inhibitors decreases total peripheral resistance to treat hypertension. Mitral valve defects are treated with surgical repair.`,
+            socraticInit: "Let's study Lesson 2.6: The Heart & Hemodynamics. How do ECG waves correspond to the electrical and mechanical phases of the cardiac cycle, and what factor has the greatest influence on hemodynamics resistance?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const ecgCheck = (text.includes('p wave') || text.includes('qrs') || text.includes('t wave')) && (text.includes('depolariz') || text.includes('repolariz'));
+                const radiusCheck = text.includes('radius') || text.includes('diameter') || text.includes('radius fourth power') || text.includes('poiseuille');
+                if (ecgCheck && radiusCheck) {
+                    return { passed: true, feedback: "Magnificent! You mapped the ECG waves to cardiac depolarization/repolarization and identified vessel radius (via Poiseuille's law) as the primary determinant of hemodynamic resistance. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Describe how ECG waves correlate with electrical events (P: atrial depolarization, QRS: ventricular depolarization, T: ventricular repolarization). Then identify the single most powerful factor affecting resistance according to Poiseuille's law (vessel radius)." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_2_6'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (conduction, wiggers, radius, hemodynamics, resistance, celiac, circle) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
             }
         }
     };
@@ -246,7 +468,7 @@ Clinical practices translate these frameworks directly to patient care. We exami
                             systemPrompt,
                             text,
                             {
-                                moduleKey: 'anatomy_llm',
+                                moduleKey: 'anatomy2_llm',
                                 model: model,
                                 history: withHistory ? localHistory.slice(0, -1) : undefined,
                                 stream: false
@@ -362,7 +584,7 @@ Clinical practices translate these frameworks directly to patient care. We exami
                 }
                 
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy2_llm',
                     model: model,
                     stream: false
                 });
@@ -421,7 +643,7 @@ Do NOT use LaTeX math formatting. Return ONLY markdown content.`;
                     throw new Error('GnosysLLM is unavailable');
                 }
                 const resp = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy2_llm',
                     model: model,
                     stream: false
                 });
@@ -472,7 +694,7 @@ Do NOT use LaTeX math formatting. Return ONLY markdown content.`;
 
             try {
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy2_llm',
                     model: model,
                     stream: false,
                 });
@@ -496,7 +718,7 @@ Do NOT use LaTeX math formatting. Return ONLY markdown content.`;
 
             try {
                 const result = await window.GnosysLLM.generateResponse('', prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy2_llm',
                     model: model,
                     stream: false,
                 });
@@ -544,7 +766,7 @@ Return a JSON object with this exact schema: {"passed": boolean, "feedback": "st
                     throw new Error('GnosysLLM is unavailable');
                 }
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy2_llm',
                     model: model,
                     stream: false
                 });
@@ -597,7 +819,7 @@ Return a JSON object with this exact schema: {"passed": boolean, "feedback": "st
                     throw new Error('GnosysLLM is unavailable');
                 }
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy2_llm',
                     model: model,
                     stream: false
                 });
@@ -650,7 +872,7 @@ Return a JSON object with this exact schema: {"passed": boolean, "feedback": "st
                         systemPrompt,
                         text,
                         {
-                            moduleKey: 'anatomy_llm',
+                            moduleKey: 'anatomy2_llm',
                             model: model,
                             history: history.slice(0, -1),
                             stream: false

@@ -326,7 +326,6 @@ function renderCourseGrid() {
         return `
             <a ${clickAction} class="block group relative ${isActive ? '' : 'opacity-70 hover:opacity-90'}">
                 <div class="glass-card rounded-3xl p-8 h-full transition-all duration-300 module-active relative overflow-hidden flex flex-col min-h-[220px]">
-                    <div class="absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-10 -mt-10 transition-all ${accentGlow}"></div>
                     
                     <div class="flex justify-between items-start mb-6">
                         <div class="w-14 h-14 rounded-2xl flex items-center justify-center border shadow-lg ${iconWrapClass}" style="${iconWrapStyle}">

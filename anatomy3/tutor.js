@@ -6,7 +6,7 @@
 window.AnatomyTutor = (() => {
     function getAnatomyModel() {
         if (typeof window.getActiveModel === 'function') {
-            return window.getActiveModel('anatomy_llm');
+            return window.getActiveModel('anatomy3_llm');
         }
         return localStorage.getItem('anatomy3_llm') || localStorage.getItem('syngnosia_tutor_model') || 'gemma';
     }
@@ -108,6 +108,25 @@ window.AnatomyTutor = (() => {
                    .replace(/\n/g, '<br>');
     };
 
+    function appendBubble(msgsEl, role, text) {
+        const wrap = document.createElement("div");
+        const bubble = document.createElement("div");
+        
+        if (role === "user") {
+            wrap.className = "flex justify-end mt-2";
+            bubble.className = "max-w-[80%] bg-pink-600 text-white px-3 py-2 rounded-2xl rounded-tr-sm text-xs font-medium";
+            bubble.innerHTML = parseMD(text);
+        } else {
+            wrap.className = "flex justify-start mt-2";
+            bubble.className = "max-w-[85%] bg-slate-900 border border-slate-800 text-slate-200 px-3 py-2 rounded-2xl rounded-tl-sm text-xs font-medium";
+            if (text) bubble.innerHTML = parseMD(text);
+        }
+        wrap.appendChild(bubble);
+        msgsEl.appendChild(wrap);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+        return bubble;
+    }
+
     function parseModelJson(rawText) {
         const text = typeof rawText === 'string' ? rawText.trim() : '';
         if (!text) throw new Error('Empty model response');
@@ -170,7 +189,7 @@ An elite mountaineer ascends to high altitude without supplemental oxygen. As am
 
 ### 2. Core Physiological Principles
 The respiratory system regulates gas exchange through ventilation mechanics and transport dynamics:
-- **Ventilation Physics (Boyle's Law)**: Volume and pressure are inversely proportional ($P \propto 1/V$). Muscle contraction (diaphragm and external intercostals) increases thoracic volume, dropping alveolar pressure below atmospheric pressure to draw air into the lungs.
+- **Ventilation Physics (Boyle's Law)**: Volume and pressure are inversely proportional ($P \\propto 1/V$). Muscle contraction (diaphragm and external intercostals) increases thoracic volume, dropping alveolar pressure below atmospheric pressure to draw air into the lungs.
 - **Gas Transport Dynamics**: Oxygen binds to hemoglobin in the alveoli. The oxygen-hemoglobin dissociation curve charts this relationship.
 - **The Bohr Effect**: Environmental shifts alter hemoglobin's oxygen affinity. A drop in pH (acidosis), elevation in PCO2, increased temperature, or higher 2,3-BPG concentration reduce oxygen affinity, shifting the curve to the right to facilitate oxygen unloading.
 
@@ -200,6 +219,172 @@ Understanding Bohr shifts is vital in intensive care units. Managing fever or re
                     return { passed: true, feedback: "Wonderful explanation! You successfully explained lung mechanics and oxygen affinity using all checklist terms." };
                 }
                 return { passed: false, feedback: `Please expand your explanation to include these essential terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_3_3: {
+            lecture: `### 1. Real-World Case Study
+A patient presents with burning epigastric pain that is temporarily relieved by eating. Endoscopy reveals a mucosal erosion in the duodenum, confirming a peptic ulcer. The erosion has penetrated the mucosa and submucosa, approaching the muscularis externa layer. In terms of metabolism, cells in the surrounding tissue rely on cellular respiration to produce ATP, driving mucosal repair and enzyme kinetics across the alimentary canal.
+
+### 2. Core Physiological Principles
+The digestive system processes nutrients through physical and chemical pathways:
+- **Alimentary Canal Layering**: The wall consists of four histological layers:
+  1. *Mucosa*: Epithelium, lamina propria, muscularis mucosae. Functions in secretion and absorption.
+  2. *Submucosa*: Dense irregular connective tissue containing blood vessels, lymphatics, and the submucosal plexus.
+  3. *Muscularis Externa*: Inner circular and outer longitudinal smooth muscle layers driving peristalsis.
+  4. *Serosa/Adventitia*: The outer protective layer.
+- **Cellular Respiration**:
+  - **Glycolysis**: Occurs in the cytoplasm; breaks down glucose into pyruvate, yielding 2 net ATP.
+  - **Krebs Citric Acid Cycle**: Occurs in the mitochondria matrix; processes acetyl-CoA, releasing CO2 and yielding ATP, NADH, and FADH2.
+  - **Electron Transport Chain (ETC)**: Occurs in the inner mitochondria membrane; transfers electrons to build a proton gradient, yielding approximately 28-32 ATP via ATP synthase.
+
+### 3. Empirical & Methodological Frameworks
+Peptic ulcers are staged by depth of tissue penetration. Metabolic pathway rates are traced using radioactive carbon-labeled glucose.
+
+### 4. Clinical & Practical Application
+Proton pump inhibitors (PPIs) inhibit gastric acid secretion to prevent mucosal digestion, allowing tissues to repair their histological layers.`,
+            socraticInit: "Welcome to Lesson 3.3: The Digestive System & Metabolism. What are the four histological layers of the digestive tract wall, and where does glycolysis take place?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const layersCheck = text.includes('mucosa') && text.includes('submucosa') && text.includes('muscularis') && (text.includes('serosa') || text.includes('adventitia'));
+                const glycolysisCheck = text.includes('cytoplasm') || text.includes('cytosol');
+                if (layersCheck && glycolysisCheck) {
+                    return { passed: true, feedback: "Superb! You correctly listed the four histological layers (mucosa, submucosa, muscularis externa, and serosa) and noted that glycolysis occurs in the cytoplasm. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Recall the four layers from superficial to deep: mucosa, submucosa, muscularis externa, and serosa. Also, state which cellular compartment hosts glycolysis (cytoplasm)." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_3_3'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (mucosa, submucosa, glycolysis, krebs, etc, mitochondria, atp) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_3_4: {
+            lecture: `### 1. Real-World Case Study
+A patient with severe glomerulonephritis presents with hematuria (blood in urine) and edema. Inflammatory damage has compromised the glomerular filtration membrane, permitting proteins and red blood cells to enter Bowman's space. Consequently, the patient's Net Filtration Pressure (NFP) is altered, dropping GFR. In response to hypovolemia and low perfusion, the kidneys release renin, triggering the RAAS cascade to raise blood pressure and retain sodium via aldosterone.
+
+### 2. Core Physiological Principles
+The urinary system filters blood, maintains fluid balance, and regulates blood pressure:
+- **Nephron Anatomy**: The structural unit of the kidney, consisting of the renal corpuscle (glomerulus and Bowman's capsule) and the renal tubule (proximal tubule, loop of Henle, distal tubule, and collecting duct).
+- **Glomerular Filtration Mechanics**: Driven by **Net Filtration Pressure (NFP)**:
+  $$\\text{NFP} = \\text{HP}_g - (\\text{OP}_g + \\text{HP}_c)$$
+  where $\\text{HP}_g$ is glomerular hydrostatic pressure (55 mmHg), $\\text{OP}_g$ is blood colloid osmotic pressure (30 mmHg), and $\\text{HP}_c$ is capsular hydrostatic pressure (15 mmHg).
+- **Renin-Angiotensin-Aldosterone System (RAAS)**: Low perfusion or low NaCl triggers the juxtaglomerular cells to release **renin**. Renin converts angiotensinogen to angiotensin I, which ACE converts to angiotensin II. Angiotensin II triggers vasoconstriction and stimulates the adrenal cortex to release **aldosterone**, promoting renal sodium reabsorption.
+
+### 3. Empirical & Methodological Frameworks
+GFR is measured clinically using creatinine clearance or insulin clearance. NFP is computed based on hydrostatic and colloid pressures.
+
+### 4. Clinical & Practical Application
+ACE inhibitors block angiotensin II production, and aldosterone antagonists block sodium retention, reducing blood pressure in patients with chronic kidney disease or renal artery stenosis.`,
+            socraticInit: "Let's discuss Lesson 3.4: The Urinary System. What physical forces determine the net filtration pressure (NFP) in the glomerulus, and what triggers renin release?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const pressuresCheck = (text.includes('hydrostatic') || text.includes('blood pressure')) && (text.includes('osmotic') || text.includes('oncotic') || text.includes('capsular'));
+                const reninCheck = text.includes('low') && (text.includes('perfusion') || text.includes('blood pressure') || text.includes('sodium') || text.includes('nacl'));
+                if (pressuresCheck && reninCheck) {
+                    return { passed: true, feedback: "Excellent! You described the balance between glomerular hydrostatic pressure (pushing fluid out) and opposing colloid osmotic/capsular pressures. You also identified low blood pressure/perfusion as the trigger for renin release. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Describe the three forces involved in NFP: glomerular hydrostatic pressure, blood colloid osmotic pressure, and capsular hydrostatic pressure. Then, detail what triggers the release of renin from the kidneys (e.g., low blood pressure)." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_3_4'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (nephron, glomerular, filtration, hydrostatic, oncotic, raas, aldosterone) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_3_5: {
+            lecture: `### 1. Real-World Case Study
+A patient in the ICU presents with severe diarrhea, lethargy, and rapid breathing (Kussmaul respiration). An Arterial Blood Gas (ABG) panel reveals a pH of 7.28, bicarbonate (HCO3-) of 15 mEq/L, and PaCO2 of 32 mmHg. The diagnosis is metabolic acidosis. The bicarbonate buffer system is depleted, and the respiratory system is actively compensating by hyperventilating to blow off CO2. Concurrently, the body activates the RAAS axis to retain sodium and secrete hydrogen ions to restore acid-base balance.
+
+### 2. Core Physiological Principles
+Maintaining fluid, electrolyte, and acid-base balance is critical for survival:
+- **Fluid Compartments**: Divided into intracellular fluid (ICF, 2/3) and extracellular fluid (ECF, 1/3, consisting of interstitial fluid and plasma).
+- **Acid-Base Homeostasis**: Blood pH must be maintained between 7.35 and 7.45:
+  - **Bicarbonate Buffer System**: The primary chemical buffer:
+    $$\\text{CO}_2 + \\text{H}_2\\text{O} \\rightleftharpoons \\text{H}_2\\text{CO}_3 \\rightleftharpoons \\text{H}^+ + \\text{HCO}_3^-$$
+  - **Respiratory Compensation**: Hyperventilation decreases PaCO2 (raises pH); hypoventilation increases PaCO2 (lowers pH).
+  - **Renal Compensation**: Reabsorbs bicarbonate and secretes hydrogen ions ($H^+$) into the urine to manage long-term pH.
+- **Electrolytes**: Aldosterone regulates sodium retention and potassium excretion, ANP promotes sodium loss, and PTH increases calcium reabsorption.
+
+### 3. Empirical & Methodological Frameworks
+ABG interpretation tracks: pH (<7.35 acidosis, >7.45 alkalosis), PaCO2 (respiratory indicator), and HCO3- (metabolic indicator).
+
+### 4. Clinical & Practical Application
+Severe acidosis is treated with intravenous sodium bicarbonate infusions, alongside addressing the underlying cause (e.g., insulin for diabetic ketoacidosis).`,
+            socraticInit: "Welcome to Lesson 3.5: Fluid, Electrolyte, & Acid-Base Balance. How do you interpret an ABG panel with low pH, high PaCO2, and normal/high HCO3-, and how does the body compensate?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const diagnosisCheck = text.includes('respiratory acidosis');
+                const compCheck = text.includes('renal') || text.includes('kidney') || text.includes('bicarbonate') || text.includes('secrete hydrogen') || text.includes('reabsorb');
+                if (diagnosisCheck && compCheck) {
+                    return { passed: true, feedback: "Outstanding! You correctly diagnosed respiratory acidosis and noted that the kidneys compensate by reabsorbing bicarbonate and excreting hydrogen ions. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "A low pH with high PaCO2 indicates respiratory acidosis. Explain how the kidneys compensate for this by manipulating bicarbonate reabsorption and hydrogen ion excretion." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_3_5'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (buffer, bicarbonate, acidosis, alkalosis, compensation, electrolyte, raas) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
+            }
+        },
+        lesson_3_6: {
+            lecture: `### 1. Real-World Case Study
+A 28-year-old female presents with irregular menstrual cycles and difficulty conceiving. Laboratory tests reveal an lack of mid-cycle LH surge, indicating anovulatory cycles. In normal physiology, estrogen levels rise, triggering a positive feedback surge of LH from the anterior pituitary, which induces ovulation. Without ovulation, the corpus luteum does not form, leading to a deficiency in progesterone, which is necessary to transition the uterine lining into the secretory phase for fertilization and implantation.
+
+### 2. Core Physiological Principles
+Reproductive function is regulated by the hypothalamic-pituitary-gonadal (HPG) axis:
+- **Gametogenesis**: Spermatogenesis (continuous in males, producing 4 functional haploid sperm) vs. oogenesis (begins before birth, halts in prophase I, resumes at puberty, and only completes meiosis II if fertilization occurs).
+- **Hormonal Regulation**: GnRH stimulates the anterior pituitary to secrete LH (triggers ovulation in females, testosterone in males) and FSH (stimulates follicle development in females, spermatogenesis in males).
+- **Menstrual & Ovarian Cycles**:
+  - *Ovarian Cycle*: Follicular phase (estrogen dominant) ➔ Ovulation (LH surge) ➔ Luteal phase (progesterone dominant).
+  - *Uterine Cycle*: Menstrual phase ➔ Proliferative phase (estrogen driven) ➔ Secretory phase (progesterone driven, preparing for implantation).
+
+### 3. Empirical & Methodological Frameworks
+Ovulation is tracked via basal body temperature charts, serum progesterone levels, or urinary LH surge test kits.
+
+### 4. Clinical & Practical Application
+Infertility due to hormonal imbalances is treated using ovulation induction drugs (e.g., clomiphene citrate, which blocks estrogen receptors to increase GnRH, FSH, and LH).`,
+            socraticInit: "Let's study Lesson 3.6: Reproductive Systems & Development. How do LH and progesterone levels coordinate the ovarian and uterine cycles, and when does ovulation occur?",
+            socraticEval: (input) => {
+                const text = input.toLowerCase();
+                const lhCheck = text.includes('lh') && (text.includes('surge') || text.includes('ovulation') || text.includes('trigger'));
+                const progCheck = text.includes('progesterone') && (text.includes('luteum') || text.includes('uterine') || text.includes('secretory') || text.includes('lining') || text.includes('maintain'));
+                if (lhCheck && progCheck) {
+                    return { passed: true, feedback: "Magnificent! You explained how the LH surge triggers ovulation and how progesterone from the corpus luteum maintains the uterine lining during the secretory phase. CONGRATULATIONS! You have grasped the concepts and can proceed to Stage 3." };
+                }
+                return { passed: false, feedback: "Explain the role of the LH surge in triggering ovulation, and describe how progesterone secreted during the luteal phase prepares and maintains the uterine lining for implantation." };
+            },
+            feynmanEval: (input) => {
+                const text = input.toLowerCase();
+                const missing = [];
+                const checklist = KEY_TERM_CHECKLISTS['lesson_3_6'];
+                checklist.forEach(term => {
+                    if (!text.includes(term)) missing.push(term);
+                });
+                if (missing.length === 0) {
+                    return { passed: true, feedback: "Perfect! Your explanation incorporates all key terms (ovarian, uterine, gonadotropin, progesterone, estrogen, gametogenesis, fertilization) clearly." };
+                }
+                return { passed: false, feedback: `Your explanation is missing key terms: **${missing.join(', ')}**.` };
             }
         }
     };
@@ -286,7 +471,7 @@ Clinical diagnostics translate these physiological principles to patient diagnos
                             systemPrompt,
                             text,
                             {
-                                moduleKey: 'anatomy_llm',
+                                moduleKey: 'anatomy3_llm',
                                 model: model,
                                 history: withHistory ? localHistory.slice(0, -1) : undefined,
                                 stream: false
@@ -402,7 +587,7 @@ Clinical diagnostics translate these physiological principles to patient diagnos
                 }
                 
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy3_llm',
                     model: model,
                     stream: false
                 });
@@ -461,7 +646,7 @@ Do NOT use LaTeX math formatting. Return ONLY markdown content.`;
                     throw new Error('GnosysLLM is unavailable');
                 }
                 const resp = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy3_llm',
                     model: model,
                     stream: false
                 });
@@ -512,7 +697,7 @@ Do NOT use LaTeX math formatting. Return ONLY markdown content.`;
 
             try {
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy3_llm',
                     model: model,
                     stream: false,
                 });
@@ -536,7 +721,7 @@ Do NOT use LaTeX math formatting. Return ONLY markdown content.`;
 
             try {
                 const result = await window.GnosysLLM.generateResponse('', prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy3_llm',
                     model: model,
                     stream: false,
                 });
@@ -584,7 +769,7 @@ Return a JSON object with this exact schema: {"passed": boolean, "feedback": "st
                     throw new Error('GnosysLLM is unavailable');
                 }
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy3_llm',
                     model: model,
                     stream: false
                 });
@@ -637,7 +822,7 @@ Return a JSON object with this exact schema: {"passed": boolean, "feedback": "st
                     throw new Error('GnosysLLM is unavailable');
                 }
                 const result = await window.GnosysLLM.generateResponse(systemPrompt, prompt, {
-                    moduleKey: 'anatomy_llm',
+                    moduleKey: 'anatomy3_llm',
                     model: model,
                     stream: false
                 });
@@ -690,7 +875,7 @@ Return a JSON object with this exact schema: {"passed": boolean, "feedback": "st
                         systemPrompt,
                         text,
                         {
-                            moduleKey: 'anatomy_llm',
+                            moduleKey: 'anatomy3_llm',
                             model: model,
                             history: history.slice(0, -1),
                             stream: false

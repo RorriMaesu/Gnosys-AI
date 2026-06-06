@@ -43,10 +43,6 @@
         els.chatInput = document.getElementById('chat-input');
         els.btnSend = document.getElementById('btn-send');
         
-        els.feynmanSpeechControls = document.getElementById('feynman-speech-controls');
-        els.btnToggleInputMode = document.getElementById('btn-toggle-input-mode');
-        els.toggleInputText = document.getElementById('toggle-input-text');
-        els.speechIndicator = document.getElementById('speech-indicator');
         els.inputInstructions = document.getElementById('input-instructions');
         
         els.sandboxHandshake = document.getElementById('sandbox-handshake');
@@ -58,6 +54,7 @@
         els.btnGenerateQuestion = document.getElementById('btn-generate-question');
         els.selectActiveLecture = document.getElementById('select-active-lecture');
         els.btnAddLecture = document.getElementById('btn-add-lecture');
+        els.btnDeleteLecture = document.getElementById('btn-delete-lecture');
         
         els.workAreaSplit = document.getElementById('work-area-split');
         els.btnToggleSocratic = document.getElementById('btn-toggle-socratic');
@@ -375,8 +372,9 @@
             return;
         }
         appState.isGeneratingLecture = true;
-        const savedModel = localStorage.getItem('anatomy3_llm') || 'gemma';
-        const modelLabel = savedModel === 'gemma' ? 'Gnosys Gemma' : 'Gnosys Llama';
+        const modelLabel = typeof window.getActiveModelLabel === 'function'
+            ? window.getActiveModelLabel('anatomy3_llm')
+            : (localStorage.getItem('anatomy3_llm') === 'llama' ? 'Gnosys Llama' : 'Gnosys Gemma');
 
         els.lectureContainer.innerHTML = `
             <div class="flex flex-col h-full justify-center p-4 max-w-lg mx-auto space-y-3">
@@ -707,6 +705,28 @@
             });
         }
 
+        if (els.btnDeleteLecture) {
+            els.btnDeleteLecture.addEventListener('click', () => {
+                if (appState.lectures.length <= 1) {
+                    alert("You must keep at least one lecture variation. If you do not like this lecture, you can regenerate it instead.");
+                    return;
+                }
+                if (confirm(`Delete Lecture Variation ${appState.activeLectureIdx + 1}? This action cannot be undone.`)) {
+                    appState.lectures.splice(appState.activeLectureIdx, 1);
+                    localStorage.setItem(`anatomy3_lesson_lectures_${appState.lesson.id}`, JSON.stringify(appState.lectures));
+                    
+                    // Adjust active index
+                    if (appState.activeLectureIdx >= appState.lectures.length) {
+                        appState.activeLectureIdx = appState.lectures.length - 1;
+                    }
+                    localStorage.setItem(`anatomy3_lesson_active_lecture_idx_${appState.lesson.id}`, String(appState.activeLectureIdx));
+                    
+                    renderLectureDropdown();
+                    renderLectureContent(appState.lesson, appState.lectures[appState.activeLectureIdx]);
+                }
+            });
+        }
+
         // Settings Modal and Bypass trigger
         const settingsModal = document.getElementById('settings-modal');
         const btnSettings = document.getElementById('btn-settings');
@@ -720,22 +740,33 @@
         const modelSelect = document.getElementById('model-select');
         if (modelSelect) {
             const savedModel = localStorage.getItem('anatomy3_llm') || 'gemma';
+            const endpoint = localStorage.getItem("anatomy3_ollama_endpoint") || "http://localhost:11434";
+            const cleanEndpoint = endpoint.replace('/api/chat', '').replace('/api/generate', '');
             
-            const opt1 = document.createElement('option');
-            opt1.value = 'gemma';
-            opt1.textContent = 'Gnosys Gemma (Default Local)';
-            opt1.selected = (savedModel === 'gemma');
-            modelSelect.appendChild(opt1);
-            
-            const opt2 = document.createElement('option');
-            opt2.value = 'llama';
-            opt2.textContent = 'Gnosys Llama (Local)';
-            opt2.selected = (savedModel === 'llama');
-            modelSelect.appendChild(opt2);
-            
-            modelSelect.addEventListener('change', () => {
-                localStorage.setItem('anatomy3_llm', modelSelect.value);
-            });
+            if (typeof window.populateModelSelector === 'function') {
+                window.populateModelSelector(modelSelect, savedModel, cleanEndpoint, {
+                    moduleKey: 'anatomy3_llm',
+                    onStatusChange: (status) => {
+                        console.log('[Anatomy III Coursework Model Select]', status.message);
+                    }
+                });
+            } else {
+                const opt1 = document.createElement('option');
+                opt1.value = 'gemma';
+                opt1.textContent = 'Gnosys Gemma (Default Local)';
+                opt1.selected = (savedModel === 'gemma');
+                modelSelect.appendChild(opt1);
+                
+                const opt2 = document.createElement('option');
+                opt2.value = 'llama';
+                opt2.textContent = 'Gnosys Llama (Local)';
+                opt2.selected = (savedModel === 'llama');
+                modelSelect.appendChild(opt2);
+                
+                modelSelect.addEventListener('change', () => {
+                    localStorage.setItem('anatomy3_llm', modelSelect.value);
+                });
+            }
         }
 
         const bypassToggleBtn = document.getElementById('bypass-toggle-btn');

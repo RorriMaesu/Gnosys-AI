@@ -377,6 +377,10 @@
         setGradeDisplay(0, 'PENDING', 'none');
     }
 
+    function isCurriculumBypassEnabledLocal() {
+        return localStorage.getItem('psychology_curriculum_bypass') === 'true';
+    }
+
     function updateForLessonSelection(lessonId) {
         const lesson = findLessonById(lessonId);
         if (!lesson) return;

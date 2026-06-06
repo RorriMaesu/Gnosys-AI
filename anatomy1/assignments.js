@@ -67,6 +67,90 @@
         ],
         lesson_1_2: () => [
             {
+                qText: "Describe the structural components of an atom and define an isotope.",
+                maxScore: 10,
+                rubric: {
+                    criteria: [
+                        { desc: "Identifies protons, neutrons, electrons and locations (nucleus vs orbitals)", points: 5 },
+                        { desc: "Defines isotopes as atoms of same element with differing neutron counts", points: 5 }
+                    ]
+                }
+            },
+            {
+                qText: "Contrast ionic, covalent (polar and nonpolar), and hydrogen bonds, providing physiological examples.",
+                maxScore: 10,
+                rubric: {
+                    criteria: [
+                        { desc: "Contrasts electron transfer (ionic) vs. sharing (covalent) vs. dipole-dipole attractions (hydrogen)", points: 5 },
+                        { desc: "Provides accurate physiological examples (NaCl, O2, H2O molecules, DNA double helix)", points: 5 }
+                    ]
+                }
+            },
+            {
+                qText: "Explain the properties of water that support cellular life and detail the bicarbonate buffer system.",
+                maxScore: 10,
+                rubric: {
+                    criteria: [
+                        { desc: "Details water solvency, high heat capacity, and polar bonding properties", points: 5 },
+                        { desc: "Explains how HCO3- and H+ bind/release to buffer blood pH shifts", points: 5 }
+                    ]
+                }
+            }
+        ],
+        lesson_1_3: () => [
+            {
+                question: "According to enzyme kinetics, how do cellular enzymes catalyze metabolic biochemical reactions?",
+                options: [
+                    "By raising the activation energy required for the reaction.",
+                    "By lowering the activation energy barrier, speeding up reaction rates.",
+                    "By generating ATP to phosphorylate reactants.",
+                    "By changing the pH of the cellular cytoplasm to neutral."
+                ],
+                correctAnswer: 1,
+                explanation: "Enzymes are organic catalysts that accelerate biochemical reactions by lowering the activation energy barrier."
+            },
+            {
+                question: "Which organic macromolecule functions primarily as the cell's long-term energy storage, forms lipid bilayers of membranes, and acts as steroid hormones?",
+                options: ["Carbohydrates", "Lipids", "Proteins", "Nucleic Acids"],
+                correctAnswer: 1,
+                explanation: "Lipids are hydrophobic molecules that function in energy storage (triglycerides), membrane structures (phospholipids), and hormonal signaling (steroids)."
+            },
+            {
+                question: "In enzyme kinetics, what does the term Vmax represent?",
+                options: [
+                    "The maximum volume of the cellular cytoplasm.",
+                    "The velocity of enzymatic reaction when the enzyme is fully saturated with substrate.",
+                    "The substrate concentration at which reaction rate is half of maximum.",
+                    "The voltage limit of resting membrane potentials."
+                ],
+                correctAnswer: 1,
+                explanation: "Vmax is the maximum rate or velocity of an enzymatic reaction achieved when all active sites on the enzyme are saturated with substrate."
+            },
+            {
+                question: "What is the primary role of adenosine triphosphate (ATP) in cellular respiration?",
+                options: [
+                    "To act as a structural building block for the cell wall.",
+                    "To store genetic instructions for protein synthesis.",
+                    "To store and transfer chemical energy within cells for metabolic work.",
+                    "To buffer the cellular cytoplasm against basic changes."
+                ],
+                correctAnswer: 2,
+                explanation: "ATP acts as the primary chemical energy carrier in all cells, capturing energy from glucose catabolism and releasing it to power cellular work."
+            },
+            {
+                question: "Which of the following is the primary chemical buffer system responsible for balancing cellular and blood pH?",
+                options: [
+                    "The sodium-potassium buffer system",
+                    "The carbonic acid-bicarbonate buffer system",
+                    "The lactic acid-pyruvate buffer system",
+                    "The hydrochloric acid-sodium chloride buffer system"
+                ],
+                correctAnswer: 1,
+                explanation: "The carbonic acid-bicarbonate buffer system maintains pH balance in extracellular fluids by neutralizing excess hydrogen ions or hydroxide ions."
+            }
+        ],
+        lesson_1_4: () => [
+            {
                 question: "Which membrane transport mechanism uses cellular energy (ATP) directly to pump sodium ions out of the cell against their concentration gradient?",
                 options: ["Simple Diffusion", "Facilitated Diffusion", "Primary Active Transport", "Secondary Active Transport"],
                 correctAnswer: 2,
@@ -84,40 +168,30 @@
                 explanation: "Pure water is hypotonic to red blood cells (which contain solutes). Water will rush into the cells by osmosis, causing them to swell and burst (hemolysis)."
             },
             {
-                question: "What is the typical resting membrane potential of a neuron, and how is the ion gradient primarily maintained?",
+                question: "During protein synthesis, the process of copying a gene's DNA sequence into a complementary messenger RNA (mRNA) strand is called _______, which occurs in the _______.",
                 options: [
-                    "+30 mV; maintained by passive sodium leakage channels",
-                    "-70 mV; maintained by the Na+/K+ ATPase pump (3 Na+ out, 2 K+ in)",
-                    "-55 mV; maintained by voltage-gated calcium channels",
-                    "0 mV; maintained by equal distribution of chloride ions"
+                    "translation; cytoplasm",
+                    "transcription; nucleus",
+                    "replication; nucleolus",
+                    "transcription; ribosomes"
                 ],
                 correctAnswer: 1,
-                explanation: "The resting membrane potential is approx -70 mV, maintained by leakage channels and the Na+/K+ pump which pumps 3 Na+ out and 2 K+ in using ATP."
+                explanation: "Transcription is the process of synthesizing mRNA from a DNA template in the nucleus. Translation is the decoding of mRNA into a polypeptide chain at the ribosome in the cytoplasm."
             },
             {
-                question: "According to enzyme kinetics, how do cellular enzymes catalyze metabolic biochemical reactions?",
-                options: [
-                    "By raising the activation energy required for the reaction.",
-                    "By lowering the activation energy barrier, speeding up reaction rates.",
-                    "By generating ATP to phosphorylate reactants.",
-                    "By changing the pH of the cellular cytoplasm to neutral."
-                ],
+                question: "During which phase of mitosis do sister chromatids separate and move toward opposite poles of the cell?",
+                options: ["Prophase", "Metaphase", "Anaphase", "Telophase"],
+                correctAnswer: 2,
+                explanation: "During anaphase, sister chromatids (now chromosomes) are pulled apart by spindle fibers toward opposite poles of the cell."
+            },
+            {
+                question: "Which type of cell junction forms an impermeable seal between adjacent cells, preventing molecules from passing through the intercellular space?",
+                options: ["Desmosomes", "Tight Junctions", "Gap Junctions", "Hemidesmosomes"],
                 correctAnswer: 1,
-                explanation: "Enzymes are organic catalysts that accelerate biochemical reactions by lowering the activation energy barrier."
-            },
-            {
-                question: "In Cystic Fibrosis, a genetic defect impairs chloride transport. Which channel is defective, and what is the cellular consequence?",
-                options: [
-                    "The CFTR channel; chloride ions cannot exit cells, leading to thick, dehydrated mucus.",
-                    "The Na+/K+ pump; cells lose resting potential and undergo necrosis.",
-                    "Voltage-gated sodium channels; action potentials are blocked.",
-                    "Aquaporin channels; water cannot enter cells, causing cellular dehydration."
-                ],
-                correctAnswer: 0,
-                explanation: "Cystic Fibrosis is caused by mutations in the CFTR gene, which code for a defective chloride channel. Chloride cannot exit, resulting in thick, sticky mucus."
+                explanation: "Tight junctions (occluding junctions) seal adjacent epithelial cells together, creating a barrier that prevents leakage of extracellular fluid across the cellular sheet."
             }
         ],
-        lesson_1_3: () => [
+        lesson_1_5: () => [
             {
                 question: "Which primary tissue type is characterized by tightly packed cells, has no direct blood supply (avascular), and covers body surfaces?",
                 options: ["Epithelial Tissue", "Connective Tissue", "Muscle Tissue", "Nervous Tissue"],
@@ -157,9 +231,21 @@
                 ],
                 correctAnswer: 0,
                 explanation: "Neurons are the excitable cells that transmit nerve impulses. Neuroglia are support cells that protect and nourish neurons."
+            },
+            {
+                question: "Which type of body membrane lines cavities that are closed to the exterior environment, such as the pleural, pericardial, and peritoneal cavities, and consists of simple squamous epithelium resting on a thin layer of loose connective tissue?",
+                options: ["Mucous Membrane", "Serous Membrane", "Cutaneous Membrane", "Synovial Membrane"],
+                correctAnswer: 1,
+                explanation: "Serous membranes (serosae) line closed ventral body cavities and secrete watery serous fluid to reduce friction between moving organs."
+            },
+            {
+                question: "During which type of exocrine gland secretion does the cell accumulate its secretory product in the cytoplasm, and then the entire cell ruptures and dies to release the secretion (as seen in sebaceous glands)?",
+                options: ["Merocrine Secretion", "Apocrine Secretion", "Holocrine Secretion", "Eccrine Secretion"],
+                correctAnswer: 2,
+                explanation: "In holocrine secretion, the entire cell ruptures to release its contents. In merocrine secretion, products are released via exocytosis, and in apocrine secretion, only the apical portion of the cell pinches off."
             }
         ],
-        lesson_1_4: () => [
+        lesson_1_6: () => [
             {
                 question: "Put the strata of the epidermis in the correct order from the deepest layer to the most superficial layer (in thick skin):",
                 options: [
@@ -201,7 +287,7 @@
                 explanation: "In ABCDE criteria: A=Asymmetry, B=Border, C=Color, D=Diameter (>6mm), E=Evolving."
             }
         ],
-        lesson_1_5: () => [
+        lesson_1_7: () => [
             {
                 question: "What structural bone unit consists of concentric lamellae rings surrounding a central vascular canal?",
                 options: ["Trabecula", "Osteon", "Canaliculus", "Lacuna"],
@@ -226,24 +312,120 @@
                 explanation: "When blood Ca2+ is low, parathyroid glands release Parathyroid Hormone (PTH), which increases osteoclast activity (resorption) and increases calcium retention in the kidneys."
             },
             {
+                question: "A young patient presents with a skeletal injury where the bone is partially fractured and bent, but not completely broken into two pieces. Which type of bone fracture is this?",
+                options: ["Comminuted Fracture", "Greenstick Fracture", "Spiral Fracture", "Compound Fracture"],
+                correctAnswer: 1,
+                explanation: "Greenstick fractures are incomplete fractures where one side of the bone breaks and the other bends. They occur primarily in children whose bones are more flexible."
+            },
+            {
+                question: "What is the correct chronological sequence of the four physiological stages of bone fracture repair?",
+                options: [
+                    "Hematoma formation ➔ Fibrocartilaginous callus formation ➔ Bony callus formation ➔ Bone remodeling",
+                    "Fibrocartilaginous callus formation ➔ Hematoma formation ➔ Bony callus formation ➔ Bone remodeling",
+                    "Hematoma formation ➔ Bony callus formation ➔ Fibrocartilaginous callus formation ➔ Bone remodeling",
+                    "Bony callus formation ➔ Hematoma formation ➔ Fibrocartilaginous callus formation ➔ Bone remodeling"
+                ],
+                correctAnswer: 0,
+                explanation: "Bone fracture repair proceeds through: 1) Hematoma (blood clot) formation, 2) Fibrocartilaginous (soft) callus formation, 3) Bony (hard) callus formation by osteoblasts, and 4) Bone remodeling to restore original structure."
+            }
+        ],
+        lesson_1_8: () => [
+            {
+                question: "Which of the following is a bone of the axial skeleton?",
+                options: ["Clavicle", "Sternum", "Scapula", "Femur"],
+                correctAnswer: 1,
+                explanation: "The axial skeleton forms the central axis of the body and includes the skull, vertebral column, ribs, and sternum. The clavicle, scapula, and femur are part of the appendicular skeleton."
+            },
+            {
+                question: "What is the name of the prominent opening at the base of the occipital bone through which the spinal cord connects to the brain?",
+                options: ["Foramen Magnum", "Sella Turcica", "Glenoid Cavity", "Mandibular Fossa"],
+                correctAnswer: 0,
+                explanation: "The foramen magnum is the large opening in the occipital bone of the skull, allowing the brain stem/spinal cord to pass through."
+            },
+            {
+                question: "Which cranial bone contains the sella turcica, a saddle-like depression that houses the pituitary gland?",
+                options: ["Temporal bone", "Sphenoid bone", "Ethmoid bone", "Frontal bone"],
+                correctAnswer: 1,
+                explanation: "The sphenoid bone, located at the center of the skull base, features the sella turcica (Turkish saddle) which protects the master endocrine gland, the pituitary gland."
+            },
+            {
+                question: "A patient presents with pain localized to the bone that forms the forehead and the superior portion of the orbit. Which bone is affected?",
+                options: ["Parietal bone", "Occipital bone", "Frontal bone", "Zygomatic bone"],
+                correctAnswer: 2,
+                explanation: "The frontal bone forms the forehead, the roof of the nasal cavity, and the superior arches of the orbits (eye sockets)."
+            },
+            {
+                question: "Which region of the vertebral column consists of 5 fused vertebrae that articulate laterally with the pelvic girdle?",
+                options: ["Cervical vertebrae", "Thoracic vertebrae", "Lumbar vertebrae", "Sacrum"],
+                correctAnswer: 3,
+                explanation: "The sacrum is a triangular bone formed by the fusion of five sacral vertebrae (S1-S5). It articulates with the coxal (hip) bones to form the sacroiliac joint, anchoring the vertebral column to the pelvis."
+            }
+        ],
+        lesson_1_9: () => [
+            {
+                question: "A patient's radiology scan shows a fracture in the cup-like socket of the coxal bone that articulates with the head of the femur. What is this landmark called?",
+                options: ["Glenoid Cavity", "Acetabulum", "Foramen Magnum", "Sella Turcica"],
+                correctAnswer: 1,
+                explanation: "The acetabulum is the deep, round socket on the lateral surface of the coxal bone (pelvis) that receives the head of the femur to form the hip joint."
+            },
+            {
+                question: "Which shallow cavity on the lateral angle of the scapula articulates with the head of the humerus to form the glenohumeral (shoulder) joint?",
+                options: ["Acetabulum", "Mandibular Fossa", "Glenoid Cavity", "Coracoid Process"],
+                correctAnswer: 2,
+                explanation: "The glenoid cavity of the scapula is a shallow socket that receives the head of the humerus, forming the highly mobile shoulder joint."
+            },
+            {
+                question: "The prominent, non-articular bony projections located on the proximal femur that serve as attachment sites for powerful hip and thigh muscles are the:",
+                options: ["Condyles", "Tuberosities", "Trochanters", "Fossae"],
+                correctAnswer: 2,
+                explanation: "The greater and lesser trochanters are large, bony projections unique to the proximal femur that serve as major attachment points for gluteal and other deep rotatory hip/thigh muscles."
+            },
+            {
+                question: "Which of the following bones forms the lateral side of the forearm in anatomical position and articulates with the carpal bones at the wrist?",
+                options: ["Ulna", "Radius", "Humerus", "Fibula"],
+                correctAnswer: 1,
+                explanation: "In the anatomical position, the radius is the lateral bone of the forearm (on the thumb side), whereas the ulna is medial (on the pinky side)."
+            },
+            {
+                question: "Which pelvic bone marking is the rough, inferior projection of the ischium that bears the body's weight when sitting?",
+                options: ["Ischial Spine", "Ischial Tuberosity", "Iliac Crest", "Pubic Symphysis"],
+                correctAnswer: 1,
+                explanation: "The ischial tuberosity (often called the 'sit bone') is a rough, inferior projection of the ischium that supports the weight of the pelvis when in a seated position."
+            }
+        ],
+        lesson_1_10: () => [
+            {
                 question: "Rotating the forearm so that the palm faces anteriorly or upward is called:",
                 options: ["Pronation", "Supination", "Inversion", "Eversion"],
                 correctAnswer: 1,
                 explanation: "Supination is the movement of the forearm that turns the palm anteriorly (upwards). Pronation turns the palm posteriorly (downwards)."
             },
             {
-                question: "In osteoporosis, what is the underlying physiological mechanism of bone loss?",
-                options: [
-                    "Osteocyte death leads to structural collapse of the marrow.",
-                    "Bone resorption by osteoclasts outpaces bone deposition by osteoblasts.",
-                    "Calcium salts fail to calcify during endochondral ossification.",
-                    "Osteoblasts undergo rapid hypertrophy, blocking osteon channels."
-                ],
+                question: "Which joint classification is structurally connected by a fluid-filled cavity and is functionally defined as a freely movable diarthrosis?",
+                options: ["Fibrous Joint", "Cartilaginous Joint", "Synovial Joint", "Synarthrosis Joint"],
+                correctAnswer: 2,
+                explanation: "Synovial joints contain a joint cavity filled with synovial fluid and are structurally designed for high mobility, making them diarthroses."
+            },
+            {
+                question: "The sutures of the skull and the gomphoses anchoring teeth to their sockets are examples of which structural joint classification?",
+                options: ["Synovial Joints", "Cartilaginous Joints", "Fibrous Joints", "Diarthroses"],
+                correctAnswer: 2,
+                explanation: "Fibrous joints are joined by dense fibrous connective tissue and lack a joint cavity. Sutures and gomphoses are classic examples of fibrous joints that allow little to no movement."
+            },
+            {
+                question: "The pubic symphysis and intervertebral discs are examples of symphyses, which are joined by fibrocartilage. How are these joints functionally classified based on mobility?",
+                options: ["Synarthrosis", "Amphiarthrosis", "Diarthrosis", "Synovial"],
                 correctAnswer: 1,
-                explanation: "Osteoporosis is characterized by low bone mass due to bone remodeling imbalance where osteoclast resorption exceeds osteoblast deposition."
+                explanation: "Symphyses are cartilaginous joints connected by fibrocartilage, allowing slight movement, which classifies them functionally as amphiarthroses."
+            },
+            {
+                question: "Which type of uniaxial synovial joint allows rotation around a single axis, such as the atlantoaxial joint between the first two cervical vertebrae?",
+                options: ["Hinge joint", "Pivot joint", "Ball-and-socket joint", "Saddle joint"],
+                correctAnswer: 1,
+                explanation: "A pivot joint is a uniaxial joint where a rounded portion of bone rotates within a ring formed by another bone and a ligament. The atlantoaxial joint and proximal radioulnar joint are pivot joints."
             }
         ],
-        lesson_1_6: () => [
+        lesson_1_11: () => [
             {
                 question: "Which protein in a sarcomere covers the myosin-binding sites on actin when a muscle is at rest?",
                 options: ["Troponin", "Tropomyosin", "Titin", "Myosin"],
@@ -284,6 +466,20 @@
                 explanation: "Botulinum toxin cleaves SNARE proteins at the presynaptic motor neuron terminal, preventing vesicle fusion and blockading ACh release, causing flaccid paralysis."
             },
             {
+                question: "Which type of muscle contraction occurs when muscle tension develops, but the muscle does not change in length and the load is not moved (e.g., maintaining posture or holding a heavy book in a static position)?",
+                options: ["Concentric Isotonic Contraction", "Eccentric Isotonic Contraction", "Isometric Contraction", "Tetanic Contraction"],
+                correctAnswer: 2,
+                explanation: "An isometric contraction occurs when tension is generated within the muscle, but muscle length remains constant because the load exceeds the maximal force produced."
+            },
+            {
+                question: "When a muscle is stimulated at such a high frequency that the relaxation phase between stimuli completely disappears, resulting in a smooth, sustained, and maximal contraction, the muscle is in a state of:",
+                options: ["Treppe", "Incomplete Tetanus", "Complete (Fused) Tetanus", "Wave Summation"],
+                correctAnswer: 2,
+                explanation: "Complete (fused) tetanus occurs at very high frequency stimulation where the muscle has no time to relax between stimuli, producing a smooth, maximal, and continuous plateau of tension."
+            }
+        ],
+        lesson_1_12: () => [
+            {
                 question: "During elbow flexion, the biceps brachii acts as the main muscle driving the movement, while the triceps brachii must relax. What are their respective terms?",
                 options: [
                     "Biceps = Antagonist; Triceps = Agonist",
@@ -293,15 +489,65 @@
                 ],
                 correctAnswer: 1,
                 explanation: "The agonist (prime mover) is the main muscle contracting to cause a movement (biceps). The antagonist opposes that movement and must relax (triceps)."
+            },
+            {
+                question: "Which muscle is the prime mover of jaw closure (mastication)?",
+                options: ["Temporalis", "Masseter", "Sternocleidomastoid", "Deltoid"],
+                correctAnswer: 1,
+                explanation: "The masseter muscle originates on the zygomatic arch and inserts into the mandible, serving as the prime mover of jaw closure."
+            },
+            {
+                question: "Which muscle is the prime mover of arm abduction along the frontal plane?",
+                options: ["Pectoralis Major", "Latissimus Dorsi", "Deltoid", "Biceps Brachii"],
+                correctAnswer: 2,
+                explanation: "The deltoid muscle is the powerful prime mover of arm abduction (moving the arm away from the midline along the frontal plane)."
+            },
+            {
+                question: "Which of the following muscles is located in the anterior compartment of the thigh and acts to extend the leg at the knee?",
+                options: ["Biceps Femoris", "Rectus Femoris", "Gastrocnemius", "Gluteus Maximus"],
+                correctAnswer: 1,
+                explanation: "The rectus femoris is a member of the quadriceps femoris muscle group in the anterior thigh, acting to extend the knee (leg) and flex the hip."
+            },
+            {
+                question: "A lever system where the load is positioned between the fulcrum and the effort (such as standing on your tiptoes, where the calf muscles lift the body weight) operates at a mechanical advantage and is classified as a:",
+                options: ["First-class lever", "Second-class lever", "Third-class lever", "Fourth-class lever"],
+                correctAnswer: 1,
+                explanation: "In a second-class lever, the load is between the fulcrum and the effort (F-L-E). This system always operates at a mechanical advantage because the effort arm is longer than the load arm."
             }
         ],
-        lesson_1_7: () => [
+        lesson_1_13: () => [
             {
                 question: "Which neuroglial cells are responsible for myelinating axons in the Central Nervous System (CNS)?",
                 options: ["Schwann Cells", "Astrocytes", "Oligodendrocytes", "Microglia"],
                 correctAnswer: 2,
                 explanation: "Oligodendrocytes myelinate axons in the CNS. Schwann cells perform this function in the PNS."
             },
+            {
+                question: "Which star-shaped neuroglial cells in the Central Nervous System (CNS) help form the blood-brain barrier (BBB) and regulate the chemical environment around neurons?",
+                options: ["Schwann Cells", "Astrocytes", "Oligodendrocytes", "Ependymal Cells"],
+                correctAnswer: 1,
+                explanation: "Astrocytes are the most abundant glial cells in the CNS. They wrap around capillaries to form the blood-brain barrier, regulate extracellular ion and neurotransmitter concentrations, and support neurons structurally."
+            },
+            {
+                question: "Which type of neuroglia acts as the resident immune cells (macrophages) of the Central Nervous System (CNS), phagocytizing pathogens and cellular debris?",
+                options: ["Ependymal Cells", "Microglia", "Schwann Cells", "Satellite Cells"],
+                correctAnswer: 1,
+                explanation: "Microglia are specialized immune cells in the CNS that act as phagocytes to clear damaged cells, debris, and pathogens, playing a crucial protective role."
+            },
+            {
+                question: "Which part of a neuron receives incoming synaptic signals from other neurons and conducts electrical changes toward the soma?",
+                options: ["Axon", "Dendrites", "Myelin Sheath", "Axon Hillock"],
+                correctAnswer: 1,
+                explanation: "Dendrites are thin, branching processes extending from the neuron's cell body (soma) that receive chemical signals from presynaptic terminals and transmit them inward."
+            },
+            {
+                question: "What type of neuroglia lines the ventricles of the brain and the central canal of the spinal cord, producing and circulating cerebrospinal fluid (CSF)?",
+                options: ["Oligodendrocytes", "Astrocytes", "Ependymal Cells", "Schwann Cells"],
+                correctAnswer: 2,
+                explanation: "Ependymal cells are ciliated cuboidal or columnar cells that line the fluid-filled cavities of the CNS. They produce, monitor, and assist in the circulation of cerebrospinal fluid."
+            }
+        ],
+        lesson_1_14: () => [
             {
                 question: "During an action potential, what causes the rapid depolarization phase?",
                 options: [
@@ -345,6 +591,23 @@
                 ],
                 correctAnswer: 1,
                 explanation: "High extracellular K+ reduces the concentration gradient. Less K+ leaves the cell through leakage channels, depolarizing the resting potential. This inactivates voltage-gated Na+ channels, halting further action potential propagation."
+            },
+            {
+                question: "Which of the following describes the electrical and ion channel events during an Excitatory Postsynaptic Potential (EPSP)?",
+                options: [
+                    "Opening of chemically-gated chloride channels, causing hyperpolarization.",
+                    "Opening of chemically-gated sodium/potassium channels, causing a localized depolarization.",
+                    "Opening of voltage-gated potassium channels, causing repolarization.",
+                    "Closure of leakage channels, keeping the potential constant."
+                ],
+                correctAnswer: 1,
+                explanation: "An EPSP is a local depolarization of the postsynaptic membrane caused by neurotransmitter binding to chemically-gated (ligand-gated) channels, allowing Na+ influx to exceed K+ efflux."
+            },
+            {
+                question: "What is the term for postsynaptic summation that occurs when a single presynaptic neuron fires nerve impulses in rapid succession, releasing neurotransmitter repeatedly to build up voltage at the postsynaptic membrane?",
+                options: ["Spatial Summation", "Temporal Summation", "Synaptic Summation", "Action Summation"],
+                correctAnswer: 1,
+                explanation: "Temporal summation occurs when a single presynaptic neuron fires repeatedly in rapid succession (summation over time). Spatial summation occurs when multiple different presynaptic neurons fire simultaneously (summation over space)."
             }
         ]
     };
