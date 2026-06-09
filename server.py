@@ -4,8 +4,10 @@ import subprocess
 import platform
 import json
 import os
+import threading
 
 PORT = 8020
+active_downloads = {}
 
 def get_quantime_install_path():
     if platform.system() != 'Windows':
@@ -538,6 +540,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'comfy_running': ace_running,
                     'custom_node_installed': True, # Mock true for backward compatibility
                     'models_installed': len(discovered_models) > 0,
+                    'active_downloads': active_downloads,
                     'scan_details': {
                         'models': discovered_models
                     },
@@ -828,6 +831,46 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(response_data)
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/download':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                payload = json.loads(self.rfile.read(content_length))
+                repo_id = payload.get('repo_id')
+                target_dir = payload.get('target_dir')
+                
+                # Check virtual environment python
+                server_dir = os.path.dirname(os.path.abspath(__file__))
+                venv_python = os.path.join(server_dir, '.venv', 'Scripts', 'python.exe')
+                python_exe = venv_python if os.path.exists(venv_python) else 'python'
+
+                # Build python download script
+                script = f"from huggingface_hub import snapshot_download; snapshot_download(repo_id='{repo_id}', local_dir=r'{target_dir}')"
+                
+                # Run download in background thread
+                def download_task():
+                    active_downloads[repo_id] = 'downloading'
+                    print(f"[Downloader] Starting download for {repo_id} to {target_dir}...")
+                    try:
+                        subprocess.run([python_exe, '-c', script], check=True)
+                        active_downloads[repo_id] = 'success'
+                        print(f"[Downloader] Successfully downloaded {repo_id}!")
+                    except Exception as err:
+                        active_downloads[repo_id] = 'failed'
+                        print(f"[Downloader] Failed to download {repo_id}: {err}")
+
+                threading.Thread(target=download_task, daemon=True).start()
+
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'message': 'Download started in background.'}).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')

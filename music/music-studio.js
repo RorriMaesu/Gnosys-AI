@@ -8,6 +8,8 @@
 
     let explorerCurrentPath = comfyPath;
 
+    let downloadPollInterval = null;
+
     document.addEventListener('DOMContentLoaded', () => {
         initUI();
         checkMusicServiceStatus();
@@ -384,23 +386,72 @@
             if (diagBox) {
                 diagBox.innerHTML = '';
                 if (data.diagnostics) {
-                    const makeBadge = (label, status, url) => {
-                        const baseClass = "text-[9px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 shrink-0 transition-all text-decoration-none";
-                        const themeClass = status 
-                            ? "bg-teal-500/10 text-teal-400 border-teal-500/20 hover:bg-teal-500/20 cursor-pointer" 
-                            : "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 cursor-pointer animate-pulse";
-                        const iconHtml = status 
-                            ? '<i class="fa-solid fa-circle-check"></i>' 
-                            : '<i class="fa-solid fa-download"></i>';
-                        const tooltip = status ? 'Installed and verified.' : 'Missing. Click to download from Hugging Face.';
-                        return `<a href="${url}" target="_blank" class="${baseClass} ${themeClass}" title="${tooltip}">${iconHtml}${label}</a>`;
+                    const makeBadge = (label, status, repoId, targetSubdir) => {
+                        const isDownloading = data.active_downloads && data.active_downloads[repoId] === 'downloading';
+                        const isFailed = data.active_downloads && data.active_downloads[repoId] === 'failed';
+                        const isSuccess = status || (data.active_downloads && data.active_downloads[repoId] === 'success');
+                        
+                        const baseClass = "text-[9px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 shrink-0 transition-all text-decoration-none cursor-pointer";
+                        let themeClass = "";
+                        let iconHtml = "";
+                        let text = label;
+                        let tooltip = "";
+
+                        if (isDownloading) {
+                            themeClass = "bg-amber-500/10 text-amber-400 border-amber-500/20 badge-pulse-amber";
+                            iconHtml = '<i class="fa-solid fa-spinner fa-spin"></i>';
+                            text = `${label} (Downloading...)`;
+                            tooltip = "Downloading model checkpoints from Hugging Face...";
+                        } else if (isSuccess) {
+                            themeClass = "bg-teal-500/10 text-teal-400 border-teal-500/20 hover:bg-teal-500/20";
+                            iconHtml = '<i class="fa-solid fa-circle-check"></i>';
+                            tooltip = "Installed and verified.";
+                        } else {
+                            themeClass = "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 animate-pulse";
+                            iconHtml = '<i class="fa-solid fa-download"></i>';
+                            tooltip = isFailed ? "Download failed. Click to retry." : "Missing. Click to download directly.";
+                        }
+
+                        const targetPath = `${comfyPath}\\${targetSubdir.replace(/\//g, '\\')}`;
+                        const badgeEl = document.createElement('a');
+                        badgeEl.className = `${baseClass} ${themeClass}`;
+                        badgeEl.title = tooltip;
+                        badgeEl.innerHTML = `${iconHtml}${text}`;
+                        
+                        if (!isSuccess && !isDownloading) {
+                            badgeEl.addEventListener('click', async (e) => {
+                                e.preventDefault();
+                                showBannerNotification(`Starting download for ${label}...`, 'info');
+                                try {
+                                    const dlRes = await fetch(`${API_BASE}/api/music/download`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ repo_id: repoId, target_dir: targetPath })
+                                    });
+                                    const dlData = await dlRes.json();
+                                    if (dlData.status === 'success') {
+                                        showBannerNotification(`Download initiated for ${label}!`, 'success');
+                                        checkMusicServiceStatus();
+                                    } else {
+                                        showBannerNotification(`Failed to start download: ${dlData.message}`, 'error');
+                                    }
+                                } catch (err) {
+                                    showBannerNotification(`Failed to start download: ${err.message}`, 'error');
+                                }
+                            });
+                        } else {
+                            badgeEl.addEventListener('click', (e) => e.preventDefault());
+                        }
+
+                        return badgeEl;
                     };
-                    diagBox.innerHTML += makeBadge("XL SFT", data.diagnostics.xl_sft, "https://huggingface.co/ACE-Step/acestep-v15-xl-sft");
-                    diagBox.innerHTML += makeBadge("XL Base", data.diagnostics.xl_base, "https://huggingface.co/ACE-Step/acestep-v15-xl-base");
-                    diagBox.innerHTML += makeBadge("XL Turbo", data.diagnostics.xl_turbo, "https://huggingface.co/ACE-Step/acestep-v15-xl-turbo");
-                    diagBox.innerHTML += makeBadge("Vocoder", data.diagnostics.vocoder, "https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/tree/main");
-                    diagBox.innerHTML += makeBadge("DCAE Encoder", data.diagnostics.dcae, "https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/tree/main");
-                    diagBox.innerHTML += makeBadge("UMT5 Text", data.diagnostics.umt5, "https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/tree/main");
+
+                    diagBox.appendChild(makeBadge("XL SFT", data.diagnostics.xl_sft, "ACE-Step/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft"));
+                    diagBox.appendChild(makeBadge("XL Base", data.diagnostics.xl_base, "ACE-Step/acestep-v15-xl-base", "checkpoints/acestep-v15-xl-base"));
+                    diagBox.appendChild(makeBadge("XL Turbo", data.diagnostics.xl_turbo, "ACE-Step/acestep-v15-xl-turbo", "checkpoints/acestep-v15-xl-turbo"));
+                    diagBox.appendChild(makeBadge("Vocoder", data.diagnostics.vocoder, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_vocoder"));
+                    diagBox.appendChild(makeBadge("DCAE Encoder", data.diagnostics.dcae, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_dcae_f8c8"));
+                    diagBox.appendChild(makeBadge("UMT5 Text", data.diagnostics.umt5, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/umt5-base"));
                 }
             }
 
@@ -426,6 +477,18 @@
                 launchBtn.classList.add('hidden');
                 installBtn.classList.remove('hidden');
             }
+            // Control polling for active downloads
+            const downloadsActive = data.active_downloads && Object.values(data.active_downloads).some(status => status === 'downloading');
+            if (downloadsActive) {
+                if (!downloadPollInterval) {
+                    downloadPollInterval = setInterval(checkMusicServiceStatus, 3000);
+                }
+            } else {
+                if (downloadPollInterval) {
+                    clearInterval(downloadPollInterval);
+                    downloadPollInterval = null;
+                }
+            }
         } catch (err) {
             badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-400 border border-white/5 uppercase font-extrabold tracking-wider';
             badge.textContent = 'Unknown';
@@ -436,6 +499,11 @@
             // Show onboarding warning if connection failed
             const onboardingCard = document.getElementById('backend-onboarding-card');
             if (onboardingCard) onboardingCard.classList.remove('hidden');
+
+            if (downloadPollInterval) {
+                clearInterval(downloadPollInterval);
+                downloadPollInterval = null;
+            }
         }
     }
 
