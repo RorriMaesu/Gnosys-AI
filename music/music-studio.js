@@ -547,14 +547,26 @@ Your objective is to brainstorm catchy, mnemonically dense, and rhythmically ali
 The user wants to generate song lyrics about: "${subjectName}".
 Keep the lines rhyming, easy to read/sing, and packed with actual educational keywords, facts, and definitions.
 
-IMPORTANT: The current song length configuration is ${audioLengthVal} seconds. Adjust the length of the generated lyrics accordingly:
-- If 10s: generate only 1 short, impactful verse (4 lines max).
-- If 30s: generate 1 verse and 1 short chorus (8 lines max).
-- If 60s: generate 2 verses and 1 chorus (12-16 lines max).
+IMPORTANT: Always generate full, complete song lyrics including at least 2-3 Verses, a Chorus (repeated), and a Bridge to provide a comprehensive, high-quality study track. Do not truncate or abbreviate the song structure.
 
 Output your response using the following XML structure:
 <lyrics>
 [Verse 1]
+(lyrics here)
+
+[Chorus]
+(lyrics here)
+
+[Verse 2]
+(lyrics here)
+
+[Chorus]
+(lyrics here)
+
+[Bridge]
+(lyrics here)
+
+[Chorus]
 (lyrics here)
 </lyrics>
 <meta>
