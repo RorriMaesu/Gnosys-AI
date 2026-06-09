@@ -208,6 +208,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         return self.client_address[0]
 
     def do_GET(self):
+        global install_thread, install_status
         if self.path == '/api/hardware-info':
             try:
                 system_ram_gb = get_system_ram_gb()
@@ -320,7 +321,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 directories = []
                 system = platform.system()
 
-                 if not target_path:
+                if not target_path:
                     # List root drives on Windows, or root directory on Unix
                     if system == 'Windows':
                         import string
@@ -590,7 +591,6 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 body = json.loads(self.rfile.read(content_length).decode('utf-8')) if content_length > 0 else {}
                 target_path = body.get('install_path', 'D:\\ComfyUI')
                 
-                global install_thread, install_status
                 if 'install_status' not in globals():
                     install_status = {'progress': 0, 'step': 'idle', 'error': None}
                 
@@ -696,7 +696,6 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/install-status':
             try:
-                global install_status
                 if 'install_status' not in globals():
                     install_status = {'progress': 0, 'step': 'idle', 'error': None}
                 
