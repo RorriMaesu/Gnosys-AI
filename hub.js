@@ -640,6 +640,16 @@ window.showQuantimeInstallModal = function() {
     if (modal) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+        
+        // Reset to initial prompt view on open
+        const promptView = document.getElementById('quantime-install-prompt-view');
+        const tutorialView = document.getElementById('quantime-install-tutorial-view');
+        if (promptView && tutorialView) {
+            promptView.classList.remove('hidden');
+            promptView.classList.add('flex');
+            tutorialView.classList.add('hidden');
+            tutorialView.classList.remove('flex');
+        }
     }
 };
 
@@ -648,6 +658,112 @@ window.closeQuantimeInstallModal = function() {
     if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
+    }
+};
+
+// Interactive Walkthrough Tutorial Logic for Quantime Setup
+let currentTutorialStep = 0;
+const tutorialSteps = [
+    {
+        title: "Locate the Download",
+        text: "Click the download icon in your browser's toolbar or download history to find the downloaded 'QuantimeSetup.exe' file.",
+        image: "./assets/InstallInstructionImages/Step1QuantimeClickTheDownloadIconInstruction.jpg"
+    },
+    {
+        title: "Access File Options",
+        text: "If your browser warns that the file is not commonly downloaded, hover over the file item and click the three dots button (...) for options.",
+        image: "./assets/InstallInstructionImages/Step2QuantimeClickThe3DotsInstruction.jpg"
+    },
+    {
+        title: "Keep the File",
+        text: "Select 'Keep' or 'Keep anyway' from the options menu. Quantime is fully local and secure, but lacks an expensive EV publisher signature.",
+        image: "./assets/InstallInstructionImages/Step3QuantimeClickKeepAnywaynstruction.jpg"
+    },
+    {
+        title: "Open the Installer",
+        text: "Once saved, click 'Open file' directly from your browser's downloads list to launch the installer.",
+        image: "./assets/InstallInstructionImages/Step4QuantimeClickOpenFileInstruction.jpg"
+    },
+    {
+        title: "Run & Install",
+        text: "Click 'Run' or 'Install' in the setup window to begin. Follow the standard installation wizard to complete the setup.",
+        image: "./assets/InstallInstructionImages/FinalStep5QuantimeClickInstallInstruction.jpg"
+    }
+];
+
+window.startQuantimeTutorial = function() {
+    const promptView = document.getElementById('quantime-install-prompt-view');
+    const tutorialView = document.getElementById('quantime-install-tutorial-view');
+    if (promptView && tutorialView) {
+        promptView.classList.add('hidden');
+        promptView.classList.remove('flex');
+        tutorialView.classList.remove('hidden');
+        tutorialView.classList.add('flex');
+    }
+    currentTutorialStep = 0;
+    renderTutorialStep(currentTutorialStep);
+};
+
+function renderTutorialStep(step) {
+    const data = tutorialSteps[step];
+    const stepNumber = document.getElementById('tutorial-step-number');
+    const stepTitle = document.getElementById('tutorial-step-title');
+    const stepText = document.getElementById('tutorial-step-text');
+    const stepImage = document.getElementById('tutorial-step-image');
+    
+    if (stepNumber) stepNumber.innerText = `Step ${step + 1} of 5`;
+    if (stepTitle) stepTitle.innerText = data.title;
+    if (stepText) stepText.innerText = data.text;
+    if (stepImage) stepImage.src = data.image;
+    
+    // Update active dot indicators
+    const dots = document.querySelectorAll('.tutorial-dot');
+    dots.forEach((dot, idx) => {
+        if (idx === step) {
+            dot.className = "tutorial-dot w-2 h-2 rounded-full bg-indigo-500 transition-all duration-300";
+        } else {
+            dot.className = "tutorial-dot w-2 h-2 rounded-full bg-white/20 transition-all duration-300";
+        }
+    });
+    
+    // Update button states
+    const prevBtn = document.getElementById('tutorial-prev-btn');
+    const nextBtn = document.getElementById('tutorial-next-btn');
+    
+    if (prevBtn) {
+        if (step === 0) {
+            prevBtn.disabled = true;
+            prevBtn.style.opacity = '0.4';
+            prevBtn.style.cursor = 'not-allowed';
+        } else {
+            prevBtn.disabled = false;
+            prevBtn.style.opacity = '1';
+            prevBtn.style.cursor = 'pointer';
+        }
+    }
+    
+    if (nextBtn) {
+        if (step === tutorialSteps.length - 1) {
+            nextBtn.innerHTML = `Finish <i class="fa-solid fa-check ml-1.5 text-[10px]"></i>`;
+        } else {
+            nextBtn.innerHTML = `Next <i class="fa-solid fa-chevron-right text-[10px]"></i>`;
+        }
+    }
+}
+
+window.nextTutorialStep = function() {
+    if (currentTutorialStep < tutorialSteps.length - 1) {
+        currentTutorialStep++;
+        renderTutorialStep(currentTutorialStep);
+    } else {
+        closeQuantimeInstallModal();
+    }
+};
+
+window.prevTutorialStep = function() {
+    if (currentTutorialStep > 0) {
+        currentTutorialStep--;
+        renderTutorialStep(currentTutorialStep);
     }
 };
 

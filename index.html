@@ -118,40 +118,69 @@
                 <button onclick="closeQuantimeInstallModal()" class="w-8 h-8 rounded-full glass-card flex items-center justify-center text-slate-400 hover:text-white transition-colors">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
+            </div>            <div id="quantime-install-prompt-view" class="flex flex-col">
+                <div class="space-y-4 text-slate-300 text-sm mb-8">
+                    <p>Quantime could not be auto-detected on this system. Follow these simple steps to install and integrate it:</p>
+                    <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
+                        <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
+                        <div>
+                            <p class="font-bold text-white mb-0.5">Download the Installer</p>
+                            <p class="text-xs text-slate-400">Grab the latest Windows setup file (`QuantimeSetup.exe`) directly from our GitHub releases.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
+                        <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
+                        <div>
+                            <p class="font-bold text-white mb-0.5">Run & Complete Setup</p>
+                            <p class="text-xs text-slate-400">Run the installer, complete the environment setup wizard, and let it launch the background tray engine.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
+                        <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</span>
+                        <div>
+                            <p class="font-bold text-white mb-0.5">Access via Dashboard</p>
+                            <p class="text-xs text-slate-400">Once installed, simply click the Quantime card here on Gnosys-AI to automatically boot and open the scheduler.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <a href="https://github.com/RorriMaesu/Quantime/releases/latest/download/QuantimeSetup.exe" onclick="startQuantimeTutorial()" target="_blank" class="flex-grow flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/20 border border-indigo-500">
+                        <i class="fa-solid fa-download"></i> Download Installer
+                    </a>
+                    <button onclick="closeQuantimeInstallModal()" class="px-6 py-3.5 rounded-2xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5 hover:bg-white/5">
+                        Close
+                    </button>
+                </div>
             </div>
 
-            <div class="space-y-4 text-slate-300 text-sm mb-8">
-                <p>Quantime could not be auto-detected on this system. Follow these simple steps to install and integrate it:</p>
-                <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
-                    <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
-                    <div>
-                        <p class="font-bold text-white mb-0.5">Download the Installer</p>
-                        <p class="text-xs text-slate-400">Grab the latest Windows setup file (`QuantimeSetup.exe`) directly from our GitHub releases.</p>
-                    </div>
+            <!-- Step-by-Step Walkthrough Tutorial View (Hidden by Default) -->
+            <div id="quantime-install-tutorial-view" class="hidden flex-col">
+                <div class="mb-4">
+                    <span id="tutorial-step-number" class="text-xs font-extrabold uppercase tracking-wider text-indigo-400">Step 1 of 5</span>
+                    <h4 id="tutorial-step-title" class="text-lg font-bold text-white mt-1">Downloading the Installer</h4>
+                    <p id="tutorial-step-text" class="text-xs text-slate-400 mt-1">Click the Download icon in the browser tab or toolbar to locate your file.</p>
                 </div>
-                <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
-                    <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
-                    <div>
-                        <p class="font-bold text-white mb-0.5">Run & Complete Setup</p>
-                        <p class="text-xs text-slate-400">Run the installer, complete the environment setup wizard, and let it launch the background tray engine.</p>
-                    </div>
+                
+                <div class="relative rounded-2xl border border-white/10 overflow-hidden bg-slate-900/50 mb-6 flex items-center justify-center min-h-[220px]">
+                    <img id="tutorial-step-image" src="" alt="Tutorial Step" class="w-full h-auto object-contain max-h-[260px] rounded-lg">
                 </div>
-                <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
-                    <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</span>
-                    <div>
-                        <p class="font-bold text-white mb-0.5">Access via Dashboard</p>
-                        <p class="text-xs text-slate-400">Once installed, simply click the Quantime card here on Gnosys-AI to automatically boot and open the scheduler.</p>
-                    </div>
-                </div>
-            </div>
 
-            <div class="flex flex-col sm:flex-row gap-3">
-                <a href="https://github.com/RorriMaesu/Quantime/releases/latest/download/QuantimeSetup.exe" onclick="closeQuantimeInstallModal()" target="_blank" class="flex-grow flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/20 border border-indigo-500">
-                    <i class="fa-solid fa-download"></i> Download Installer
-                </a>
-                <button onclick="closeQuantimeInstallModal()" class="px-6 py-3.5 rounded-2xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5 hover:bg-white/5">
-                    Close
-                </button>
+                <div class="flex justify-between items-center gap-3">
+                    <button id="tutorial-prev-btn" onclick="prevTutorialStep()" class="px-5 py-2.5 rounded-xl glass-card text-xs font-bold text-slate-300 hover:text-white transition-all border border-white/5 flex items-center gap-1.5">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i> Back
+                    </button>
+                    <div class="flex items-center gap-1">
+                        <span class="tutorial-dot w-2 h-2 rounded-full bg-indigo-500"></span>
+                        <span class="tutorial-dot w-2 h-2 rounded-full bg-white/20"></span>
+                        <span class="tutorial-dot w-2 h-2 rounded-full bg-white/20"></span>
+                        <span class="tutorial-dot w-2 h-2 rounded-full bg-white/20"></span>
+                        <span class="tutorial-dot w-2 h-2 rounded-full bg-white/20"></span>
+                    </div>
+                    <button id="tutorial-next-btn" onclick="nextTutorialStep()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all shadow-md shadow-indigo-600/10 flex items-center gap-1.5">
+                        Next <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
