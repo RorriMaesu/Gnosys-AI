@@ -266,6 +266,7 @@
         const lyricsPromptVal = document.getElementById('lyrics-prompt').value.trim();
         const subjectSelector = document.getElementById('subject-selector').value;
         const customSubjectVal = document.getElementById('custom-subject-input').value.trim();
+        const audioLengthVal = document.getElementById('music-length').value;
 
         let subjectName = '';
         if (subjectSelector === 'custom') {
@@ -278,11 +279,27 @@
         btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Brainstorming lyric lines...';
         generatedLyricsTextarea.value = '';
 
-        const systemPrompt = `You are a creative, expert educational songwriter for Gnosys AI.
+        const systemPrompt = `You are a creative, expert educational songwriter and music producer for Gnosys AI.
 Your objective is to brainstorm catchy, mnemonically dense, and rhythmically aligned study lyrics to help a student master a specific field of study.
 The user wants to generate song lyrics about: "${subjectName}".
 Keep the lines rhyming, easy to read/sing, and packed with actual educational keywords, facts, and definitions.
-Separate verses and chorus clearly using [Verse 1], [Chorus], etc.`;
+
+IMPORTANT: The current song length configuration is ${audioLengthVal} seconds. Adjust the length of the generated lyrics accordingly:
+- If 10s: generate only 1 short, impactful verse (4 lines max).
+- If 30s: generate 1 verse and 1 short chorus (8 lines max).
+- If 60s: generate 2 verses and 1 chorus (12-16 lines max).
+
+Output your response using the following XML structure:
+<lyrics>
+[Verse 1]
+(lyrics here)
+</lyrics>
+<meta>
+genre: (recommend a prompt string like "synthwave, electronic, energetic, focus tempo")
+bpm: (recommend 80, 100, or 120)
+key: (recommend a key scale compatible with the UI: "C Major", "G Major", "A Minor", "E Minor", "D Minor", or "F Major")
+signature: (recommend "4", "3", or "6" for time signature)
+</meta>`;
 
         const userPrompt = lyricsPromptVal || `Generate educational study lyrics for a song about ${subjectName}.`;
 
@@ -291,7 +308,57 @@ Separate verses and chorus clearly using [Verse 1], [Chorus], etc.`;
                 await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
                     stream: true,
                     onToken: (token, fullText) => {
-                        generatedLyricsTextarea.value = fullText;
+                        // Extract only the <lyrics> content for display
+                        const lyricsMatch = fullText.match(/<lyrics>([\s\S]*?)<\/lyrics>/i);
+                        if (lyricsMatch) {
+                            generatedLyricsTextarea.value = lyricsMatch[1].trim();
+                        } else {
+                            // Strip out any partial raw tags for a cleaner stream
+                            generatedLyricsTextarea.value = fullText.replace(/<lyrics>/i, '').replace(/<\/lyrics>/i, '').trim();
+                        }
+
+                        // Try to extract and apply the <meta> configuration if the stream is complete
+                        const metaMatch = fullText.match(/<meta>([\s\S]*?)<\/meta>/i);
+                        if (metaMatch) {
+                            try {
+                                const metaText = metaMatch[1].trim();
+                                const lines = metaText.split('\n');
+                                lines.forEach(line => {
+                                    const parts = line.split(':');
+                                    if (parts.length >= 2) {
+                                        const key = parts[0].trim().toLowerCase();
+                                        const val = parts.slice(1).join(':').trim();
+                                        
+                                        if (key === 'genre' && val) {
+                                            document.getElementById('music-prompt').value = val;
+                                        } else if (key === 'bpm') {
+                                            // Find closest matching option (80, 100, 120)
+                                            const bpmNum = parseInt(val);
+                                            const select = document.getElementById('music-bpm');
+                                            if (bpmNum <= 90) select.value = "80";
+                                            else if (bpmNum <= 110) select.value = "100";
+                                            else select.value = "120";
+                                        } else if (key === 'key') {
+                                            const select = document.getElementById('music-key');
+                                            // Map string to selector options
+                                            for (let i = 0; i < select.options.length; i++) {
+                                                if (select.options[i].value.toLowerCase() === val.toLowerCase()) {
+                                                    select.value = select.options[i].value;
+                                                    break;
+                                                }
+                                            }
+                                        } else if (key === 'signature') {
+                                            const select = document.getElementById('music-signature');
+                                            if (val === '4' || val === '3' || val === '6') {
+                                                select.value = val;
+                                            }
+                                        }
+                                    }
+                                });
+                            } catch (e) {
+                                console.log('Meta parsing error:', e);
+                            }
+                        }
                     }
                 });
             } else {
