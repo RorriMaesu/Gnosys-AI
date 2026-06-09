@@ -603,6 +603,42 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/generate':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                payload = self.rfile.read(content_length)
+                
+                # Proxy to local openrouter_api_server.py on port 8002
+                import urllib.request
+                import urllib.error
+                
+                req = urllib.request.Request(
+                    'http://127.0.0.1:8002/v1/chat/completions',
+                    data=payload,
+                    headers={'Content-Type': 'application/json'}
+                )
+                
+                # Send with high timeout (180s) to survive slow inference
+                with urllib.request.urlopen(req, timeout=180) as response_conn:
+                    response_data = response_conn.read()
+                    
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(response_data)
+            except urllib.error.HTTPError as he:
+                self.send_response(he.code)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(he.read())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()

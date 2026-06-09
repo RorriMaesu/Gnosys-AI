@@ -382,7 +382,7 @@ Separate verses and chorus clearly using [Verse 1], [Chorus], etc.`;
         };
 
         try {
-            const res = await fetch('http://localhost:8002/v1/chat/completions', {
+            const res = await fetch('/api/music/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
