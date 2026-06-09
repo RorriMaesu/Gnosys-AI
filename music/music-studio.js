@@ -287,6 +287,17 @@
         const launchAssistantBtn = document.getElementById('btn-launch-assistant');
         if (launchAssistantBtn) {
             launchAssistantBtn.addEventListener('click', () => {
+                const originalText = launchAssistantBtn.innerHTML;
+                launchAssistantBtn.disabled = true;
+                launchAssistantBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Launching...';
+
+                const onboardingCard = document.getElementById('backend-onboarding-card');
+                const titleEl = onboardingCard ? onboardingCard.querySelector('h2') : null;
+                const descEl = onboardingCard ? onboardingCard.querySelector('p') : null;
+
+                if (titleEl) titleEl.textContent = 'Starting Local Assistant Server...';
+                if (descEl) descEl.innerHTML = 'Connecting to custom protocol <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">gnosys-assistant://</code>... Attempting connection (1/15)';
+
                 showBannerNotification("Launching local assistant server...", "info");
                 try {
                     const iframe = document.createElement('iframe');
@@ -303,6 +314,7 @@
                 const maxAttempts = 15;
                 const interval = setInterval(async () => {
                     attempts++;
+                    if (descEl) descEl.innerHTML = `Connecting to custom protocol <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">gnosys-assistant://</code>... Attempting connection (${attempts}/${maxAttempts})`;
                     try {
                         const res = await fetch(`${API_BASE}/api/music/status`, {
                             headers: { 'X-ComfyUI-Path': comfyPath }
@@ -310,11 +322,19 @@
                         if (res.ok) {
                             clearInterval(interval);
                             showBannerNotification("Local assistant server successfully connected!", "success");
+                            launchAssistantBtn.disabled = false;
+                            launchAssistantBtn.innerHTML = originalText;
+                            if (titleEl) titleEl.textContent = 'Local Assistant Server is Offline';
                             checkMusicServiceStatus();
                         }
                     } catch (e) {}
                     if (attempts >= maxAttempts) {
                         clearInterval(interval);
+                        launchAssistantBtn.disabled = false;
+                        launchAssistantBtn.innerHTML = originalText;
+                        if (titleEl) titleEl.textContent = 'Local Assistant Server is Offline';
+                        if (descEl) descEl.innerHTML = 'Because this application is hosted statically, browsers cannot launch local programs automatically. Please open your installation folder and run <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux) to start the local helper.';
+                        showBannerNotification('Connection attempt timed out. Please run run_backend.bat manually.', 'error');
                     }
                 }, 1500);
             });
@@ -416,19 +436,49 @@
 
     function pollComfyStartup() {
         let attempts = 0;
+        const maxAttempts = 20;
+        const badge = document.getElementById('comfy-status-badge');
+        const icon = document.getElementById('comfy-status-icon');
+        const launchBtn = document.getElementById('btn-launch-service');
+
+        if (launchBtn) {
+            launchBtn.disabled = true;
+            launchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Starting...';
+        }
+
+        if (badge) {
+            badge.className = 'text-xs px-2.5 py-0.5 rounded-full uppercase font-extrabold tracking-wider badge-pulse-amber';
+            badge.textContent = `Starting (0/${maxAttempts})`;
+        }
+        if (icon) {
+            icon.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-amber-400"></i>';
+        }
+
         const interval = setInterval(async () => {
             attempts++;
+            if (badge) {
+                badge.textContent = `Starting (${attempts}/${maxAttempts})`;
+            }
             try {
                 const res = await fetch('http://localhost:8002/health', { signal: AbortSignal.timeout(1000) });
                 if (res.ok) {
                     clearInterval(interval);
+                    if (launchBtn) {
+                        launchBtn.disabled = false;
+                        launchBtn.innerHTML = '<i class="fa-solid fa-rocket mr-1.5"></i> Launch Service';
+                    }
                     showBannerNotification('ACE-Step API Server connected successfully!', 'success');
                     checkMusicServiceStatus();
                 }
             } catch (e) {
-                if (attempts >= 20) {
+                if (attempts >= maxAttempts) {
                     clearInterval(interval);
+                    if (launchBtn) {
+                        launchBtn.disabled = false;
+                        launchBtn.innerHTML = '<i class="fa-solid fa-rocket mr-1.5"></i> Launch Service';
+                    }
                     showBannerNotification('ACE-Step API Server launch timed out. Please check if it is running.', 'error');
+                    checkMusicServiceStatus();
                 }
             }
         }, 2000);

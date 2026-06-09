@@ -76,6 +76,16 @@
             0% { background-position: 0% 50%; }
             100% { background-position: 200% 50%; }
         }
+        @keyframes pulse-amber {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.96); }
+        }
+        .badge-pulse-amber {
+            animation: pulse-amber 1.8s infinite ease-in-out;
+            background-color: rgba(245, 158, 11, 0.1) !important;
+            color: rgb(251, 191, 36) !important;
+            border-color: rgba(245, 158, 11, 0.3) !important;
+        }
     </style>
 </head>
 <body class="min-h-screen selection:bg-fuchsia-500/30 pb-20">
