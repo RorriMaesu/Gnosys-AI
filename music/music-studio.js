@@ -420,12 +420,16 @@
             if (res.ok) {
                 const data = await res.json();
                 if (data && data.data && data.data.length > 0) {
-                    select.innerHTML = '';
+                    // Keep track of existing option values to avoid duplicates
+                    const existingValues = new Set(Array.from(select.options).map(opt => opt.value));
+                    
                     data.data.forEach(model => {
-                        const opt = document.createElement('option');
-                        opt.value = model.id;
-                        opt.textContent = `${model.id} (${model.name || 'ACE-Step'})`;
-                        select.appendChild(opt);
+                        if (!existingValues.has(model.id)) {
+                            const opt = document.createElement('option');
+                            opt.value = model.id;
+                            opt.textContent = `${model.id} (${model.name || 'ACE-Step'})`;
+                            select.appendChild(opt);
+                        }
                     });
                 }
             }
