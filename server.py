@@ -375,7 +375,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
-        elif self.path in ['/api/music/status', '/api/music/install-status', '/api/music/auto-detect']:
+        elif self.path in ['/api/music/status', '/api/music/install-status', '/api/music/auto-detect', '/api/music/models']:
             self.do_POST()
         else:
             super().do_GET()
@@ -809,6 +809,25 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(he.read())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/models':
+            try:
+                import urllib.request
+                import urllib.error
+                req = urllib.request.Request('http://127.0.0.1:8002/v1/models')
+                with urllib.request.urlopen(req, timeout=10) as response_conn:
+                    response_data = response_conn.read()
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(response_data)
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')

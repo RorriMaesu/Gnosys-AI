@@ -416,7 +416,7 @@
     async function fetchModelsList() {
         const select = document.getElementById('music-model');
         try {
-            const res = await fetch('http://127.0.0.1:8002/v1/models', { signal: AbortSignal.timeout(2000) });
+            const res = await fetch(`${API_BASE}/api/music/models`, { signal: AbortSignal.timeout(4000) });
             if (res.ok) {
                 const data = await res.json();
                 if (data && data.data && data.data.length > 0) {
