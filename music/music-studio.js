@@ -109,6 +109,26 @@
             }
         });
 
+        // Advanced settings accordion toggle
+        document.getElementById('btn-toggle-advanced').addEventListener('click', () => {
+            const panel = document.getElementById('advanced-settings-panel');
+            const chevron = document.getElementById('advanced-chevron');
+            const isHidden = panel.classList.contains('hidden');
+            
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                chevron.classList.add('rotate-180');
+            } else {
+                panel.classList.add('hidden');
+                chevron.classList.remove('rotate-180');
+            }
+        });
+
+        // LM CFG slider update value label
+        document.getElementById('music-lm-cfg').addEventListener('input', (e) => {
+            document.getElementById('lm-cfg-val').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+
         // Gemma lyric brainstorm trigger
         document.getElementById('btn-brainstorm').addEventListener('click', handleBrainstormLyrics);
 
@@ -330,6 +350,14 @@ Separate verses and chorus clearly using [Verse 1], [Chorus], etc.`;
         const vocalsVal = document.getElementById('music-vocals').value;
         const lyricsVal = document.getElementById('generated-lyrics').value || "";
 
+        // Collect new advanced parameters
+        const thinkingVal = document.getElementById('music-thinking').checked;
+        const formatVal = document.getElementById('music-format').checked;
+        const keyVal = document.getElementById('music-key').value;
+        const sigVal = document.getElementById('music-signature').value;
+        const seedInputVal = document.getElementById('music-seed').value.trim();
+        const lmCfgVal = parseFloat(document.getElementById('music-lm-cfg').value);
+
         // Construct standard OpenRouter payload format accepted by openrouter_api_server.py
         const payload = {
             model: modelVal,
@@ -342,9 +370,15 @@ Separate verses and chorus clearly using [Verse 1], [Chorus], etc.`;
             audio_config: {
                 duration: parseFloat(lengthVal),
                 bpm: parseInt(bpmVal),
-                instrumental: vocalsVal !== 'on'
+                instrumental: vocalsVal !== 'on',
+                key_scale: keyVal || null,
+                time_signature: sigVal || null
             },
-            inference_steps: parseInt(stepsVal)
+            inference_steps: parseInt(stepsVal),
+            thinking: thinkingVal,
+            use_format: formatVal,
+            lm_cfg_scale: lmCfgVal,
+            seed: seedInputVal ? parseInt(seedInputVal) : null
         };
 
         try {

@@ -225,6 +225,64 @@
                         </div>
                     </div>
 
+                    <!-- Advanced Studio Tuning Accordion -->
+                    <div class="mb-6 rounded-2xl border border-white/5 bg-slate-900/40 overflow-hidden">
+                        <button id="btn-toggle-advanced" type="button" class="w-full px-5 py-4 flex justify-between items-center bg-slate-950/40 hover:bg-slate-950/60 transition-colors text-left">
+                            <span class="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
+                                <i class="fa-solid fa-sliders mr-2"></i> Advanced Studio Tuning
+                            </span>
+                            <i id="advanced-chevron" class="fa-solid fa-chevron-down text-slate-400 text-xs transition-transform duration-300"></i>
+                        </button>
+                        <div id="advanced-settings-panel" class="hidden p-5 space-y-4 border-t border-white/5 bg-slate-950/20">
+                            <div class="grid grid-cols-2 gap-4">
+                                <label class="flex items-center gap-2.5 cursor-pointer py-1">
+                                    <input type="checkbox" id="music-thinking" checked class="rounded bg-slate-900 border-white/10 text-indigo-600 focus:ring-0 focus:ring-offset-0 w-4 h-4">
+                                    <span class="text-xs text-slate-300 font-semibold select-none">Thinking (CoT Planner)</span>
+                                </label>
+                                <label class="flex items-center gap-2.5 cursor-pointer py-1">
+                                    <input type="checkbox" id="music-format" checked class="rounded bg-slate-900 border-white/10 text-indigo-600 focus:ring-0 focus:ring-offset-0 w-4 h-4">
+                                    <span class="text-xs text-slate-300 font-semibold select-none">Metadata Enhancer</span>
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Musical Key</label>
+                                    <select id="music-key" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                        <option value="">Auto-Detect Key</option>
+                                        <option value="C Major">C Major (Happy, Clear)</option>
+                                        <option value="G Major">G Major (Bright, Pure)</option>
+                                        <option value="A Minor">A Minor (Pensive, Deep)</option>
+                                        <option value="E Minor">E Minor (Emotional, Focused)</option>
+                                        <option value="D Minor">D Minor (Melancholic, Intense)</option>
+                                        <option value="F Major">F Major (Warm, Calm)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Time Signature</label>
+                                    <select id="music-signature" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                        <option value="">Auto-Detect Metric</option>
+                                        <option value="4">4/4 (Standard Meter)</option>
+                                        <option value="3">3/4 (Waltz Metric)</option>
+                                        <option value="6">6/8 (Compound Meter)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 items-end">
+                                <div>
+                                    <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Custom Seed</label>
+                                    <input type="number" id="music-seed" placeholder="Random Seed" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors font-mono">
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">LM CFG Scale</label>
+                                        <span id="lm-cfg-val" class="text-[10px] font-bold text-indigo-400 font-mono">2.0</span>
+                                    </div>
+                                    <input type="range" id="music-lm-cfg" min="1.0" max="5.0" step="0.5" value="2.0" class="w-full accent-indigo-500 h-1.5 bg-slate-900 rounded-lg appearance-none cursor-pointer">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <button id="btn-generate-track" class="w-full py-4 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white font-bold text-sm transition-all shadow-lg glow-button mb-8 flex items-center justify-center gap-2">
                         <i class="fa-solid fa-play"></i> Generate Study Track
                     </button>
