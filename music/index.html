@@ -177,6 +177,16 @@
                             <input type="text" id="music-prompt" value="lofi study beats, soft chill ambient synth, relaxing piano, focus tempo" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
                         </div>
 
+                        <div class="grid grid-cols-1 gap-4">
+                            <div>
+                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Model Selection</label>
+                                <select id="music-model" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                    <option value="acemusic/acestep-v15-xl-turbo">acemusic/acestep-v15-xl-turbo (4B XL Turbo - Premium)</option>
+                                    <option value="acemusic/acestep-v15-turbo">acemusic/acestep-v15-turbo (Standard Turbo)</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Tempo (BPM)</label>

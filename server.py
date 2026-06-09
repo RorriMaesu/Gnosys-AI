@@ -406,94 +406,21 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode('utf-8'))
         elif self.path == '/api/music/status':
             try:
-                # Helper for cross-platform auto-discovery
-                def find_comfy_path():
-                    system = platform.system()
-                    candidates = []
-                    if system == 'Windows':
-                        user_profile = os.environ.get('USERPROFILE', '')
-                        candidates = [
-                            "D:\\ComfyUI",
-                            "C:\\ComfyUI",
-                            os.path.join(user_profile, "Downloads", "ComfyUI_windows_portable"),
-                            os.path.join(user_profile, "Desktop", "ComfyUI_windows_portable"),
-                        ]
-                        for drive in ['C', 'D', 'E', 'F', 'G']:
-                            candidates.append(f"{drive}:\\ComfyUI_windows_portable")
-                    else:
-                        home = os.environ.get('HOME', '')
-                        candidates = [
-                            os.path.join(home, "ComfyUI"),
-                            os.path.join(home, "Downloads", "ComfyUI"),
-                        ]
-                    for p in candidates:
-                        if p and os.path.exists(os.path.join(p, "ComfyUI", "main.py")):
-                            return os.path.abspath(p)
-                    return None
-
-                # Helper for targeted deep-scanning models folder safely
-                def scan_audio_models_safe(c_path):
-                    res_scan = {"dit": [], "vae": [], "text_enc": [], "nodes": []}
-                    if not c_path or not os.path.exists(c_path):
-                        return res_scan
-                    
-                    # Scan custom nodes
-                    nodes_dir = os.path.join(c_path, "ComfyUI", "custom_nodes")
-                    if os.path.exists(nodes_dir):
-                        try:
-                            for item in os.listdir(nodes_dir):
-                                full_item = os.path.join(nodes_dir, item)
-                                if os.path.isdir(full_item):
-                                    if any(t in item.lower() for t in ["ace-step", "acestep", "ryanontheinside"]):
-                                        res_scan["nodes"].append(item)
-                        except Exception:
-                            pass
-
-                    # Scan models subfolders safely (depth-limited, following symlinks)
-                    models_dir = os.path.join(c_path, "ComfyUI", "models")
-                    target_folders = ["checkpoints", "diffusion_models", "vae", "text_encoders", "TTS"]
-                    for subfolder in target_folders:
-                        scan_root = os.path.join(models_dir, subfolder)
-                        if not os.path.exists(scan_root):
-                            continue
-                        scan_root_depth = scan_root.count(os.path.sep)
-                        try:
-                            for root, dirs, files in os.walk(scan_root, followlinks=True):
-                                # Limit depth to 3
-                                depth = root.count(os.path.sep) - scan_root_depth
-                                if depth > 3:
-                                    dirs.clear()
-                                    continue
-                                for file in files:
-                                    file_lower = file.lower()
-                                    full_file_path = os.path.join(root, file)
-                                    
-                                    if "safetensors" in file_lower and any(x in file_lower for x in ["acestep", "ace_step"]):
-                                        if "vae" not in file_lower:
-                                            res_scan["dit"].append(full_file_path)
-                                    if "safetensors" in file_lower and any(x in file_lower for x in ["ace_1.5_vae", "ace_vae", "dcae"]):
-                                        res_scan["vae"].append(full_file_path)
-                                    if "safetensors" in file_lower and any(x in file_lower for x in ["umt5", "qwen_0.6b", "qwen_1.7b"]):
-                                        res_scan["text_enc"].append(full_file_path)
-                        except Exception:
-                            pass
-                    return res_scan
-
-                # Resolve comfy path
-                comfy_path = self.headers.get('X-ComfyUI-Path', '')
-                if not comfy_path or not os.path.exists(comfy_path):
-                    discovered = find_comfy_path()
-                    if discovered:
-                        comfy_path = discovered
-                    else:
-                        comfy_path = comfy_path or 'D:\\ComfyUI'
+                # Resolve ACE-Step standalone directory
+                ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
+                ace_installed = os.path.exists(ace_path)
+                ace_running = probe_port(8002)
                 
-                comfy_installed = os.path.exists(comfy_path)
-                comfy_running = probe_port(8188)
-                
-                scan_results = scan_audio_models_safe(comfy_path)
-                custom_node_installed = len(scan_results["nodes"]) > 0
-                models_installed = len(scan_results["dit"]) > 0 or len(scan_results["vae"]) > 0
+                # Scan models subfolders safely (checkpoints)
+                checkpoints_dir = os.path.join(ace_path, "checkpoints")
+                discovered_models = []
+                if os.path.exists(checkpoints_dir):
+                    try:
+                        for item in os.listdir(checkpoints_dir):
+                            if os.path.isdir(os.path.join(checkpoints_dir, item)):
+                                discovered_models.append(item)
+                    except Exception:
+                        pass
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
@@ -502,12 +429,14 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 response = {
                     'status': 'success',
-                    'comfy_path': comfy_path,
-                    'comfy_installed': comfy_installed,
-                    'comfy_running': comfy_running,
-                    'custom_node_installed': custom_node_installed,
-                    'models_installed': models_installed,
-                    'scan_details': scan_results
+                    'comfy_path': ace_path,
+                    'comfy_installed': ace_installed,
+                    'comfy_running': ace_running,
+                    'custom_node_installed': True, # Mock true for backward compatibility
+                    'models_installed': len(discovered_models) > 0,
+                    'scan_details': {
+                        'models': discovered_models
+                    }
                 }
                 self.wfile.write(json.dumps(response).encode('utf-8'))
             except Exception as e:
@@ -518,29 +447,22 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/launch':
             try:
-                comfy_path = 'D:\\ComfyUI'
-                # Check headers/body for override
-                content_length = int(self.headers.get('Content-Length', 0))
-                if content_length > 0:
-                    body = json.loads(self.rfile.read(content_length).decode('utf-8'))
-                    comfy_path = body.get('comfy_path', comfy_path)
-
-                bat_nvidia = os.path.join(comfy_path, 'run_nvidia_gpu.bat')
-                bat_cpu = os.path.join(comfy_path, 'run_cpu.bat')
-                main_py = os.path.join(comfy_path, 'ComfyUI', 'main.py')
-                python_exe = os.path.join(comfy_path, 'python_embeded', 'python.exe')
+                ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
+                python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
-                if os.path.exists(bat_nvidia):
-                    subprocess.Popen([bat_nvidia], cwd=comfy_path, shell=True)
-                    msg = "Launched ComfyUI via run_nvidia_gpu.bat"
-                elif os.path.exists(bat_cpu):
-                    subprocess.Popen([bat_cpu], cwd=comfy_path, shell=True)
-                    msg = "Launched ComfyUI via run_cpu.bat"
-                elif os.path.exists(python_exe) and os.path.exists(main_py):
-                    subprocess.Popen([python_exe, main_py], cwd=os.path.join(comfy_path, 'ComfyUI'))
-                    msg = "Launched ComfyUI via embedded python"
+                if not os.path.exists(ace_path):
+                    raise Exception(f"ACE-Step directory not found at {ace_path}")
+                
+                if os.path.exists(python_exe):
+                    # Launch API server using venv Python
+                    cmd = [python_exe, '-m', 'openrouter.openrouter_api_server', '--host', '127.0.0.1', '--port', '8002']
+                    subprocess.Popen(cmd, cwd=ace_path)
+                    msg = "Launched ACE-Step API Server via venv python"
                 else:
-                    raise Exception("No launch scripts or executable found in " + comfy_path)
+                    # Fallback to system python
+                    cmd = ['python', '-m', 'openrouter.openrouter_api_server', '--host', '127.0.0.1', '--port', '8002']
+                    subprocess.Popen(cmd, cwd=ace_path)
+                    msg = "Launched ACE-Step API Server via system python"
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')

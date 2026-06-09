@@ -135,7 +135,9 @@
                 icon.innerHTML = '<i class="fa-solid fa-circle-check text-teal-400"></i>';
                 launchBtn.classList.add('hidden');
                 installBtn.classList.add('hidden');
-                connectWebSocket();
+                
+                // Fetch models dynamically from local API server
+                fetchModelsList();
             } else if (data.comfy_installed) {
                 badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider';
                 badge.textContent = 'Offline';
@@ -158,21 +160,42 @@
         }
     }
 
+    async function fetchModelsList() {
+        const select = document.getElementById('music-model');
+        try {
+            const res = await fetch('http://localhost:8002/v1/models', { signal: AbortSignal.timeout(2000) });
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.data && data.data.length > 0) {
+                    select.innerHTML = '';
+                    data.data.forEach(model => {
+                        const opt = document.createElement('option');
+                        opt.value = model.id;
+                        opt.textContent = `${model.id} (${model.name || 'ACE-Step'})`;
+                        select.appendChild(opt);
+                    });
+                }
+            }
+        } catch (e) {
+            console.log('Failed to fetch models list, using static options:', e);
+        }
+    }
+
     function pollComfyStartup() {
         let attempts = 0;
         const interval = setInterval(async () => {
             attempts++;
             try {
-                const res = await fetch('http://localhost:8188/system_info', { signal: AbortSignal.timeout(1000) });
+                const res = await fetch('http://localhost:8002/health', { signal: AbortSignal.timeout(1000) });
                 if (res.ok) {
                     clearInterval(interval);
-                    showBannerNotification('ComfyUI connected successfully!', 'success');
+                    showBannerNotification('ACE-Step API Server connected successfully!', 'success');
                     checkMusicServiceStatus();
                 }
             } catch (e) {
-                if (attempts >= 15) {
+                if (attempts >= 20) {
                     clearInterval(interval);
-                    showBannerNotification('ComfyUI launch timed out. Please check if it is running.', 'error');
+                    showBannerNotification('ACE-Step API Server launch timed out. Please check if it is running.', 'error');
                 }
             }
         }, 2000);
@@ -262,36 +285,6 @@ Separate verses and chorus clearly using [Verse 1], [Chorus], etc.`;
         }
     }
 
-    function connectWebSocket() {
-        if (ws) return;
-        ws = new WebSocket(`ws://localhost:8188/ws?clientId=${clientId}`);
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'progress') {
-                const fill = document.getElementById('gen-progress-bar-fill');
-                const percent = document.getElementById('gen-percent');
-                const pct = Math.round((data.value / data.max) * 100);
-                fill.style.width = pct + '%';
-                percent.textContent = pct + '%';
-            } else if (data.type === 'executing') {
-                const status = document.getElementById('gen-status-text');
-                if (data.data.node) {
-                    status.textContent = `Processing node: ${data.data.node}...`;
-                }
-            } else if (data.type === 'executed') {
-                const status = document.getElementById('gen-status-text');
-                status.textContent = 'Audio file generated successfully!';
-                
-                const outputData = data.data.output;
-                if (outputData && outputData.audio && outputData.audio.length > 0) {
-                    const filename = outputData.audio[0].filename;
-                    const audioUrl = `http://localhost:8188/view?filename=${filename}&subfolder=&type=output`;
-                    loadAudioToPlayer(audioUrl);
-                }
-            }
-        };
-    }
-
     function loadAudioToPlayer(url) {
         const container = document.getElementById('player-container');
         const audio = document.getElementById('audio-player');
@@ -316,72 +309,75 @@ Separate verses and chorus clearly using [Verse 1], [Chorus], etc.`;
         const fill = document.getElementById('gen-progress-bar-fill');
         const percent = document.getElementById('gen-percent');
 
-        // Check if comfy is online
+        // Check if server is online
         const isOnline = document.getElementById('comfy-status-badge').textContent === 'Running';
         if (!isOnline) {
-            showBannerNotification('Local ComfyUI is offline. Please launch the service first.', 'error');
+            showBannerNotification('Local ACE-Step API Server is offline. Please launch the service first.', 'error');
             return;
         }
 
+        btn.disabled = true;
         progressContainer.classList.remove('hidden');
-        statusText.textContent = 'Submitting workflow generation queue...';
-        fill.style.width = '0%';
-        percent.textContent = '0%';
+        statusText.textContent = 'Generating study music... (Running inference)';
+        fill.style.width = '20%';
+        percent.textContent = '20%';
 
+        const modelVal = document.getElementById('music-model').value;
         const promptVal = document.getElementById('music-prompt').value;
         const bpmVal = document.getElementById('music-bpm').value;
         const lengthVal = document.getElementById('music-length').value;
         const stepsVal = document.getElementById('music-steps').value;
         const vocalsVal = document.getElementById('music-vocals').value;
-        const lyricsVal = document.getElementById('generated-lyrics').value || "Mnemonic rhythm focus study lines";
+        const lyricsVal = document.getElementById('generated-lyrics').value || "";
 
-        // Predefined simple ComfyUI Workflow JSON for billwuhao's custom node
-        const workflow = {
-            "3": {
-                "class_type": "ACEModelLoaderZveroboy",
-                "inputs": {
-                    "model_name": "ACE-Step-v1-3.5B"
+        // Construct standard OpenRouter payload format accepted by openrouter_api_server.py
+        const payload = {
+            model: modelVal,
+            messages: [
+                {
+                    role: "user",
+                    content: `<prompt>${promptVal}</prompt>${vocalsVal === 'on' && lyricsVal ? `\n<lyrics>${lyricsVal}</lyrics>` : ''}`
                 }
+            ],
+            audio_config: {
+                duration: parseFloat(lengthVal),
+                bpm: parseInt(bpmVal),
+                instrumental: vocalsVal !== 'on'
             },
-            "6": {
-                "class_type": "ACEStepGenerateZveroboy",
-                "inputs": {
-                    "model": ["3", 0],
-                    "prompt": promptVal,
-                    "lyrics": vocalsVal === 'on' ? lyricsVal : "",
-                    "bpm": parseInt(bpmVal),
-                    "steps": parseInt(stepsVal),
-                    "duration": parseInt(lengthVal),
-                    "cfg": 7.0,
-                    "seed": Math.floor(Math.random() * 1000000)
-                }
-            },
-            "8": {
-                "class_type": "SaveAudio",
-                "inputs": {
-                    "audio": ["6", 0],
-                    "filename_prefix": "GnosysStudyTrack"
-                }
-            }
+            inference_steps: parseInt(stepsVal)
         };
 
         try {
-            const res = await fetch('http://localhost:8188/prompt', {
+            const res = await fetch('http://localhost:8002/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: workflow,
-                    client_id: clientId
-                })
+                body: JSON.stringify(payload)
             });
-            if (res.ok) {
-                statusText.textContent = 'In queue... waiting for execution to begin...';
-            } else {
+            
+            fill.style.width = '70%';
+            percent.textContent = '70%';
+
+            if (!res.ok) {
                 throw new Error(await res.text());
+            }
+
+            const data = await res.json();
+            
+            // Extract the generated audio base64 url
+            const audioItem = data?.choices?.[0]?.message?.audio?.[0];
+            if (audioItem && audioItem.audio_url && audioItem.audio_url.url) {
+                const audioUrl = audioItem.audio_url.url; // This is a data:audio/mp3;base64,... URL
+                fill.style.width = '100%';
+                percent.textContent = '100%';
+                loadAudioToPlayer(audioUrl);
+            } else {
+                throw new Error("No audio block returned in API response.");
             }
         } catch (err) {
             statusText.textContent = 'Generation failed: ' + err.message;
-            showBannerNotification('Generation queue failed.', 'error');
+            showBannerNotification('Generation failed.', 'error');
+        } finally {
+            btn.disabled = false;
         }
     }
 
