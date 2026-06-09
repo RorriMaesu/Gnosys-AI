@@ -384,18 +384,23 @@
             if (diagBox) {
                 diagBox.innerHTML = '';
                 if (data.diagnostics) {
-                    const makeBadge = (label, status) => {
-                        const baseClass = "text-[9px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 shrink-0";
-                        const themeClass = status ? "bg-teal-500/10 text-teal-400 border-teal-500/20" : "bg-red-500/10 text-red-400 border-red-500/20";
-                        const iconHtml = status ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-circle-xmark"></i>';
-                        return `<span class="${baseClass} ${themeClass}">${iconHtml}${label}</span>`;
+                    const makeBadge = (label, status, url) => {
+                        const baseClass = "text-[9px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 shrink-0 transition-all text-decoration-none";
+                        const themeClass = status 
+                            ? "bg-teal-500/10 text-teal-400 border-teal-500/20 hover:bg-teal-500/20 cursor-pointer" 
+                            : "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 cursor-pointer animate-pulse";
+                        const iconHtml = status 
+                            ? '<i class="fa-solid fa-circle-check"></i>' 
+                            : '<i class="fa-solid fa-download"></i>';
+                        const tooltip = status ? 'Installed and verified.' : 'Missing. Click to download from Hugging Face.';
+                        return `<a href="${url}" target="_blank" class="${baseClass} ${themeClass}" title="${tooltip}">${iconHtml}${label}</a>`;
                     };
-                    diagBox.innerHTML += makeBadge("XL SFT", data.diagnostics.xl_sft);
-                    diagBox.innerHTML += makeBadge("XL Base", data.diagnostics.xl_base);
-                    diagBox.innerHTML += makeBadge("XL Turbo", data.diagnostics.xl_turbo);
-                    diagBox.innerHTML += makeBadge("Vocoder", data.diagnostics.vocoder);
-                    diagBox.innerHTML += makeBadge("DCAE Encoder", data.diagnostics.dcae);
-                    diagBox.innerHTML += makeBadge("UMT5 Text", data.diagnostics.umt5);
+                    diagBox.innerHTML += makeBadge("XL SFT", data.diagnostics.xl_sft, "https://huggingface.co/ACE-Step/acestep-v15-xl-sft");
+                    diagBox.innerHTML += makeBadge("XL Base", data.diagnostics.xl_base, "https://huggingface.co/ACE-Step/acestep-v15-xl-base");
+                    diagBox.innerHTML += makeBadge("XL Turbo", data.diagnostics.xl_turbo, "https://huggingface.co/ACE-Step/acestep-v15-xl-turbo");
+                    diagBox.innerHTML += makeBadge("Vocoder", data.diagnostics.vocoder, "https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/tree/main");
+                    diagBox.innerHTML += makeBadge("DCAE Encoder", data.diagnostics.dcae, "https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/tree/main");
+                    diagBox.innerHTML += makeBadge("UMT5 Text", data.diagnostics.umt5, "https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged/tree/main");
                 }
             }
 
