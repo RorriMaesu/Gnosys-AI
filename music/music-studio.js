@@ -1,4 +1,5 @@
 (function() {
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://localhost:8020';
     let comfyPath = localStorage.getItem('gnosys_comfy_path') || 'D:\\ComfyUI';
     let vramProfile = localStorage.getItem('gnosys_music_vram_profile') || 'high';
     const clientId = Math.random().toString(36).substring(2, 15);
@@ -21,7 +22,7 @@
         }
         statusDiv.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Probing folder contents...</span>';
         try {
-            const res = await fetch('/api/music/status', {
+            const res = await fetch(`${API_BASE}/api/music/status`, {
                 headers: { 'X-ComfyUI-Path': path }
             });
             const data = await res.json();
@@ -42,7 +43,7 @@
         listContainer.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Scanning directory...</div>';
         
         try {
-            const res = await fetch(`/api/explorer?path=${encodeURIComponent(path)}`);
+            const res = await fetch(`${API_BASE}/api/explorer?path=${encodeURIComponent(path)}`);
             const data = await res.json();
             if (data.status === 'success') {
                 explorerCurrentPath = path;
@@ -157,7 +158,7 @@
             btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Detecting...';
             
             try {
-                const res = await fetch('/api/music/auto-detect');
+                const res = await fetch(`${API_BASE}/api/music/auto-detect`);
                 const data = await res.json();
                 if (data.status === 'success' && data.candidates && data.candidates.length > 0) {
                     const bestCandidate = data.candidates[0].path;
@@ -177,7 +178,7 @@
         // Launch service click
         document.getElementById('btn-launch-service').addEventListener('click', async () => {
             try {
-                const res = await fetch('/api/music/launch', {
+                const res = await fetch(`${API_BASE}/api/music/launch`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ comfy_path: comfyPath, vram_profile: vramProfile })
@@ -217,7 +218,7 @@
             document.getElementById('btn-start-install').textContent = 'Installing...';
 
             try {
-                const res = await fetch('/api/music/install', {
+                const res = await fetch(`${API_BASE}/api/music/install`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ install_path: path })
@@ -281,7 +282,7 @@
         const installBtn = document.getElementById('btn-install-wizard');
 
         try {
-            const res = await fetch('/api/music/status', {
+            const res = await fetch(`${API_BASE}/api/music/status`, {
                 headers: { 'X-ComfyUI-Path': comfyPath }
             });
             if (!res.ok) throw new Error();
@@ -388,7 +389,7 @@
         
         installPollInterval = setInterval(async () => {
             try {
-                const res = await fetch('/api/music/install-status');
+                const res = await fetch(`${API_BASE}/api/music/install-status`);
                 const data = await res.json();
                 
                 stepText.textContent = data.step;
@@ -629,7 +630,7 @@ signature: (recommend "4", "3", or "6" for time signature)
         };
 
         try {
-            const res = await fetch('/api/music/generate', {
+            const res = await fetch(`${API_BASE}/api/music/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
