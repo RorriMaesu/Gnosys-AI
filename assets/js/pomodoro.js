@@ -835,6 +835,9 @@
             .in-openword #pomodoro-break-overlay .text-indigo-400 {
                 color: #818cf8 !important;
             }
+            .blur-3xl {
+                filter: blur(64px) !important;
+            }
         `;
         document.head.appendChild(style);
     }
