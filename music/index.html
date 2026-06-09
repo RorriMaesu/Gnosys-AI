@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gnosys-AI | Study Music Studio</title>
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
+    <link rel="icon" type="image/jpeg" href="../assets/GnosysAILogo.jpg">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #020617;
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            background-size: 40px 40px;
+            background-image: linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px), 
+                              linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+        }
+        .glow-button {
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.25);
+            transition: all 0.3s ease;
+        }
+        .glow-button:hover {
+            box-shadow: 0 0 30px rgba(168, 85, 247, 0.5);
+            transform: translateY(-2px);
+        }
+        /* Custom progress bar styles */
+        .progress-bar {
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #d946ef, #6366f1);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+    </style>
+</head>
+<body class="min-h-screen selection:bg-fuchsia-500/30">
+
+    <!-- Navbar -->
+    <nav class="w-full border-b border-white/5 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <a href="../index.html" class="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-indigo-700 flex items-center justify-center text-white shadow-lg overflow-hidden shrink-0 border border-white/10 hover:scale-105 transition-transform">
+                    <img src="../assets/GnosysAILogo.jpg" alt="Gnosys-AI" class="w-full h-full object-cover">
+                </a>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight text-white leading-none">Gnosys AI Music Studio</h1>
+                    <p class="text-[10px] uppercase tracking-widest text-fuchsia-400 font-bold mt-0.5">ACE Step 1.5 Composer</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="../index.html" class="flex items-center gap-2 px-4 py-2 rounded-full glass-card text-slate-300 hover:text-white hover:bg-white/10 transition-all text-sm border border-white/5">
+                    <i class="fa-solid fa-arrow-left"></i> Exit to Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Workspace -->
+    <main class="max-w-7xl mx-auto px-6 py-12">
+        
+        <!-- Connection Banner -->
+        <div id="connection-banner" class="glass-card rounded-3xl p-6 mb-8 border-violet-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-xl" id="comfy-status-icon">
+                    <i class="fa-solid fa-server text-slate-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        ACE Step Local Service Status: 
+                        <span id="comfy-status-badge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-400 border border-white/5 uppercase font-extrabold tracking-wider">Checking...</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        Local ComfyUI Path: <span id="current-comfy-path" class="font-mono text-slate-300">D:\ComfyUI</span>
+                    </p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button id="btn-configure-path" class="px-4 py-2 rounded-xl glass-card text-xs font-bold text-slate-300 hover:text-white transition-all border border-white/5">
+                    <i class="fa-solid fa-folder-open mr-1.5"></i> Change Path
+                </button>
+                <button id="btn-launch-service" class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white transition-all shadow-md shadow-violet-600/20 hidden">
+                    <i class="fa-solid fa-rocket mr-1.5"></i> Launch Service
+                </button>
+                <button id="btn-install-wizard" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 text-xs font-bold text-white transition-all glow-button hidden">
+                    <i class="fa-solid fa-download mr-1.5"></i> Install ACE Step 1.5
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- LEFT PANEL: Gemma 4 Brainstormer -->
+            <div class="lg:col-span-6 flex flex-col">
+                <div class="glass-card rounded-3xl p-8 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[500px]">
+                    <div class="absolute -right-24 -top-24 w-48 h-48 bg-fuchsia-600/10 rounded-full blur-3xl"></div>
+                    
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center text-white shadow-lg">
+                            <i class="fa-solid fa-brain text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">Agentic Lyrics & Prompt Brainstormer</h3>
+                            <p class="text-xs text-fuchsia-400 font-bold uppercase tracking-wider mt-0.5">Powered by Gemma 4</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4 mb-6">
+                        <div>
+                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">1. Choose a Field of Study</label>
+                            <select id="subject-selector" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
+                                <option value="anatomy">Anatomy & Physiology (Muscles, Bones, Hormones)</option>
+                                <option value="chemistry">General Chemistry (Molecules, Reactions, Periodic Table)</option>
+                                <option value="psychology">Intro to Psychology (Behaviors, Brain Regions, Ethics)</option>
+                                <option value="medicine">Medical Terminology (Prefixes, Roots, Diagnoses)</option>
+                                <option value="custom">Custom Subject...</option>
+                            </select>
+                        </div>
+                        
+                        <div id="custom-subject-container" class="hidden">
+                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Custom Topic Details</label>
+                            <input type="text" id="custom-subject-input" placeholder="e.g. Physics Wave Mechanics, Organic Chemistry Nomenclature" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">2. Lyrics Inspiration & Topic Prompt</label>
+                            <textarea id="lyrics-prompt" placeholder="Brainstorm ideas or specify details to help Gemma generate targeted educational lyrics. E.g. 'Generate a catchy, upbeat pop song explaining the functions of the skull bones.'" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors h-24 resize-none"></textarea>
+                        </div>
+                    </div>
+
+                    <button id="btn-brainstorm" class="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/20 border border-indigo-500 mb-6 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Brainstorm Lyrics with Gemma
+                    </button>
+
+                    <div class="flex-grow flex flex-col">
+                        <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Generated Song Lyrics</label>
+                        <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. You can edit them freely before generating music." class="w-full bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-4 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors flex-grow resize-none font-mono min-h-[220px]"></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RIGHT PANEL: ComfyUI / ACE Step Composer -->
+            <div class="lg:col-span-6 flex flex-col">
+                <div class="glass-card rounded-3xl p-8 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[500px]">
+                    <div class="absolute -left-24 -bottom-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
+
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg">
+                            <i class="fa-solid fa-music text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-white">ACE Step 1.5 Composer Settings</h3>
+                            <p class="text-xs text-indigo-400 font-bold uppercase tracking-wider mt-0.5">Local Audio Generator</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4 mb-6">
+                        <div>
+                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Track Prompt (Mood/Genre)</label>
+                            <input type="text" id="music-prompt" value="lofi study beats, soft chill ambient synth, relaxing piano, focus tempo" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Tempo (BPM)</label>
+                                <select id="music-bpm" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                    <option value="80">80 (Chill / Lofi)</option>
+                                    <option value="100">100 (Relaxed)</option>
+                                    <option value="120">120 (Upbeat)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Audio Length</label>
+                                <select id="music-length" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                    <option value="10">10 seconds (Quick Test)</option>
+                                    <option value="30">30 seconds (Short Loop)</option>
+                                    <option value="60">60 seconds (Full Verse)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Inference Steps</label>
+                                <select id="music-steps" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                    <option value="8">8 Steps (ACE Turbo - Fastest)</option>
+                                    <option value="20">20 Steps (Standard - Better Quality)</option>
+                                    <option value="50">50 Steps (Supervised Fine-Tune - High Quality)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Vocal Generation</label>
+                                <select id="music-vocals" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                    <option value="on">Vocals On (Sings Lyrics)</option>
+                                    <option value="off">Instrumental Only (BGM)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="btn-generate-track" class="w-full py-4 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white font-bold text-sm transition-all shadow-lg glow-button mb-8 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-play"></i> Generate Study Track
+                    </button>
+
+                    <!-- Generation Progress UI -->
+                    <div id="generation-progress-container" class="hidden space-y-3 p-5 rounded-2xl bg-white/5 border border-white/5 mb-8">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-300">
+                            <span id="gen-status-text">Queuing prompt on local ComfyUI...</span>
+                            <span id="gen-percent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="gen-progress-bar-fill" class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+
+                    <!-- Audio Player Box -->
+                    <div id="player-container" class="hidden mt-auto p-6 rounded-2xl bg-slate-900/80 border border-white/5 flex flex-col gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                                <i class="fa-solid fa-headphones"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-white">Your Generated Study Session Beat</h4>
+                                <p class="text-xs text-slate-400" id="player-track-info">120 BPM • Instrumental Beat</p>
+                            </div>
+                        </div>
+                        <audio id="audio-player" controls class="w-full h-10 mt-2 bg-slate-800 rounded-lg"></audio>
+                        <a id="btn-download-audio" href="#" download="GnosysStudyTrack.wav" class="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-center font-bold text-slate-300 hover:text-white border border-white/5 transition-all">
+                            <i class="fa-solid fa-download mr-1.5"></i> Export WAV File
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Configure ComfyUI Path Modal -->
+    <div id="path-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="glass-card rounded-3xl p-8 max-w-md w-full border border-white/10 shadow-2xl relative overflow-hidden fade-in text-left">
+            <h3 class="text-lg font-bold text-white mb-2">Configure Local ComfyUI Directory</h3>
+            <p class="text-xs text-slate-400 mb-6 leading-relaxed">
+                Specify the installation directory of your portable or native ComfyUI. We will search this folder for custom nodes and models.
+            </p>
+            <input type="text" id="input-comfy-path" value="D:\ComfyUI" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors mb-6 font-mono">
+            <div class="flex gap-3">
+                <button id="btn-save-path" class="flex-grow py-3 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-sm transition-all border border-fuchsia-500">
+                    Save Configuration
+                </button>
+                <button id="btn-close-path-modal" class="px-5 py-3 rounded-xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Installation Wizard Modal -->
+    <div id="install-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="glass-card rounded-3xl p-8 max-w-lg w-full border border-white/10 shadow-2xl relative overflow-hidden fade-in text-left">
+            <div class="flex justify-between items-start mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-indigo-600 flex items-center justify-center text-white shadow-lg">
+                        <i class="fa-solid fa-download text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Install ACE Step 1.5</h3>
+                        <p class="text-xs text-fuchsia-400 font-bold uppercase tracking-wider mt-0.5">Automated Installer</p>
+                    </div>
+                </div>
+                <button id="btn-close-install" class="w-8 h-8 rounded-full glass-card flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="install-wizard-body" class="space-y-4 text-slate-300 text-sm mb-6">
+                <p>This wizard will set up ComfyUI, clone the ACE-Step 1.5 custom nodes, and prepare model configuration layouts. Select the folder where you want to install:</p>
+                <input type="text" id="install-dir-input" value="D:\ComfyUI" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors font-mono">
+                
+                <div id="install-progress-box" class="hidden space-y-2 p-4 rounded-xl bg-black/40 border border-white/5">
+                    <div class="flex justify-between items-center text-xs">
+                        <span id="install-step-text">Initializing install...</span>
+                        <span id="install-percent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="install-progress-bar-fill" class="progress-bar-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button id="btn-start-install" class="flex-grow py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all border border-indigo-500">
+                    Start Auto-Installation
+                </button>
+                <button id="btn-cancel-install" class="px-6 py-3.5 rounded-2xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/llm-router.js"></script>
+    <script src="music-studio.js"></script>
+</body>
+</html>

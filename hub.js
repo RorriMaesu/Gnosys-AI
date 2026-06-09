@@ -115,6 +115,23 @@ const COURSES = [
         status: 'active'
     },
     {
+        id: 'gnosys-music',
+        title: 'AI Study Music Studio',
+        description: 'Generate study-focused music locally. Brainstorm lyric ideas with Gemma 4 and compose tracks using ACE Step 1.5.',
+        link: './music/index.html',
+        category: 'Workspace',
+        icon: 'fa-music',
+        color: 'from-fuchsia-500 to-indigo-600',
+        iconWrapClass: 'bg-fuchsia-500/15 border-fuchsia-400/30',
+        iconClass: 'text-fuchsia-300',
+        iconWrapStyle: 'background: rgba(217, 70, 239, 0.18); border-color: rgba(232, 121, 249, 0.45);',
+        iconStyle: 'color: #f472b6;',
+        accentGlow: 'bg-fuchsia-500/10 group-hover:bg-fuchsia-500/20',
+        accentTitleHover: 'group-hover:text-fuchsia-200',
+        accentCta: 'text-fuchsia-400',
+        status: 'active'
+    },
+    {
         id: 'general-sound-physics',
         title: 'General & Sound Physics',
         description: 'Acoustics, wave mechanics, electromagnetism, and SPI instrumentation foundations.',

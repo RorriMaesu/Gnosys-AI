@@ -373,6 +373,263 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 response = {'status': 'error', 'message': str(e)}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
+        elif self.path == '/api/launch-quantime':
+            try:
+                if not is_quantime_running():
+                    path = get_quantime_install_path()
+                    if path:
+                        pythonw_path = os.path.join(path, 'backend', '.venv', 'Scripts', 'pythonw.exe')
+                        tray_path = os.path.join(path, 'backend', 'tray_icon.py')
+                        if os.path.exists(pythonw_path) and os.path.exists(tray_path):
+                            subprocess.Popen([pythonw_path, tray_path], cwd=os.path.join(path, 'backend'))
+                            print("[Launcher] Launched Quantime from install path.")
+                        else:
+                            raise Exception("Quantime executable or tray icon script missing.")
+                    else:
+                        raise Exception("Quantime installation directory not found.")
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {'status': 'success', 'message': 'Quantime launch initiated.'}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+            except Exception as e:
+                print(f"[Launcher] Error starting Quantime: {e}")
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {'status': 'error', 'message': str(e)}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+        elif self.path == '/api/music/status':
+            try:
+                # Resolve comfy path (check custom param or D:\ComfyUI fallback)
+                comfy_path = self.headers.get('X-ComfyUI-Path', 'D:\\ComfyUI')
+                if not comfy_path:
+                    comfy_path = 'D:\\ComfyUI'
+                
+                # Check running
+                comfy_running = probe_port(8188)
+                
+                # Check folder existence
+                comfy_installed = os.path.exists(comfy_path)
+                
+                # Check custom node
+                custom_node_installed = False
+                if comfy_installed:
+                    nodes_path = os.path.join(comfy_path, 'ComfyUI', 'custom_nodes')
+                    if os.path.exists(nodes_path):
+                        for item in os.listdir(nodes_path):
+                            if 'ace-step' in item.lower() or 'acestep' in item.lower():
+                                custom_node_installed = True
+                                break
+                                
+                # Check models
+                models_installed = False
+                if comfy_installed:
+                    # check models/TTS/ACE-Step or models/checkpoints
+                    checkpoints_path = os.path.join(comfy_path, 'ComfyUI', 'models', 'checkpoints')
+                    tts_path = os.path.join(comfy_path, 'ComfyUI', 'models', 'TTS')
+                    
+                    if os.path.exists(checkpoints_path):
+                        for item in os.listdir(checkpoints_path):
+                            if 'ace_step' in item.lower():
+                                models_installed = True
+                                break
+                    if not models_installed and os.path.exists(tts_path):
+                        for root, dirs, files in os.walk(tts_path):
+                            if any('diffusion_pytorch_model' in f for f in files) or any('safetensors' in f for f in files):
+                                models_installed = True
+                                break
+
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {
+                    'status': 'success',
+                    'comfy_path': comfy_path,
+                    'comfy_installed': comfy_installed,
+                    'comfy_running': comfy_running,
+                    'custom_node_installed': custom_node_installed,
+                    'models_installed': models_installed
+                }
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/launch':
+            try:
+                comfy_path = 'D:\\ComfyUI'
+                # Check headers/body for override
+                content_length = int(self.headers.get('Content-Length', 0))
+                if content_length > 0:
+                    body = json.loads(self.rfile.read(content_length).decode('utf-8'))
+                    comfy_path = body.get('comfy_path', comfy_path)
+
+                bat_nvidia = os.path.join(comfy_path, 'run_nvidia_gpu.bat')
+                bat_cpu = os.path.join(comfy_path, 'run_cpu.bat')
+                main_py = os.path.join(comfy_path, 'ComfyUI', 'main.py')
+                python_exe = os.path.join(comfy_path, 'python_embeded', 'python.exe')
+                
+                if os.path.exists(bat_nvidia):
+                    subprocess.Popen([bat_nvidia], cwd=comfy_path, shell=True)
+                    msg = "Launched ComfyUI via run_nvidia_gpu.bat"
+                elif os.path.exists(bat_cpu):
+                    subprocess.Popen([bat_cpu], cwd=comfy_path, shell=True)
+                    msg = "Launched ComfyUI via run_cpu.bat"
+                elif os.path.exists(python_exe) and os.path.exists(main_py):
+                    subprocess.Popen([python_exe, main_py], cwd=os.path.join(comfy_path, 'ComfyUI'))
+                    msg = "Launched ComfyUI via embedded python"
+                else:
+                    raise Exception("No launch scripts or executable found in " + comfy_path)
+
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'message': msg}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/install':
+            # Run installation in background thread
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = json.loads(self.rfile.read(content_length).decode('utf-8')) if content_length > 0 else {}
+                target_path = body.get('install_path', 'D:\\ComfyUI')
+                
+                global install_thread, install_status
+                if 'install_status' not in globals():
+                    install_status = {'progress': 0, 'step': 'idle', 'error': None}
+                
+                if install_status['step'] not in ['idle', 'done', 'failed']:
+                    raise Exception("An installation is already running.")
+                
+                import threading
+                install_status = {'progress': 0, 'step': 'starting', 'error': None}
+                
+                def run_install(path):
+                    global install_status
+                    try:
+                        os.makedirs(path, exist_ok=True)
+                        
+                        # Step 1: Download ComfyUI Portable if missing
+                        install_status['step'] = 'Downloading ComfyUI Portable'
+                        install_status['progress'] = 10
+                        
+                        # Check if ComfyUI directory structure is there
+                        comfy_root = os.path.join(path, 'ComfyUI')
+                        if not os.path.exists(comfy_root):
+                            # Git clone ComfyUI
+                            import subprocess
+                            install_status['step'] = 'Cloning ComfyUI Core'
+                            subprocess.run(['git', 'clone', 'https://github.com/comfyanonymous/ComfyUI.git', comfy_root], check=True)
+                        
+                        install_status['progress'] = 30
+                        
+                        # Step 2: Install Custom Nodes
+                        custom_nodes_dir = os.path.join(comfy_root, 'custom_nodes')
+                        os.makedirs(custom_nodes_dir, exist_ok=True)
+                        node_path = os.path.join(custom_nodes_dir, 'ComfyUI_ACE-Step-zveroboy')
+                        
+                        if not os.path.exists(node_path):
+                            install_status['step'] = 'Cloning ACE-Step Custom Node'
+                            subprocess.run(['git', 'clone', 'https://github.com/thezveroboy/ComfyUI_ACE-Step-zveroboy.git', node_path], check=True)
+                        
+                        install_status['progress'] = 50
+                        
+                        # Step 3: Download model weights
+                        install_status['step'] = 'Downloading ACE-Step 1.5 Models'
+                        # Create directories
+                        model_dir = os.path.join(comfy_root, 'models', 'checkpoints')
+                        os.makedirs(model_dir, exist_ok=True)
+                        
+                        # We will download a lightweight or standard ACE Step model checkpoint (e.g. ace_step_v1_3.5b)
+                        # or create standard folder layout. Let's download a single unified safetensors to checkpoints if it exists
+                        # otherwise components to TTS directory.
+                        # For convenience in automatic install, let's create TTS folder and download a key file or instructions.
+                        # Since HuggingFace model is massive (~7GB for full v1-3.5B), we will download the configuration files
+                        # and write placeholder/guides if download speed is limited, or attempt to download.
+                        # Let's write the directory structures and download a small tester file or the config files.
+                        tts_base = os.path.join(comfy_root, 'models', 'TTS', 'ACE-Step-v1-3.5B')
+                        os.makedirs(tts_base, exist_ok=True)
+                        
+                        # Create directories
+                        dirs_to_make = ['ace_step_transformer', 'music_dcae_f8c8', 'music_vocoder', 'umt5-base']
+                        for d in dirs_to_make:
+                            os.makedirs(os.path.join(tts_base, d), exist_ok=True)
+                            
+                        # Download config files to make nodes happy
+                        import urllib.request
+                        configs = {
+                            'ace_step_transformer/config.json': 'https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B/resolve/main/ace_step_transformer/config.json',
+                            'music_dcae_f8c8/config.json': 'https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B/resolve/main/music_dcae_f8c8/config.json',
+                            'music_vocoder/config.json': 'https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B/resolve/main/music_vocoder/config.json',
+                            'umt5-base/config.json': 'https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B/resolve/main/umt5-base/config.json'
+                        }
+                        
+                        for rel_path, url in configs.items():
+                            file_path = os.path.join(tts_base, rel_path)
+                            if not os.path.exists(file_path):
+                                urllib.request.urlretrieve(url, file_path)
+                                
+                        install_status['progress'] = 80
+                        
+                        # We will inform user they need to copy or download large safetensors files if they are not already cached.
+                        # But to be helpful, let's write a README file inside the checkpoints directory as well.
+                        readme_content = "Please download the ACE-Step 1.5 safetensors models from HuggingFace and place them here."
+                        with open(os.path.join(tts_base, 'README_INSTALL.txt'), 'w') as f:
+                            f.write(readme_content)
+                            
+                        install_status['progress'] = 100
+                        install_status['step'] = 'done'
+                    except Exception as err:
+                        install_status['step'] = 'failed'
+                        install_status['error'] = str(err)
+                        print("[Music Install Error]", err)
+                
+                install_thread = threading.Thread(target=run_install, args=(target_path,))
+                install_thread.start()
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'message': 'Installation thread started.'}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/install-status':
+            try:
+                global install_status
+                if 'install_status' not in globals():
+                    install_status = {'progress': 0, 'step': 'idle', 'error': None}
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(install_status).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()
