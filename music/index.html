@@ -10,48 +10,75 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         body {
-            background-color: #020617;
+            background-color: #030712;
             color: #f8fafc;
             font-family: 'Inter', sans-serif;
-            background-size: 40px 40px;
-            background-image: linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px), 
-                              linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 50px 50px;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(217, 70, 239, 0.05) 0px, transparent 50%),
+                linear-gradient(to right, rgba(255,255,255,0.01) 1px, transparent 1px), 
+                linear-gradient(to bottom, rgba(255,255,255,0.01) 1px, transparent 1px);
         }
         .glass-card {
-            background: rgba(30, 41, 59, 0.4);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.05);
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(16px) saturate(130%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.25);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .glass-card:hover {
+            border-color: rgba(168, 85, 247, 0.25);
+            box-shadow: 0 10px 40px rgba(168, 85, 247, 0.06);
+        }
+        .studio-input {
+            background-color: rgba(3, 7, 18, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .studio-input:focus {
+            border-color: #a855f7;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.15);
+            outline: none;
         }
         .text-glow {
-            text-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+            text-shadow: 0 0 15px rgba(217, 70, 239, 0.5);
         }
         .glow-button {
-            box-shadow: 0 0 20px rgba(168, 85, 247, 0.25);
-            transition: all 0.3s ease;
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .glow-button:hover {
-            box-shadow: 0 0 30px rgba(168, 85, 247, 0.5);
+        .glow-button:hover:not(:disabled) {
+            box-shadow: 0 0 35px rgba(168, 85, 247, 0.45);
             transform: translateY(-2px);
         }
-        /* Custom progress bar styles */
+        .glow-button:active:not(:disabled) {
+            transform: translateY(0);
+        }
         .progress-bar {
             width: 100%;
-            background-color: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            height: 10px;
-            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            height: 8px;
+            border-radius: 9999px;
             overflow: hidden;
             position: relative;
         }
         .progress-bar-fill {
             height: 100%;
-            background: linear-gradient(90deg, #d946ef, #6366f1);
+            background: linear-gradient(90deg, #d946ef, #818cf8, #d946ef);
+            background-size: 200% auto;
+            animation: progress-slide 1.5s linear infinite;
             transition: width 0.3s ease;
             width: 0%;
         }
+        @keyframes progress-slide {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
     </style>
 </head>
-<body class="min-h-screen selection:bg-fuchsia-500/30">
+<body class="min-h-screen selection:bg-fuchsia-500/30 pb-20">
 
     <!-- Navbar -->
     <nav class="w-full border-b border-white/5 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
@@ -77,9 +104,9 @@
     <main class="max-w-7xl mx-auto px-6 py-12">
         
         <!-- Connection Banner -->
-        <div id="connection-banner" class="glass-card rounded-3xl p-6 mb-8 border-violet-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div id="connection-banner" class="glass-card rounded-3xl p-6 mb-10 border-violet-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div class="flex items-center gap-4">
-                <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-xl" id="comfy-status-icon">
+                <div class="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center text-xl border border-white/5" id="comfy-status-icon">
                     <i class="fa-solid fa-server text-slate-400"></i>
                 </div>
                 <div>
@@ -88,7 +115,7 @@
                         <span id="comfy-status-badge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-400 border border-white/5 uppercase font-extrabold tracking-wider">Checking...</span>
                     </h2>
                     <p class="text-xs text-slate-400 mt-1">
-                        Local ComfyUI Path: <span id="current-comfy-path" class="font-mono text-slate-300">D:\ComfyUI</span>
+                        Local Service Path: <span id="current-comfy-path" class="font-mono text-slate-300">D:\ComfyUI\ACE-Step-1.5</span>
                     </p>
                 </div>
             </div>
@@ -105,10 +132,10 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
             <!-- LEFT PANEL: Gemma 4 Brainstormer -->
-            <div class="lg:col-span-6 flex flex-col">
+            <div class="lg:col-span-7 flex flex-col">
                 <div class="glass-card rounded-3xl p-8 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[500px]">
                     <div class="absolute -right-24 -top-24 w-48 h-48 bg-fuchsia-600/10 rounded-full blur-3xl"></div>
                     
@@ -125,7 +152,7 @@
                     <div class="space-y-4 mb-6">
                         <div>
                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">1. Choose a Field of Study</label>
-                            <select id="subject-selector" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
+                            <select id="subject-selector" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                                 <option value="anatomy">Anatomy & Physiology (Muscles, Bones, Hormones)</option>
                                 <option value="chemistry">General Chemistry (Molecules, Reactions, Periodic Table)</option>
                                 <option value="psychology">Intro to Psychology (Behaviors, Brain Regions, Ethics)</option>
@@ -136,28 +163,28 @@
                         
                         <div id="custom-subject-container" class="hidden">
                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Custom Topic Details</label>
-                            <input type="text" id="custom-subject-input" placeholder="e.g. Physics Wave Mechanics, Organic Chemistry Nomenclature" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
+                            <input type="text" id="custom-subject-input" placeholder="e.g. Physics Wave Mechanics, Organic Chemistry Nomenclature" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                         </div>
 
                         <div>
                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">2. Lyrics Inspiration & Topic Prompt</label>
-                            <textarea id="lyrics-prompt" placeholder="Brainstorm ideas or specify details to help Gemma generate targeted educational lyrics. E.g. 'Generate a catchy, upbeat pop song explaining the functions of the skull bones.'" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors h-24 resize-none"></textarea>
+                            <textarea id="lyrics-prompt" placeholder="Brainstorm ideas or specify details to help Gemma generate targeted educational lyrics. E.g. 'Generate a catchy, upbeat pop song explaining the functions of the skull bones.'" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors h-24 resize-none"></textarea>
                         </div>
                     </div>
 
-                    <button id="btn-brainstorm" class="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/20 border border-indigo-500 mb-6 flex items-center justify-center gap-2">
+                    <button id="btn-brainstorm" class="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/20 border border-indigo-500/30 mb-6 flex items-center justify-center gap-2">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> Brainstorm Lyrics with Gemma
                     </button>
 
                     <div class="flex-grow flex flex-col">
                         <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Generated Song Lyrics</label>
-                        <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. You can edit them freely before generating music." class="w-full bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-4 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors flex-grow resize-none font-mono min-h-[220px]"></textarea>
+                        <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. You can edit them freely before generating music." class="w-full studio-input rounded-2xl px-4 py-4 text-sm text-slate-200 focus:outline-none flex-grow resize-none font-mono min-h-[220px]"></textarea>
                     </div>
                 </div>
             </div>
             
             <!-- RIGHT PANEL: ComfyUI / ACE Step Composer -->
-            <div class="lg:col-span-6 flex flex-col">
+            <div class="lg:col-span-5 flex flex-col">
                 <div class="glass-card rounded-3xl p-8 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[500px]">
                     <div class="absolute -left-24 -bottom-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
 
@@ -166,7 +193,7 @@
                             <i class="fa-solid fa-music text-xl"></i>
                         </div>
                         <div>
-                            <h3 class="text-lg font-bold text-white">ACE Step 1.5 Composer Settings</h3>
+                            <h3 class="text-lg font-bold text-white">ACE Step 1.5 Settings</h3>
                             <p class="text-xs text-indigo-400 font-bold uppercase tracking-wider mt-0.5">Local Audio Generator</p>
                         </div>
                     </div>
@@ -174,13 +201,13 @@
                     <div class="space-y-4 mb-6">
                         <div>
                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Track Prompt (Mood/Genre)</label>
-                            <input type="text" id="music-prompt" value="lofi study beats, soft chill ambient synth, relaxing piano, focus tempo" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                            <input type="text" id="music-prompt" value="lofi study beats, soft chill ambient synth, relaxing piano, focus tempo" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                         </div>
 
                         <div class="grid grid-cols-1 gap-4">
                             <div>
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Model Selection</label>
-                                <select id="music-model" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                <select id="music-model" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                                     <option value="acemusic/acestep-v15-xl-turbo">acemusic/acestep-v15-xl-turbo (4B XL Turbo - Premium)</option>
                                     <option value="acemusic/acestep-v15-turbo">acemusic/acestep-v15-turbo (Standard Turbo)</option>
                                 </select>
@@ -190,7 +217,7 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Tempo (BPM)</label>
-                                <select id="music-bpm" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                <select id="music-bpm" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                                     <option value="80">80 (Chill / Lofi)</option>
                                     <option value="100">100 (Relaxed)</option>
                                     <option value="120">120 (Upbeat)</option>
@@ -198,7 +225,7 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Audio Length</label>
-                                <select id="music-length" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                <select id="music-length" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                                     <option value="10">10 seconds (Quick Test)</option>
                                     <option value="30">30 seconds (Short Loop)</option>
                                     <option value="60">60 seconds (Full Verse)</option>
@@ -209,7 +236,7 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Inference Steps</label>
-                                <select id="music-steps" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                <select id="music-steps" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                                     <option value="8">8 Steps (ACE Turbo - Fastest)</option>
                                     <option value="20">20 Steps (Standard - Better Quality)</option>
                                     <option value="50">50 Steps (Supervised Fine-Tune - High Quality)</option>
@@ -217,7 +244,7 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Vocal Generation</label>
-                                <select id="music-vocals" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                <select id="music-vocals" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
                                     <option value="on">Vocals On (Sings Lyrics)</option>
                                     <option value="off">Instrumental Only (BGM)</option>
                                 </select>
@@ -247,7 +274,7 @@
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Musical Key</label>
-                                    <select id="music-key" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                    <select id="music-key" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors">
                                         <option value="">Auto-Detect Key</option>
                                         <option value="C Major">C Major (Happy, Clear)</option>
                                         <option value="G Major">G Major (Bright, Pure)</option>
@@ -259,7 +286,7 @@
                                 </div>
                                 <div>
                                     <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Time Signature</label>
-                                    <select id="music-signature" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors">
+                                    <select id="music-signature" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors">
                                         <option value="">Auto-Detect Metric</option>
                                         <option value="4">4/4 (Standard Meter)</option>
                                         <option value="3">3/4 (Waltz Metric)</option>
@@ -270,14 +297,14 @@
                             <div class="grid grid-cols-2 gap-4 items-end">
                                 <div>
                                     <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Custom Seed</label>
-                                    <input type="number" id="music-seed" placeholder="Random Seed" class="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors font-mono">
+                                    <input type="number" id="music-seed" placeholder="Random Seed" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors font-mono">
                                 </div>
                                 <div>
                                     <div class="flex justify-between items-center mb-1">
                                         <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">LM CFG Scale</label>
                                         <span id="lm-cfg-val" class="text-[10px] font-bold text-indigo-400 font-mono">2.0</span>
                                     </div>
-                                    <input type="range" id="music-lm-cfg" min="1.0" max="5.0" step="0.5" value="2.0" class="w-full accent-indigo-500 h-1.5 bg-slate-900 rounded-lg appearance-none cursor-pointer">
+                                    <input type="range" id="music-lm-cfg" min="1.0" max="5.0" step="0.5" value="2.0" class="w-full accent-indigo-500 h-1.5 bg-slate-950 rounded-lg appearance-none cursor-pointer">
                                 </div>
                             </div>
                         </div>
