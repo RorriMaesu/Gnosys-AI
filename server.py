@@ -853,6 +853,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 script = f"from huggingface_hub import snapshot_download; snapshot_download(repo_id='{repo_id}', local_dir=r'{target_dir}')"
                 
                 # Run download in background thread
+                import threading as th
                 def download_task():
                     active_downloads[repo_id] = 'downloading'
                     print(f"[Downloader] Starting download for {repo_id} to {target_dir}...")
@@ -864,7 +865,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         active_downloads[repo_id] = 'failed'
                         print(f"[Downloader] Failed to download {repo_id}: {err}")
 
-                threading.Thread(target=download_task, daemon=True).start()
+                th.Thread(target=download_task, daemon=True).start()
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
