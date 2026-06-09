@@ -153,7 +153,15 @@
         try {
             const stateStr = localStorage.getItem('study_pomodoro_state');
             if (stateStr) {
-                return JSON.parse(stateStr);
+                const parsed = JSON.parse(stateStr);
+                if (!parsed.config) {
+                    parsed.config = {
+                        autoStart: false,
+                        soundEnabled: true,
+                        notificationsEnabled: true
+                    };
+                }
+                return parsed;
             }
         } catch (e) {
             console.error('Failed to parse Pomodoro state:', e);
@@ -166,7 +174,12 @@
             selectedCourseId: detectCurrentCourse(),
             targetTime: null,
             alarmActive: false,
-            alarmMode: null
+            alarmMode: null,
+            config: {
+                autoStart: false,
+                soundEnabled: true,
+                notificationsEnabled: true
+            }
         };
     }
 
@@ -188,6 +201,16 @@
     function saveFocusStats(stats) {
         localStorage.setItem('study_hub_focus_stats', JSON.stringify(stats));
         window.dispatchEvent(new Event('studyStatsUpdated'));
+    }
+
+    // Log larger chunks of focus time (e.g. offline completion)
+    function logFocusTime(courseId, seconds) {
+        const stats = getFocusStats();
+        if (!stats[courseId]) {
+            stats[courseId] = 0;
+        }
+        stats[courseId] += seconds;
+        saveFocusStats(stats);
     }
 
     // Add styles to document head
@@ -273,6 +296,7 @@
                 cursor: pointer !important;
                 transition: transform 0.2s ease, border-color 0.2s ease !important;
                 position: relative !important;
+                flex-shrink: 0 !important;
             }
             .in-openword #timer-toggle-btn:hover {
                 transform: scale(1.05) !important;
@@ -506,6 +530,7 @@
                 -webkit-backdrop-filter: blur(12px) !important;
                 cursor: pointer !important;
                 transition: transform 0.2s ease, border-color 0.2s ease !important;
+                flex-shrink: 0 !important;
             }
             .in-openword #stats-modal-trigger-btn:hover {
                 transform: scale(1.05) !important;
@@ -838,6 +863,62 @@
             .blur-3xl {
                 filter: blur(64px) !important;
             }
+            
+            /* Toggle Switch Vanilla styles */
+            .pomo-switch-label {
+                position: relative;
+                display: inline-block;
+                width: 38px;
+                height: 20px;
+                flex-shrink: 0;
+            }
+            .pomo-switch-label input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+            .pomo-switch-slider {
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(255, 255, 255, 0.1);
+                transition: .3s;
+                border-radius: 20px;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            .pomo-switch-slider:before {
+                position: absolute;
+                content: "";
+                height: 14px;
+                width: 14px;
+                left: 2px;
+                bottom: 2px;
+                background-color: #94a3b8;
+                transition: .3s;
+                border-radius: 50%;
+            }
+            .pomo-switch-label input:checked + .pomo-switch-slider {
+                background-color: #4f46e5;
+            }
+            .pomo-switch-label input:checked + .pomo-switch-slider:before {
+                transform: translateX(18px);
+                background-color: #ffffff;
+            }
+            
+            /* Extra styles for settings layout compatibility */
+            .settings-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 0;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            .settings-row:last-child {
+                border-bottom: none;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -855,7 +936,7 @@
         // Collapsed Button
         const btn = document.createElement('button');
         btn.id = 'timer-toggle-btn';
-        btn.className = 'w-14 h-14 rounded-full bg-slate-900/90 border border-indigo-500/30 text-white flex items-center justify-center shadow-2xl backdrop-blur-md hover:scale-105 transition-all relative group';
+        btn.className = 'w-14 h-14 rounded-full bg-slate-900/90 border border-indigo-500/30 text-white flex items-center justify-center shadow-2xl backdrop-blur-md hover:scale-105 transition-all relative group shrink-0';
         btn.innerHTML = `
             <span id="timer-pulse-ring" class="absolute inset-0 rounded-full border border-indigo-500/40 scale-100 opacity-0 pointer-events-none"></span>
             <i class="fa-solid fa-clock text-xl text-indigo-400 group-hover:rotate-12 transition-transform"></i>
@@ -869,38 +950,71 @@
         panel.className = 'hidden flex-col bg-slate-950/95 border border-white/10 rounded-2xl p-5 shadow-2xl w-80 max-w-sm fade-in backdrop-blur-lg';
         panel.innerHTML = `
             <div class="flex justify-between items-center mb-3">
-                <h3 class="text-xs uppercase tracking-widest text-slate-400 font-extrabold flex items-center gap-1.5">
+                <h3 class="text-xs uppercase tracking-widest text-slate-400 font-extrabold flex items-center gap-1.5" id="timer-panel-title">
                     <i class="fa-solid fa-hourglass-half text-indigo-400"></i> Focus Workspace
                 </h3>
-                <button id="timer-close-panel-btn" class="text-slate-500 hover:text-white transition-colors">
-                    <i class="fa-solid fa-xmark text-xs"></i>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="timer-settings-btn" class="text-slate-500 hover:text-white transition-colors p-1" title="Timer Settings" style="background:none; border:none; cursor:pointer;">
+                        <i class="fa-solid fa-gear text-xs"></i>
+                    </button>
+                    <button id="timer-close-panel-btn" class="text-slate-500 hover:text-white transition-colors p-1" style="background:none; border:none; cursor:pointer;">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                </div>
             </div>
             
-            <div class="timer-panel-body-wrapper flex items-center gap-4 py-2 border-b border-white/5 mb-3">
-                <div class="timer-progress-container relative w-20 h-20 flex items-center justify-center shrink-0">
-                    <svg class="absolute w-full h-full -rotate-90">
-                        <circle cx="40" cy="40" r="34" class="stroke-slate-800 fill-none" stroke-width="4"></circle>
-                        <circle cx="40" cy="40" r="34" class="stroke-indigo-500 fill-none transition-all duration-300" stroke-width="4" stroke-dasharray="213" stroke-dashoffset="0" id="timer-progress-ring"></circle>
-                    </svg>
-                    <span id="timer-display" class="text-base font-black text-white tracking-tight z-10">25:00</span>
+            <div id="timer-main-view" class="flex flex-col">
+                <div class="timer-panel-body-wrapper flex items-center gap-4 py-2 border-b border-white/5 mb-3">
+                    <div class="timer-progress-container relative w-20 h-20 flex items-center justify-center shrink-0">
+                        <svg class="absolute w-full h-full -rotate-90" viewBox="0 0 80 80">
+                            <circle cx="40" cy="40" r="34" class="stroke-slate-800 fill-none" stroke-width="4"></circle>
+                            <circle cx="40" cy="40" r="34" class="stroke-indigo-500 fill-none transition-all duration-300" stroke-width="4" stroke-dasharray="213" stroke-dashoffset="0" id="timer-progress-ring"></circle>
+                        </svg>
+                        <span id="timer-display" class="text-base font-black text-white tracking-tight z-10">25:00</span>
+                    </div>
+                    <div class="timer-info-container flex-grow">
+                        <span id="timer-mode-indicator" class="text-[9px] font-extrabold text-indigo-400 uppercase tracking-widest block mb-1">Focus Session Active</span>
+                        <span id="timer-active-course-display" class="text-xs font-extrabold text-slate-300 block leading-tight">General Focus</span>
+                    </div>
                 </div>
-                <div class="timer-info-container flex-grow">
-                    <span id="timer-mode-indicator" class="text-[9px] font-extrabold text-indigo-400 uppercase tracking-widest block mb-1">Focus Session Active</span>
-                    <span id="timer-active-course-display" class="text-xs font-extrabold text-slate-300 block leading-tight">General Focus</span>
+
+                <div class="timer-buttons-container flex gap-2">
+                    <button id="timer-play" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all">
+                        <i class="fa-solid fa-play"></i> Start
+                    </button>
+                    <button id="timer-pause" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 border border-white/5 transition-all hidden">
+                        <i class="fa-solid fa-pause"></i> Pause
+                    </button>
+                    <button id="timer-reset" class="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white border border-white/5 transition-colors">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
                 </div>
             </div>
-
-
-            <div class="timer-buttons-container flex gap-2">
-                <button id="timer-play" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all">
-                    <i class="fa-solid fa-play"></i> Start
-                </button>
-                <button id="timer-pause" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 border border-white/5 transition-all hidden">
-                    <i class="fa-solid fa-pause"></i> Pause
-                </button>
-                <button id="timer-reset" class="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white border border-white/5 transition-colors">
-                    <i class="fa-solid fa-rotate-right"></i>
+            
+            <div id="timer-settings-view" class="hidden flex-col gap-1 py-1">
+                <div class="settings-row">
+                    <span class="text-xs font-semibold text-slate-300">Auto-Start Focus</span>
+                    <label class="pomo-switch-label">
+                        <input type="checkbox" id="setting-auto-start">
+                        <span class="pomo-switch-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row">
+                    <span class="text-xs font-semibold text-slate-300">Sound Alerts</span>
+                    <label class="pomo-switch-label">
+                        <input type="checkbox" id="setting-sound" checked>
+                        <span class="pomo-switch-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row">
+                    <span class="text-xs font-semibold text-slate-300">Desktop Alerts</span>
+                    <label class="pomo-switch-label">
+                        <input type="checkbox" id="setting-notifications" checked>
+                        <span class="pomo-switch-slider"></span>
+                    </label>
+                </div>
+                <button id="settings-back-btn" class="w-full mt-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs border border-white/5 transition-colors" style="cursor:pointer; outline:none; border: 1px solid rgba(255, 255, 255, 0.05);">
+                    Back to Timer
                 </button>
             </div>
         `;
@@ -915,7 +1029,7 @@
             statsBtnContainer.id = 'floating-stats-btn-container';
             statsBtnContainer.className = 'fixed bottom-6 right-6 z-[250] pointer-events-auto';
             statsBtnContainer.innerHTML = `
-                <button id="stats-modal-trigger-btn" class="w-14 h-14 rounded-full bg-slate-900/90 border border-teal-500/30 text-white flex items-center justify-center shadow-2xl backdrop-blur-md hover:scale-105 transition-all group">
+                <button id="stats-modal-trigger-btn" class="w-14 h-14 rounded-full bg-slate-900/90 border border-teal-500/30 text-white flex items-center justify-center shadow-2xl backdrop-blur-md hover:scale-105 transition-all group shrink-0">
                     <i class="fa-solid fa-chart-simple text-xl text-teal-400 group-hover:scale-110 transition-transform"></i>
                 </button>
             `;
@@ -1026,7 +1140,7 @@
         if (cooldownActive) return;
         
         const state = getTimerState();
-        if (!state.isRunning && state.mode === 'focus' && !state.alarmActive) {
+        if (state.config && state.config.autoStart && !state.isRunning && state.mode === 'focus' && !state.alarmActive) {
             if (e && e.target) {
                 const isPomoClick = e.target.closest('#floating-timer-widget') || 
                                      e.target.closest('#modal-stats') || 
@@ -1153,6 +1267,8 @@
 
     // Alarm Sound Loops
     function startAlarmAudio() {
+        const state = getTimerState();
+        if (state.config && !state.config.soundEnabled) return;
         if (alarmAudioInterval) return;
         playDoubleBeep();
         alarmAudioInterval = setInterval(playDoubleBeep, 1800);
@@ -1312,6 +1428,8 @@
 
     // Show HTML5 system browser notification
     function showBrowserNotification(title, message) {
+        const state = getTimerState();
+        if (state.config && !state.config.notificationsEnabled) return;
         if (!('Notification' in window)) return;
         if (Notification.permission === 'granted') {
             new Notification(title, { body: message, icon: getRootPath() + 'assets/GnosysAILogo.jpg' });
@@ -1551,6 +1669,67 @@
         const statsBackdrop = document.getElementById('stats-modal-backdrop');
         const globalToggleBtn = document.getElementById('pomo-toggle-btn');
 
+        const settingsBtn = document.getElementById('timer-settings-btn');
+        const backBtn = document.getElementById('settings-back-btn');
+        const mainView = document.getElementById('timer-main-view');
+        const settingsView = document.getElementById('timer-settings-view');
+        const panelTitle = document.getElementById('timer-panel-title');
+
+        const chkAutoStart = document.getElementById('setting-auto-start');
+        const chkSound = document.getElementById('setting-sound');
+        const chkNotifications = document.getElementById('setting-notifications');
+
+        function loadSettingsUI() {
+            const state = getTimerState();
+            if (state.config) {
+                if (chkAutoStart) chkAutoStart.checked = !!state.config.autoStart;
+                if (chkSound) chkSound.checked = !!state.config.soundEnabled;
+                if (chkNotifications) chkNotifications.checked = !!state.config.notificationsEnabled;
+            }
+        }
+
+        function saveSettingsFromUI() {
+            const state = getTimerState();
+            if (!state.config) state.config = {};
+            state.config.autoStart = chkAutoStart ? chkAutoStart.checked : false;
+            state.config.soundEnabled = chkSound ? chkSound.checked : true;
+            state.config.notificationsEnabled = chkNotifications ? chkNotifications.checked : true;
+            setTimerState(state);
+        }
+
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', () => {
+                const isHidden = settingsView.classList.contains('hidden');
+                if (isHidden) {
+                    loadSettingsUI();
+                    mainView.classList.add('hidden');
+                    settingsView.classList.remove('hidden');
+                    settingsView.classList.add('flex');
+                    if (panelTitle) panelTitle.innerHTML = '<i class="fa-solid fa-gear text-indigo-400"></i> Settings';
+                } else {
+                    mainView.classList.remove('hidden');
+                    settingsView.classList.add('hidden');
+                    settingsView.classList.remove('flex');
+                    if (panelTitle) panelTitle.innerHTML = '<i class="fa-solid fa-hourglass-half text-indigo-400"></i> Focus Workspace';
+                }
+            });
+        }
+
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                mainView.classList.remove('hidden');
+                settingsView.classList.add('hidden');
+                settingsView.classList.remove('flex');
+                if (panelTitle) panelTitle.innerHTML = '<i class="fa-solid fa-hourglass-half text-indigo-400"></i> Focus Workspace';
+            });
+        }
+
+        [chkAutoStart, chkSound, chkNotifications].forEach(chk => {
+            if (chk) {
+                chk.addEventListener('change', saveSettingsFromUI);
+            }
+        });
+
         if (btnPlay) btnPlay.addEventListener('click', handlePlay);
         if (btnPause) btnPause.addEventListener('click', handlePause);
         if (btnReset) btnReset.addEventListener('click', handleReset);
@@ -1592,6 +1771,16 @@
                     dismissLocalAlarm();
                 }
 
+                // Synchronize checkboxes
+                const chkAutoStart = document.getElementById('setting-auto-start');
+                const chkSound = document.getElementById('setting-sound');
+                const chkNotifications = document.getElementById('setting-notifications');
+                if (newState.config) {
+                    if (chkAutoStart) chkAutoStart.checked = !!newState.config.autoStart;
+                    if (chkSound) chkSound.checked = !!newState.config.soundEnabled;
+                    if (chkNotifications) chkNotifications.checked = !!newState.config.notificationsEnabled;
+                }
+
                 updateTimerUI(newState);
                 if (newState.isRunning) {
                     startTicker();
@@ -1610,6 +1799,99 @@
                 startAlarmAudio();
             }
         });
+    }
+
+    function checkOfflineExpiration(state) {
+        if (!state.isRunning || !state.targetTime) return state;
+
+        const now = Date.now();
+        const delta = Math.round((state.targetTime - now) / 1000);
+
+        if (delta <= 0) {
+            // Timer expired offline
+            const expiredBySeconds = Math.abs(delta);
+            const finishedMode = state.mode;
+            
+            if (expiredBySeconds > 180) {
+                // Stale expiration (more than 3 minutes ago)
+                state.isRunning = false;
+                state.targetTime = null;
+                state.alarmActive = false;
+                state.alarmMode = null;
+                
+                let toastMsg = "";
+                if (finishedMode === 'focus') {
+                    const lastLog = parseInt(localStorage.getItem('pomodoro_last_log_time') || '0', 10);
+                    let offlineSeconds = 0;
+                    if (lastLog > 0 && state.targetTime > lastLog) {
+                        offlineSeconds = Math.min(state.maxTime, Math.round((state.targetTime - lastLog) / 1000));
+                    } else {
+                        offlineSeconds = state.timeLeft;
+                    }
+                    
+                    if (offlineSeconds > 0) {
+                        logFocusTime(state.selectedCourseId, offlineSeconds);
+                    }
+                    const course = POMODORO_COURSES.find(c => c.id === state.selectedCourseId);
+                    const courseTitle = course ? course.title : "General Focus";
+                    toastMsg = `Completed focus session for ${courseTitle} while away! +${Math.round(offlineSeconds / 60)}m logged. 🏆`;
+                } else {
+                    toastMsg = `Break completed while you were away! Ready to focus. ☕`;
+                }
+
+                // Reset to default focus session
+                state.mode = 'focus';
+                state.timeLeft = 25 * 60;
+                state.maxTime = 25 * 60;
+                setTimerState(state);
+
+                // Show toast notification
+                setTimeout(() => showTimerToast(toastMsg, finishedMode === 'focus' ? 'fa-trophy' : 'fa-mug-hot'), 1000);
+            } else {
+                // Non-stale expiration. Trigger normal alarm transition.
+                state.alarmActive = true;
+                state.alarmMode = finishedMode;
+                state.isRunning = false;
+                state.targetTime = null;
+
+                if (finishedMode === 'focus') {
+                    logFocusTime(state.selectedCourseId, state.timeLeft);
+                    state.mode = 'break';
+                    state.timeLeft = 5 * 60;
+                    state.maxTime = 5 * 60;
+                } else {
+                    state.mode = 'focus';
+                    state.timeLeft = 25 * 60;
+                    state.maxTime = 25 * 60;
+                }
+                setTimerState(state);
+            }
+        }
+        return state;
+    }
+
+    function showTimerToast(message, iconClass) {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = 'glass-card border border-indigo-500/20 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs text-slate-200 fade-in select-none';
+        toast.style.background = 'rgba(15, 23, 42, 0.9)';
+        toast.style.backdropFilter = 'blur(12px)';
+        toast.innerHTML = `
+            <div class="w-7 h-7 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                <i class="fa-solid ${iconClass} animate-pulse"></i>
+            </div>
+            <span>${message}</span>
+        `;
+        container.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(10px)';
+            toast.style.transition = 'all 0.5s ease-out';
+            setTimeout(() => toast.remove(), 500);
+        }, 5000);
     }
 
     // Initialize Timer widget
@@ -1632,7 +1914,10 @@
         setupListeners();
         
         // Initial setup
-        const state = getTimerState();
+        let state = getTimerState();
+        
+        // Check for stale offline completions
+        state = checkOfflineExpiration(state);
         
         // Auto-select course on load if user hasn't overridden it in the current run
         const currentDet = detectCurrentCourse();

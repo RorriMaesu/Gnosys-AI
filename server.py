@@ -844,10 +844,20 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 repo_id = payload.get('repo_id')
                 target_dir = payload.get('target_dir')
                 
-                # Check virtual environment python
+                # Check ACE-Step virtual environment python first (from path header)
+                ace_path = self.headers.get('X-ComfyUI-Path', '').strip() or 'D:\\ComfyUI\\ACE-Step-1.5'
+                ace_python = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
+                
+                # Check helper server virtual environment python
                 server_dir = os.path.dirname(os.path.abspath(__file__))
                 venv_python = os.path.join(server_dir, '.venv', 'Scripts', 'python.exe')
-                python_exe = venv_python if os.path.exists(venv_python) else 'python'
+                
+                if os.path.exists(ace_python):
+                    python_exe = ace_python
+                elif os.path.exists(venv_python):
+                    python_exe = venv_python
+                else:
+                    python_exe = 'python'
 
                 # Build python download script
                 script = f"from huggingface_hub import snapshot_download; snapshot_download(repo_id='{repo_id}', local_dir=r'{target_dir}')"
