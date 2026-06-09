@@ -273,6 +273,15 @@
 
         // Music generation trigger
         document.getElementById('btn-generate-track').addEventListener('click', generateStudyTrack);
+
+        // Copy launch command helper
+        const copyCmdBtn = document.getElementById('btn-copy-launch-cmd');
+        if (copyCmdBtn) {
+            copyCmdBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText("python server.py");
+                showBannerNotification("Local run command copied to clipboard!", "success");
+            });
+        }
     }
 
     async function checkMusicServiceStatus() {
@@ -287,6 +296,10 @@
             });
             if (!res.ok) throw new Error();
             const data = await res.json();
+
+            // Hide onboarding warning if port 8020 responds
+            const onboardingCard = document.getElementById('backend-onboarding-card');
+            if (onboardingCard) onboardingCard.classList.add('hidden');
 
             // Render diagnostic indicators if path exists
             const diagBox = document.getElementById('comfy-diagnostics-box');
@@ -336,6 +349,10 @@
             icon.innerHTML = '<i class="fa-solid fa-server text-slate-400"></i>';
             launchBtn.classList.add('hidden');
             installBtn.classList.remove('hidden');
+
+            // Show onboarding warning if connection failed
+            const onboardingCard = document.getElementById('backend-onboarding-card');
+            if (onboardingCard) onboardingCard.classList.remove('hidden');
         }
     }
 

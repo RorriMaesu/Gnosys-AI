@@ -135,6 +135,26 @@
             </div>
         </div>
 
+        <!-- Local Backend Onboarding Warning -->
+        <div id="backend-onboarding-card" class="glass-card rounded-3xl p-6 mb-10 border-amber-500/20 bg-amber-950/10 flex flex-col sm:flex-row justify-between items-center gap-4 hidden">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-xl border border-amber-500/20 text-amber-400">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h2 class="text-sm font-bold text-white">Local Assistant Server is Offline</h2>
+                    <p class="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                        Because this application is hosted statically, browsers cannot launch local programs automatically. Please open your installation folder and run <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux) to start the local helper.
+                    </p>
+                </div>
+            </div>
+            <div>
+                <button id="btn-copy-launch-cmd" class="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-xs font-bold text-amber-300 hover:text-white transition-all whitespace-nowrap">
+                    <i class="fa-solid fa-copy mr-1.5"></i> Copy Run Command
+                </button>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
             <!-- LEFT PANEL: Gemma 4 Brainstormer -->
