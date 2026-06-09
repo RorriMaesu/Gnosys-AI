@@ -98,6 +98,23 @@ const COURSES = [
         status: 'active'
     },
     {
+        id: 'quantime',
+        title: 'Quantime',
+        description: 'AI-driven task scheduler and calendar. Track objectives, optimize schedules, and manage time.',
+        link: '#',
+        category: 'Workspace',
+        icon: 'fa-calendar-days',
+        color: 'from-violet-500 to-fuchsia-600',
+        iconWrapClass: 'bg-violet-500/15 border-violet-400/30',
+        iconClass: 'text-violet-300',
+        iconWrapStyle: 'background: rgba(139, 92, 246, 0.18); border-color: rgba(167, 139, 250, 0.45);',
+        iconStyle: 'color: #a78bfa;',
+        accentGlow: 'bg-violet-500/10 group-hover:bg-violet-500/20',
+        accentTitleHover: 'group-hover:text-violet-200',
+        accentCta: 'text-violet-400',
+        status: 'active'
+    },
+    {
         id: 'general-sound-physics',
         title: 'General & Sound Physics',
         description: 'Acoustics, wave mechanics, electromagnetism, and SPI instrumentation foundations.',
@@ -319,9 +336,11 @@ function renderCourseGrid() {
             : '';
 
         // Handle card click
-        const clickAction = isActive
-            ? `href="${c.link}"`
-            : `href="#" onclick="showToast('${c.title}'); return false;"`;
+        const clickAction = c.id === 'quantime'
+            ? `href="#" onclick="handleQuantimeClick(event); return false;"`
+            : (isActive
+                ? `href="${c.link}"`
+                : `href="#" onclick="showToast('${c.title}'); return false;"`);
 
         return `
             <a ${clickAction} class="block group relative ${isActive ? '' : 'opacity-70 hover:opacity-90'}">
@@ -391,3 +410,231 @@ window.showToast = function(courseTitle) {
         }, 500);
     }, 4000);
 };
+
+// ----------------------------------------------------
+// QUANTIME INTEGRATION LAUNCHER & INSTALLATION LOGIC
+// ----------------------------------------------------
+function getOrCreateToastContainer() {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full';
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+let activeLaunchToast = null;
+
+function showLaunchToast(message, iconClass) {
+    removeLaunchToast();
+    const container = getOrCreateToastContainer();
+    if (!container) return;
+
+    activeLaunchToast = document.createElement('div');
+    activeLaunchToast.className = 'glass-card border border-indigo-500/20 px-5 py-4 rounded-2xl shadow-2xl flex items-center gap-3 text-sm text-slate-200 fade-in select-none max-w-sm w-full';
+    activeLaunchToast.style.background = 'rgba(15, 23, 42, 0.9)';
+    activeLaunchToast.style.backdropFilter = 'blur(12px)';
+    
+    activeLaunchToast.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+            <i class="fa-solid ${iconClass}"></i>
+        </div>
+        <div class="flex-grow">
+            <p class="font-extrabold text-white">Quantime Launcher</p>
+            <p class="text-xs text-slate-400 mt-0.5" id="launch-toast-text">${message}</p>
+        </div>
+    `;
+    container.appendChild(activeLaunchToast);
+}
+
+function updateLaunchToast(message, iconClass, timeout = 0) {
+    if (!activeLaunchToast) {
+        showLaunchToast(message, iconClass);
+    } else {
+        const textEl = document.getElementById('launch-toast-text');
+        if (textEl) textEl.textContent = message;
+        const iconContainer = activeLaunchToast.querySelector('.w-8.h-8 i');
+        if (iconContainer) {
+            iconContainer.className = `fa-solid ${iconClass}`;
+        }
+    }
+    
+    if (timeout > 0) {
+        setTimeout(removeLaunchToast, timeout);
+    }
+}
+
+function removeLaunchToast() {
+    if (activeLaunchToast) {
+        const t = activeLaunchToast;
+        activeLaunchToast = null;
+        t.style.opacity = '0';
+        t.style.transform = 'translateY(10px)';
+        t.style.transition = 'all 0.5s ease-out';
+        setTimeout(() => {
+            t.remove();
+        }, 500);
+    }
+}
+
+function fetchStatusFromList(endpoints, index, resolve, reject) {
+    if (index >= endpoints.length) {
+        reject(new Error("All endpoints failed"));
+        return;
+    }
+    fetch(endpoints[index], { signal: AbortSignal.timeout(1500) })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                data.apiBase = endpoints[index].substring(0, endpoints[index].indexOf('/api/'));
+                resolve(data);
+            } else {
+                fetchStatusFromList(endpoints, index + 1, resolve, reject);
+            }
+        })
+        .catch(() => {
+            fetchStatusFromList(endpoints, index + 1, resolve, reject);
+        });
+}
+
+function getQuantimeStatus() {
+    const endpoints = [
+        '/api/quantime-status',
+        'http://localhost:8020/api/quantime-status',
+        'http://localhost:8000/api/quantime-status'
+    ];
+    return new Promise((resolve, reject) => {
+        fetchStatusFromList(endpoints, 0, resolve, reject);
+    });
+}
+
+function triggerQuantimeProtocolLaunch() {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = 'gnosys-quantime://launch';
+    document.body.appendChild(iframe);
+    setTimeout(() => iframe.remove(), 1000);
+}
+
+function pollQuantimeApp(successCallback, failureCallback) {
+    let attempts = 0;
+    const maxAttempts = 15;
+    const interval = setInterval(() => {
+        attempts++;
+        // Check standard Quantime backend health (port 8000) or Vite (5173)
+        Promise.any([
+            fetch('http://localhost:8000/health', { signal: AbortSignal.timeout(1000) }).then(res => res.ok ? 'http://localhost:8000' : Promise.reject()),
+            fetch('http://localhost:5173/', { mode: 'no-cors', signal: AbortSignal.timeout(1000) }).then(() => 'http://localhost:5173')
+        ])
+        .then(url => {
+            clearInterval(interval);
+            successCallback(url);
+        })
+        .catch(() => {
+            if (attempts >= maxAttempts) {
+                clearInterval(interval);
+                failureCallback();
+            }
+        });
+    }, 1000);
+}
+
+window.handleQuantimeClick = function(event) {
+    if (event) event.preventDefault();
+    
+    showLaunchToast('Checking Quantime status...', 'fa-spinner fa-spin');
+    
+    getQuantimeStatus()
+        .then(data => {
+            if (data.installed) {
+                if (data.running) {
+                    removeLaunchToast();
+                    window.open(data.dashboard_url, '_blank');
+                } else {
+                    updateLaunchToast('Booting Quantime Scheduler...', 'fa-rocket text-indigo-400 animate-bounce');
+                    
+                    // Try launching via backend server API first
+                    const launchUrl = `${data.apiBase || ''}/api/launch-quantime`;
+                    fetch(launchUrl, { method: 'POST' })
+                        .then(res => res.json())
+                        .then(launchData => {
+                            if (launchData.status === 'success') {
+                                pollQuantimeApp(
+                                    (url) => {
+                                        removeLaunchToast();
+                                        window.open(url, '_blank');
+                                    },
+                                    () => {
+                                        updateLaunchToast('Launch timed out. Make sure it is installed.', 'fa-circle-exclamation text-rose-500', 4000);
+                                    }
+                                );
+                            } else {
+                                // Fallback to URL protocol launch
+                                triggerQuantimeProtocolLaunch();
+                                pollQuantimeApp(
+                                    (url) => {
+                                        removeLaunchToast();
+                                        window.open(url, '_blank');
+                                    },
+                                    () => {
+                                        updateLaunchToast('Launch failed. Please start manually.', 'fa-circle-exclamation text-rose-500', 4000);
+                                    }
+                                );
+                            }
+                        })
+                        .catch(() => {
+                            // Fallback to URL protocol launch
+                            triggerQuantimeProtocolLaunch();
+                            pollQuantimeApp(
+                                (url) => {
+                                    removeLaunchToast();
+                                    window.open(url, '_blank');
+                                },
+                                () => {
+                                    updateLaunchToast('Launch failed. Please start manually.', 'fa-circle-exclamation text-rose-500', 4000);
+                                }
+                            );
+                        });
+                }
+            } else {
+                removeLaunchToast();
+                showQuantimeInstallModal();
+            }
+        })
+        .catch(err => {
+            // Local server not running. Try directly launching via OS URL protocol handler
+            updateLaunchToast('Attempting OS protocol launch...', 'fa-rocket text-indigo-400 animate-bounce');
+            triggerQuantimeProtocolLaunch();
+            
+            pollQuantimeApp(
+                (url) => {
+                    removeLaunchToast();
+                    window.open(url, '_blank');
+                },
+                () => {
+                    // If polling fails, they likely don't have it installed
+                    removeLaunchToast();
+                    showQuantimeInstallModal();
+                }
+            );
+        });
+};
+
+window.showQuantimeInstallModal = function() {
+    const modal = document.getElementById('quantime-install-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+};
+
+window.closeQuantimeInstallModal = function() {
+    const modal = document.getElementById('quantime-install-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+};
+

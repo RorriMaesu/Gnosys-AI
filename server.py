@@ -5,10 +5,65 @@ import platform
 import json
 import os
 
-PORT = 8000
+PORT = 8020
+
+def get_quantime_install_path():
+    if platform.system() != 'Windows':
+        return None
+    try:
+        import winreg
+        for hive in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
+            try:
+                key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{D37E618A-706E-45E4-A159-4E6DF9B53A04}_is1"
+                with winreg.OpenKey(hive, key_path, 0, winreg.KEY_READ) as key:
+                    install_loc, _ = winreg.QueryValueEx(key, "InstallLocation")
+                    if install_loc and os.path.exists(install_loc):
+                        return install_loc
+            except Exception:
+                continue
+    except Exception:
+        pass
+    
+    # Fallback to standard LOCALAPPDATA path
+    local_app_data = os.environ.get('LOCALAPPDATA', '')
+    if local_app_data:
+        fallback = os.path.join(local_app_data, 'Programs', 'Quantime')
+        if os.path.exists(fallback):
+            return fallback
+    return None
+
+def is_quantime_installed():
+    path = get_quantime_install_path()
+    if not path:
+        return False
+    pythonw_path = os.path.join(path, 'backend', '.venv', 'Scripts', 'pythonw.exe')
+    return os.path.exists(pythonw_path)
+
+def is_quantime_running():
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(('127.0.0.1', 49999))
+        s.close()
+        return False
+    except socket.error:
+        return True
+
+def probe_port(port):
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.5)
+    try:
+        s.connect(('127.0.0.1', port))
+        s.close()
+        return True
+    except Exception:
+        return False
+
 
 def register_windows_protocol():
     if platform.system() == 'Windows':
+        # 1. Register Ollama protocol
         try:
             local_app_data = os.environ.get('LOCALAPPDATA', '')
             ollama_path = os.path.join(local_app_data, 'Programs', 'Ollama', 'ollama app.exe')
@@ -19,6 +74,20 @@ def register_windows_protocol():
             print("[Launcher] Programmatically registered gnosys-ollama:// protocol in HKCU.")
         except Exception as e:
             print(f"[Launcher] Warning: Could not register gnosys-ollama:// protocol: {e}")
+
+        # 2. Register Quantime protocol
+        try:
+            quantime_path = get_quantime_install_path()
+            if quantime_path:
+                pythonw_path = os.path.join(quantime_path, 'backend', '.venv', 'Scripts', 'pythonw.exe')
+                tray_path = os.path.join(quantime_path, 'backend', 'tray_icon.py')
+                if os.path.exists(pythonw_path) and os.path.exists(tray_path):
+                    q_cmd_path = f'"{pythonw_path}" "{tray_path}"'
+                    subprocess.run(['reg', 'add', 'HKCU\\Software\\Classes\\gnosys-quantime', '/v', 'URL Protocol', '/t', 'REG_SZ', '/d', '', '/f'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(['reg', 'add', 'HKCU\\Software\\Classes\\gnosys-quantime\\shell\\open\\command', '/ve', '/t', 'REG_SZ', '/d', q_cmd_path, '/f'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    print("[Launcher] Programmatically registered gnosys-quantime:// protocol in HKCU.")
+        except Exception as e:
+            print(f"[Launcher] Warning: Could not register gnosys-quantime:// protocol: {e}")
 
 def get_system_ram_gb():
     system = platform.system()
@@ -192,6 +261,34 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/quantime-status':
+            try:
+                installed = is_quantime_installed()
+                running = is_quantime_running()
+                
+                # Determine which port dashboard is on (5173 for dev, 8000 for prod)
+                dashboard_url = "http://localhost:8000"
+                if probe_port(5173):
+                    dashboard_url = "http://localhost:5173"
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {
+                    'status': 'success',
+                    'installed': installed,
+                    'running': running,
+                    'dashboard_url': dashboard_url
+                }
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         else:
             super().do_GET()
     def do_OPTIONS(self):
@@ -238,6 +335,37 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode('utf-8'))
             except Exception as e:
                 print(f"[Launcher] Error starting Ollama: {e}")
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {'status': 'error', 'message': str(e)}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+        elif self.path == '/api/launch-quantime':
+            try:
+                if not is_quantime_running():
+                    path = get_quantime_install_path()
+                    if path:
+                        pythonw_path = os.path.join(path, 'backend', '.venv', 'Scripts', 'pythonw.exe')
+                        tray_path = os.path.join(path, 'backend', 'tray_icon.py')
+                        if os.path.exists(pythonw_path) and os.path.exists(tray_path):
+                            subprocess.Popen([pythonw_path, tray_path], cwd=os.path.join(path, 'backend'))
+                            print("[Launcher] Launched Quantime from install path.")
+                        else:
+                            raise Exception("Quantime executable or tray icon script missing.")
+                    else:
+                        raise Exception("Quantime installation directory not found.")
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {'status': 'success', 'message': 'Quantime launch initiated.'}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+            except Exception as e:
+                print(f"[Launcher] Error starting Quantime: {e}")
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')

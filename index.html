@@ -99,6 +99,63 @@
         <p class="mt-2"><a href="https://buymeacoffee.com/rorrimaesu" target="_blank" class="hover:text-yellow-400 transition-colors inline-flex justify-center items-center gap-1.5"><i class="fa-solid fa-heart text-rose-500"></i> Support the project</a></p>
     </footer>
 
+    <!-- Quantime Installation Modal -->
+    <div id="quantime-install-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="glass-card rounded-3xl p-8 max-w-lg w-full border border-white/10 shadow-2xl relative overflow-hidden fade-in text-left">
+            <div class="absolute -right-16 -top-16 w-36 h-36 bg-violet-600/10 rounded-full blur-3xl"></div>
+            <div class="absolute -left-16 -bottom-16 w-36 h-36 bg-fuchsia-600/10 rounded-full blur-3xl"></div>
+            
+            <div class="flex justify-between items-start mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-white shadow-lg">
+                        <i class="fa-solid fa-calendar-days text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Install Quantime Scheduler</h3>
+                        <p class="text-xs text-indigo-300 font-bold uppercase tracking-wider mt-0.5">Workspace Tool integration</p>
+                    </div>
+                </div>
+                <button onclick="closeQuantimeInstallModal()" class="w-8 h-8 rounded-full glass-card flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-slate-300 text-sm mb-8">
+                <p>Quantime could not be auto-detected on this system. Follow these simple steps to install and integrate it:</p>
+                <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
+                    <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
+                    <div>
+                        <p class="font-bold text-white mb-0.5">Download the Installer</p>
+                        <p class="text-xs text-slate-400">Grab the latest Windows setup file (`QuantimeSetup.exe`) directly from our GitHub releases.</p>
+                    </div>
+                </div>
+                <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
+                    <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
+                    <div>
+                        <p class="font-bold text-white mb-0.5">Run & Complete Setup</p>
+                        <p class="text-xs text-slate-400">Run the installer, complete the environment setup wizard, and let it launch the background tray engine.</p>
+                    </div>
+                </div>
+                <div class="flex gap-3 items-start bg-white/5 p-3.5 rounded-2xl border border-white/5">
+                    <span class="w-6 h-6 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</span>
+                    <div>
+                        <p class="font-bold text-white mb-0.5">Access via Dashboard</p>
+                        <p class="text-xs text-slate-400">Once installed, simply click the Quantime card here on Gnosys-AI to automatically boot and open the scheduler.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3">
+                <a href="https://github.com/RorriMaesu/Quantime/releases/latest/download/QuantimeSetup.exe" onclick="closeQuantimeInstallModal()" target="_blank" class="flex-grow flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/20 border border-indigo-500">
+                    <i class="fa-solid fa-download"></i> Download Installer
+                </a>
+                <button onclick="closeQuantimeInstallModal()" class="px-6 py-3.5 rounded-2xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5 hover:bg-white/5">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="./assets/llm-router.js?v=1.1.2"></script>
     <script src="./assets/js/pomodoro.js"></script>
     <script src="./hub.js?v=20260601c"></script>
