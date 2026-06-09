@@ -493,8 +493,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if os.path.exists(checkpoints_dir):
                     try:
                         for item in os.listdir(checkpoints_dir):
-                            if os.path.isdir(os.path.join(checkpoints_dir, item)):
+                            full_item_path = os.path.join(checkpoints_dir, item)
+                            if os.path.isdir(full_item_path):
                                 discovered_models.append(item)
+                            elif os.path.isfile(full_item_path) and item.endswith('.safetensors'):
+                                # Strip extension for clean selector display
+                                discovered_models.append(os.path.splitext(item)[0])
                     except Exception:
                         pass
 
