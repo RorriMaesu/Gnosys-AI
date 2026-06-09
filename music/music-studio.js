@@ -1,5 +1,5 @@
 (function() {
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://localhost:8020';
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
     let comfyPath = localStorage.getItem('gnosys_comfy_path') || 'D:\\ComfyUI';
     let vramProfile = localStorage.getItem('gnosys_music_vram_profile') || 'high';
     const clientId = Math.random().toString(36).substring(2, 15);
@@ -416,7 +416,7 @@
     async function fetchModelsList() {
         const select = document.getElementById('music-model');
         try {
-            const res = await fetch('http://localhost:8002/v1/models', { signal: AbortSignal.timeout(2000) });
+            const res = await fetch('http://127.0.0.1:8002/v1/models', { signal: AbortSignal.timeout(2000) });
             if (res.ok) {
                 const data = await res.json();
                 if (data && data.data && data.data.length > 0) {
@@ -462,7 +462,7 @@
                 badge.textContent = `Starting (${attempts}/${maxAttempts})`;
             }
             try {
-                const res = await fetch('http://localhost:8002/health', { signal: AbortSignal.timeout(1000) });
+                const res = await fetch('http://127.0.0.1:8002/health', { signal: AbortSignal.timeout(1000) });
                 if (res.ok) {
                     clearInterval(interval);
                     if (launchBtn) {
