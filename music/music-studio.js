@@ -674,9 +674,15 @@ signature: (recommend "4", "3", or "6" for time signature)
         const percent = document.getElementById('gen-percent');
 
         // Check if server is online
-        const isOnline = document.getElementById('comfy-status-badge').textContent === 'Running';
-        if (!isOnline) {
-            showBannerNotification('Local ACE-Step API Server is offline. Please launch the service first.', 'error');
+        const statusTextVal = document.getElementById('comfy-status-badge').textContent.trim();
+        if (statusTextVal !== 'Running') {
+            if (statusTextVal.startsWith('Starting')) {
+                showBannerNotification('ACE-Step API Server is still loading model weights in the background. Please wait for the service to finish starting up.', 'info');
+            } else if (statusTextVal === 'Not Found') {
+                showBannerNotification('ACE-Step service not found. Please run the install wizard to set it up.', 'error');
+            } else {
+                showBannerNotification('Local ACE-Step API Server is offline. Please launch the service first.', 'error');
+            }
             return;
         }
 
