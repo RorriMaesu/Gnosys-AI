@@ -375,6 +375,8 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path in ['/api/music/status', '/api/music/install-status', '/api/music/auto-detect']:
+            self.do_POST()
         else:
             super().do_GET()
     def do_OPTIONS(self):
