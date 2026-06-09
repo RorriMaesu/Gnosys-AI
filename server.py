@@ -819,7 +819,9 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     # Override end_headers to inject CORS into normal GET file requests too
     def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        has_cors = any(b'access-control-allow-origin' in h.lower() for h in getattr(self, '_headers_buffer', []))
+        if not has_cors:
+            self.send_header('Access-Control-Allow-Origin', '*')
         super().end_headers()
 
 def run_server():
