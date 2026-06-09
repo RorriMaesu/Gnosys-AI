@@ -406,44 +406,94 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode('utf-8'))
         elif self.path == '/api/music/status':
             try:
-                # Resolve comfy path (check custom param or D:\ComfyUI fallback)
-                comfy_path = self.headers.get('X-ComfyUI-Path', 'D:\\ComfyUI')
-                if not comfy_path:
-                    comfy_path = 'D:\\ComfyUI'
+                # Helper for cross-platform auto-discovery
+                def find_comfy_path():
+                    system = platform.system()
+                    candidates = []
+                    if system == 'Windows':
+                        user_profile = os.environ.get('USERPROFILE', '')
+                        candidates = [
+                            "D:\\ComfyUI",
+                            "C:\\ComfyUI",
+                            os.path.join(user_profile, "Downloads", "ComfyUI_windows_portable"),
+                            os.path.join(user_profile, "Desktop", "ComfyUI_windows_portable"),
+                        ]
+                        for drive in ['C', 'D', 'E', 'F', 'G']:
+                            candidates.append(f"{drive}:\\ComfyUI_windows_portable")
+                    else:
+                        home = os.environ.get('HOME', '')
+                        candidates = [
+                            os.path.join(home, "ComfyUI"),
+                            os.path.join(home, "Downloads", "ComfyUI"),
+                        ]
+                    for p in candidates:
+                        if p and os.path.exists(os.path.join(p, "ComfyUI", "main.py")):
+                            return os.path.abspath(p)
+                    return None
+
+                # Helper for targeted deep-scanning models folder safely
+                def scan_audio_models_safe(c_path):
+                    res_scan = {"dit": [], "vae": [], "text_enc": [], "nodes": []}
+                    if not c_path or not os.path.exists(c_path):
+                        return res_scan
+                    
+                    # Scan custom nodes
+                    nodes_dir = os.path.join(c_path, "ComfyUI", "custom_nodes")
+                    if os.path.exists(nodes_dir):
+                        try:
+                            for item in os.listdir(nodes_dir):
+                                full_item = os.path.join(nodes_dir, item)
+                                if os.path.isdir(full_item):
+                                    if any(t in item.lower() for t in ["ace-step", "acestep", "ryanontheinside"]):
+                                        res_scan["nodes"].append(item)
+                        except Exception:
+                            pass
+
+                    # Scan models subfolders safely (depth-limited, following symlinks)
+                    models_dir = os.path.join(c_path, "ComfyUI", "models")
+                    target_folders = ["checkpoints", "diffusion_models", "vae", "text_encoders", "TTS"]
+                    for subfolder in target_folders:
+                        scan_root = os.path.join(models_dir, subfolder)
+                        if not os.path.exists(scan_root):
+                            continue
+                        scan_root_depth = scan_root.count(os.path.sep)
+                        try:
+                            for root, dirs, files in os.walk(scan_root, followlinks=True):
+                                # Limit depth to 3
+                                depth = root.count(os.path.sep) - scan_root_depth
+                                if depth > 3:
+                                    dirs.clear()
+                                    continue
+                                for file in files:
+                                    file_lower = file.lower()
+                                    full_file_path = os.path.join(root, file)
+                                    
+                                    if "safetensors" in file_lower and any(x in file_lower for x in ["acestep", "ace_step"]):
+                                        if "vae" not in file_lower:
+                                            res_scan["dit"].append(full_file_path)
+                                    if "safetensors" in file_lower and any(x in file_lower for x in ["ace_1.5_vae", "ace_vae", "dcae"]):
+                                        res_scan["vae"].append(full_file_path)
+                                    if "safetensors" in file_lower and any(x in file_lower for x in ["umt5", "qwen_0.6b", "qwen_1.7b"]):
+                                        res_scan["text_enc"].append(full_file_path)
+                        except Exception:
+                            pass
+                    return res_scan
+
+                # Resolve comfy path
+                comfy_path = self.headers.get('X-ComfyUI-Path', '')
+                if not comfy_path or not os.path.exists(comfy_path):
+                    discovered = find_comfy_path()
+                    if discovered:
+                        comfy_path = discovered
+                    else:
+                        comfy_path = comfy_path or 'D:\\ComfyUI'
                 
-                # Check running
+                comfy_installed = os.path.exists(comfy_path)
                 comfy_running = probe_port(8188)
                 
-                # Check folder existence
-                comfy_installed = os.path.exists(comfy_path)
-                
-                # Check custom node
-                custom_node_installed = False
-                if comfy_installed:
-                    nodes_path = os.path.join(comfy_path, 'ComfyUI', 'custom_nodes')
-                    if os.path.exists(nodes_path):
-                        for item in os.listdir(nodes_path):
-                            if 'ace-step' in item.lower() or 'acestep' in item.lower():
-                                custom_node_installed = True
-                                break
-                                
-                # Check models
-                models_installed = False
-                if comfy_installed:
-                    # check models/TTS/ACE-Step or models/checkpoints
-                    checkpoints_path = os.path.join(comfy_path, 'ComfyUI', 'models', 'checkpoints')
-                    tts_path = os.path.join(comfy_path, 'ComfyUI', 'models', 'TTS')
-                    
-                    if os.path.exists(checkpoints_path):
-                        for item in os.listdir(checkpoints_path):
-                            if 'ace_step' in item.lower():
-                                models_installed = True
-                                break
-                    if not models_installed and os.path.exists(tts_path):
-                        for root, dirs, files in os.walk(tts_path):
-                            if any('diffusion_pytorch_model' in f for f in files) or any('safetensors' in f for f in files):
-                                models_installed = True
-                                break
+                scan_results = scan_audio_models_safe(comfy_path)
+                custom_node_installed = len(scan_results["nodes"]) > 0
+                models_installed = len(scan_results["dit"]) > 0 or len(scan_results["vae"]) > 0
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
@@ -456,7 +506,8 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'comfy_installed': comfy_installed,
                     'comfy_running': comfy_running,
                     'custom_node_installed': custom_node_installed,
-                    'models_installed': models_installed
+                    'models_installed': models_installed,
+                    'scan_details': scan_results
                 }
                 self.wfile.write(json.dumps(response).encode('utf-8'))
             except Exception as e:
