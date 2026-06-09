@@ -334,9 +334,30 @@
                         launchAssistantBtn.innerHTML = originalText;
                         if (titleEl) titleEl.textContent = 'Local Assistant Server is Offline';
                         if (descEl) descEl.innerHTML = 'Because this application is hosted statically, browsers cannot launch local programs automatically. Please open your installation folder and run <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux) to start the local helper.';
-                        showBannerNotification('Connection attempt timed out. Please run run_backend.bat manually.', 'error');
+                        
+                        // Automatically pop up the setup wizard guide modal
+                        const setupModal = document.getElementById('assistant-setup-modal');
+                        if (setupModal) {
+                            setupModal.classList.remove('hidden');
+                            setupModal.classList.add('flex');
+                        }
+                        showBannerNotification('Connection attempt timed out. Opening assistant setup guide...', 'warning');
                     }
                 }, 1500);
+            });
+        }
+
+        // Assistant Setup Guide Modal wireup
+        const setupModal = document.getElementById('assistant-setup-modal');
+        if (setupModal) {
+            document.getElementById('btn-close-setup').addEventListener('click', () => {
+                setupModal.classList.add('hidden');
+                setupModal.classList.remove('flex');
+            });
+            document.getElementById('btn-setup-ok').addEventListener('click', () => {
+                setupModal.classList.add('hidden');
+                setupModal.classList.remove('flex');
+                checkMusicServiceStatus();
             });
         }
     }

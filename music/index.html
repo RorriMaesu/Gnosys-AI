@@ -443,7 +443,65 @@
         </div>
     </div>
 
-    <!-- Installation Wizard Modal -->
+    <!-- Assistant Local Setup Guide Modal -->
+    <div id="assistant-setup-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="glass-card rounded-3xl p-8 max-w-lg w-full border border-white/10 shadow-2xl relative overflow-hidden fade-in text-left">
+            <div class="flex justify-between items-start mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg">
+                        <i class="fa-solid fa-server text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Local Assistant Setup</h3>
+                        <p class="text-xs text-amber-400 font-bold uppercase tracking-wider mt-0.5">Static Hosting Helper</p>
+                    </div>
+                </div>
+                <button id="btn-close-setup" class="w-8 h-8 rounded-full glass-card flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4 text-slate-300 text-sm mb-6 leading-relaxed">
+                <p>Because Gnosys-AI runs completely inside your browser sandbox, it cannot start local programs directly. To enable AI music generation and local models, please download and run the lightweight assistant helper:</p>
+                
+                <div class="space-y-3.5 mt-2">
+                    <div class="flex gap-3">
+                        <div class="w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-xs shrink-0 font-bold">1</div>
+                        <div class="text-xs text-slate-300">
+                            Download the helper repository bundle:<br>
+                            <a href="https://github.com/RorriMaesu/Gnosys-AI/archive/refs/heads/main.zip" class="inline-flex items-center gap-1.5 px-3 py-1.5 mt-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-[11px] font-bold text-amber-300 hover:text-white transition-all text-decoration-none">
+                                <i class="fa-solid fa-download"></i> Download Helper Bundle (.zip)
+                            </a>
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <div class="w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-xs shrink-0 font-bold">2</div>
+                        <p class="text-xs text-slate-300 pt-0.5">
+                            Extract the downloaded ZIP file to any folder on your PC.
+                        </p>
+                    </div>
+                    <div class="flex gap-3">
+                        <div class="w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-xs shrink-0 font-bold">3</div>
+                        <div class="text-xs text-slate-300 pt-0.5">
+                            Open the folder and double-click:
+                            <code class="block font-mono text-[10px] text-amber-300 bg-amber-950/30 border border-amber-500/20 px-2 py-1.5 rounded mt-1.5">run_backend.bat  (Windows) or run_backend.sh (Mac/Linux)</code>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/10 text-[11px] text-slate-400 mt-4 leading-normal flex items-start gap-2">
+                    <i class="fa-solid fa-lightbulb text-amber-400 mt-0.5 animate-pulse"></i>
+                    <span>Once running, the helper server registers browser launcher protocols so you can start it with one-click in the future.</span>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button id="btn-setup-ok" class="flex-grow py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm transition-all shadow-lg shadow-amber-500/10 border-0 cursor-pointer">
+                    I Have Started the Helper
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <div id="install-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
         <div class="glass-card rounded-3xl p-8 max-w-lg w-full border border-white/10 shadow-2xl relative overflow-hidden fade-in text-left">
             <div class="flex justify-between items-start mb-6">
