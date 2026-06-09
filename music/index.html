@@ -353,12 +353,31 @@
             <p class="text-xs text-slate-400 mb-6 leading-relaxed">
                 Specify the installation directory of your portable or native ComfyUI. We will search this folder for custom nodes and models.
             </p>
-            <input type="text" id="input-comfy-path" value="D:\ComfyUI" class="w-full bg-slate-900 border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors mb-6 font-mono">
-            <div class="flex gap-3">
-                <button id="btn-save-path" class="flex-grow py-3 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-sm transition-all border border-fuchsia-500">
-                    Save Configuration
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-slate-400">Current Target Path:</span>
+                    <button id="btn-explorer-back" class="text-xs px-2.5 py-1 rounded-lg glass-card text-indigo-400 hover:text-indigo-300 font-bold border border-white/5 transition-colors">
+                        <i class="fa-solid fa-chevron-left mr-1"></i> Back
+                    </button>
+                </div>
+                <div class="p-4 rounded-2xl studio-input font-mono text-xs text-indigo-400 border border-white/10 select-all overflow-x-auto whitespace-nowrap" id="explorer-current-path">
+                    D:\ComfyUI
+                </div>
+                
+                <div class="relative">
+                    <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Double-click / Tap to navigate:</label>
+                    <div id="explorer-list" class="space-y-1.5 max-h-56 overflow-y-auto studio-input rounded-2xl p-4 border border-white/10 select-none">
+                        <!-- Directories/Drives injected here dynamically -->
+                        <div class="text-xs text-slate-500 py-4 text-center">Loading directories...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex gap-3 mt-6">
+                <button id="btn-save-path" class="flex-grow py-3.5 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white font-bold text-sm transition-all shadow-lg glow-button">
+                    Save Directory
                 </button>
-                <button id="btn-close-path-modal" class="px-5 py-3 rounded-xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5">
+                <button id="btn-close-path-modal" class="px-6 py-3.5 rounded-2xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5">
                     Cancel
                 </button>
             </div>

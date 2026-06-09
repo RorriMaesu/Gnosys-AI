@@ -4,29 +4,101 @@
     let ws = null;
     let installPollInterval = null;
 
+    let explorerCurrentPath = comfyPath;
+
     document.addEventListener('DOMContentLoaded', () => {
         initUI();
         checkMusicServiceStatus();
     });
 
+    // Helper to query and render directory list
+    async function loadDirectory(path) {
+        const listContainer = document.getElementById('explorer-list');
+        const pathDisplay = document.getElementById('explorer-current-path');
+        listContainer.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Scanning directory...</div>';
+        
+        try {
+            const res = await fetch(`/api/explorer?path=${encodeURIComponent(path)}`);
+            const data = await res.json();
+            if (data.status === 'success') {
+                explorerCurrentPath = path;
+                pathDisplay.textContent = path || "My Computer (Root Drives)";
+                
+                listContainer.innerHTML = '';
+                if (data.directories.length === 0) {
+                    listContainer.innerHTML = '<div class="text-xs text-slate-500 py-4 text-center">Empty directory or access restricted.</div>';
+                    return;
+                }
+                
+                data.directories.forEach(item => {
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/5 cursor-pointer text-xs text-slate-300 transition-colors border border-transparent hover:border-white/5';
+                    row.innerHTML = `<i class="fa-solid ${path ? 'fa-folder' : 'fa-hard-drive'} text-indigo-400"></i> <span class="truncate font-medium">${item.name}</span>`;
+                    
+                    // Simple select on click, browse on dblclick
+                    row.addEventListener('click', () => {
+                        // Highlight selected row visually
+                        Array.from(listContainer.children).forEach(child => child.classList.remove('bg-indigo-500/10', 'border-indigo-500/20'));
+                        row.classList.add('bg-indigo-500/10', 'border-indigo-500/20');
+                        explorerCurrentPath = item.path;
+                        pathDisplay.textContent = item.path;
+                    });
+                    
+                    row.addEventListener('dblclick', () => {
+                        loadDirectory(item.path);
+                    });
+                    
+                    listContainer.appendChild(row);
+                });
+            } else {
+                listContainer.innerHTML = `<div class="text-xs text-red-400 py-4 text-center">Error: ${data.message}</div>`;
+            }
+        } catch (err) {
+            listContainer.innerHTML = `<div class="text-xs text-red-400 py-4 text-center">Connection failed: ${err.message}</div>`;
+        }
+    }
+
     function initUI() {
         document.getElementById('current-comfy-path').textContent = comfyPath;
-        document.getElementById('input-comfy-path').value = comfyPath;
+        document.getElementById('explorer-current-path').textContent = comfyPath;
         document.getElementById('install-dir-input').value = comfyPath;
 
         // Path modal controls
         document.getElementById('btn-configure-path').addEventListener('click', () => {
             document.getElementById('path-modal').classList.remove('hidden');
             document.getElementById('path-modal').classList.add('flex');
+            loadDirectory(comfyPath);
         });
         document.getElementById('btn-close-path-modal').addEventListener('click', () => {
             document.getElementById('path-modal').classList.add('hidden');
             document.getElementById('path-modal').classList.remove('flex');
         });
+        
+        // Explorer back button
+        document.getElementById('btn-explorer-back').addEventListener('click', () => {
+            if (!explorerCurrentPath || explorerCurrentPath === '/' || /^[a-zA-Z]:\\?$/.test(explorerCurrentPath)) {
+                // Go to root drives list
+                loadDirectory('');
+            } else {
+                // Find parent folder path
+                const parts = explorerCurrentPath.split(/[/\\]/);
+                if (parts.length > 1) {
+                    // Remove last folder name
+                    parts.pop();
+                    let parent = parts.join('\\');
+                    if (parent.endsWith(':')) {
+                        parent += '\\';
+                    }
+                    loadDirectory(parent);
+                } else {
+                    loadDirectory('');
+                }
+            }
+        });
+
         document.getElementById('btn-save-path').addEventListener('click', () => {
-            const newPath = document.getElementById('input-comfy-path').value.trim();
-            if (newPath) {
-                comfyPath = newPath;
+            if (explorerCurrentPath) {
+                comfyPath = explorerCurrentPath;
                 localStorage.setItem('gnosys_comfy_path', comfyPath);
                 document.getElementById('current-comfy-path').textContent = comfyPath;
                 document.getElementById('install-dir-input').value = comfyPath;

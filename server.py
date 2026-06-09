@@ -289,6 +289,54 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path.startswith('/api/explorer'):
+            try:
+                import urllib.parse
+                parsed_url = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed_url.query)
+                target_path = params.get('path', [''])[0].strip()
+
+                directories = []
+                system = platform.system()
+
+                if not target_path:
+                    # List root drives on Windows, or root directory on Unix
+                    if system == 'Windows':
+                        import string
+                        from ctypes import windll
+                        drives = []
+                        bitmask = windll.kernel32.GetLogicalDrives()
+                        for letter in string.ascii_uppercase:
+                            if bitmask & 1:
+                                drives.append(f"{letter}:\\")
+                            bitmask >>= 1
+                        for d in drives:
+                            directories.append({'name': d, 'path': d, 'isDir': True})
+                    else:
+                        directories.append({'name': '/', 'path': '/', 'isDir': True})
+                else:
+                    # List subdirectories inside target_path
+                    if os.path.exists(target_path) and os.path.isdir(target_path):
+                        for item in os.listdir(target_path):
+                            full_path = os.path.join(target_path, item)
+                            if os.path.isdir(full_path) and not item.startswith('.'):
+                                directories.append({
+                                    'name': item,
+                                    'path': full_path,
+                                    'isDir': True
+                                })
+
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'directories': directories}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         else:
             super().do_GET()
     def do_OPTIONS(self):
@@ -406,8 +454,11 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode('utf-8'))
         elif self.path == '/api/music/status':
             try:
-                # Resolve ACE-Step standalone directory
-                ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
+                # Resolve ACE-Step standalone directory (read from custom path header if present)
+                ace_path = self.headers.get('X-ComfyUI-Path', '').strip()
+                if not ace_path:
+                    ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
+                    
                 ace_installed = os.path.exists(ace_path)
                 ace_running = probe_port(8002)
                 
@@ -448,6 +499,11 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif self.path == '/api/music/launch':
             try:
                 ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
+                content_length = int(self.headers.get('Content-Length', 0))
+                if content_length > 0:
+                    body = json.loads(self.rfile.read(content_length).decode('utf-8'))
+                    ace_path = body.get('comfy_path', ace_path)
+
                 python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
                 if not os.path.exists(ace_path):
