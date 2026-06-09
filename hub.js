@@ -546,31 +546,57 @@ window.handleQuantimeClick = function(event) {
     
     showLaunchToast('Checking Quantime status...', 'fa-spinner fa-spin');
     
-    getQuantimeStatus()
-        .then(data => {
-            if (data.installed) {
-                if (data.running) {
-                    removeLaunchToast();
-                    window.open(data.dashboard_url, '_blank');
-                } else {
-                    updateLaunchToast('Booting Quantime Scheduler...', 'fa-rocket text-indigo-400 animate-bounce');
-                    
-                    // Try launching via backend server API first
-                    const launchUrl = `${data.apiBase || ''}/api/launch-quantime`;
-                    fetch(launchUrl, { method: 'POST' })
-                        .then(res => res.json())
-                        .then(launchData => {
-                            if (launchData.status === 'success') {
-                                pollQuantimeApp(
-                                    (url) => {
-                                        removeLaunchToast();
-                                        window.open(url, '_blank');
-                                    },
-                                    () => {
-                                        updateLaunchToast('Launch timed out. Make sure it is installed.', 'fa-circle-exclamation text-rose-500', 4000);
-                                    }
-                                );
-                            } else {
+    // Quick check: is Quantime already running? (CORS allowed on Quantime now)
+    Promise.any([
+        fetch('http://localhost:8000/health', { signal: AbortSignal.timeout(1200) }).then(res => res.ok ? 'http://localhost:8000' : Promise.reject()),
+        fetch('http://localhost:5173/', { mode: 'no-cors', signal: AbortSignal.timeout(1200) }).then(() => 'http://localhost:5173')
+    ])
+    .then(url => {
+        // Yes! It is running. Open directly.
+        removeLaunchToast();
+        window.open(url, '_blank');
+    })
+    .catch(() => {
+        // No, not running. Look for local Gnosys server to launch/detect
+        getQuantimeStatus()
+            .then(data => {
+                if (data.installed) {
+                    if (data.running) {
+                        removeLaunchToast();
+                        window.open(data.dashboard_url, '_blank');
+                    } else {
+                        updateLaunchToast('Booting Quantime Scheduler...', 'fa-rocket text-indigo-400 animate-bounce');
+                        
+                        // Try launching via backend server API first
+                        const launchUrl = `${data.apiBase || ''}/api/launch-quantime`;
+                        fetch(launchUrl, { method: 'POST' })
+                            .then(res => res.json())
+                            .then(launchData => {
+                                if (launchData.status === 'success') {
+                                    pollQuantimeApp(
+                                        (url) => {
+                                            removeLaunchToast();
+                                            window.open(url, '_blank');
+                                        },
+                                        () => {
+                                            updateLaunchToast('Launch timed out. Make sure it is installed.', 'fa-circle-exclamation text-rose-500', 4000);
+                                        }
+                                    );
+                                } else {
+                                    // Fallback to URL protocol launch
+                                    triggerQuantimeProtocolLaunch();
+                                    pollQuantimeApp(
+                                        (url) => {
+                                            removeLaunchToast();
+                                            window.open(url, '_blank');
+                                        },
+                                        () => {
+                                            updateLaunchToast('Launch failed. Please start manually.', 'fa-circle-exclamation text-rose-500', 4000);
+                                        }
+                                    );
+                                }
+                            })
+                            .catch(() => {
                                 // Fallback to URL protocol launch
                                 triggerQuantimeProtocolLaunch();
                                 pollQuantimeApp(
@@ -582,44 +608,31 @@ window.handleQuantimeClick = function(event) {
                                         updateLaunchToast('Launch failed. Please start manually.', 'fa-circle-exclamation text-rose-500', 4000);
                                     }
                                 );
-                            }
-                        })
-                        .catch(() => {
-                            // Fallback to URL protocol launch
-                            triggerQuantimeProtocolLaunch();
-                            pollQuantimeApp(
-                                (url) => {
-                                    removeLaunchToast();
-                                    window.open(url, '_blank');
-                                },
-                                () => {
-                                    updateLaunchToast('Launch failed. Please start manually.', 'fa-circle-exclamation text-rose-500', 4000);
-                                }
-                            );
-                        });
-                }
-            } else {
-                removeLaunchToast();
-                showQuantimeInstallModal();
-            }
-        })
-        .catch(err => {
-            // Local server not running. Try directly launching via OS URL protocol handler
-            updateLaunchToast('Attempting OS protocol launch...', 'fa-rocket text-indigo-400 animate-bounce');
-            triggerQuantimeProtocolLaunch();
-            
-            pollQuantimeApp(
-                (url) => {
-                    removeLaunchToast();
-                    window.open(url, '_blank');
-                },
-                () => {
-                    // If polling fails, they likely don't have it installed
+                            });
+                    }
+                } else {
                     removeLaunchToast();
                     showQuantimeInstallModal();
                 }
-            );
-        });
+            })
+            .catch(err => {
+                // Local server not running. Try directly launching via OS URL protocol handler
+                updateLaunchToast('Attempting OS protocol launch...', 'fa-rocket text-indigo-400 animate-bounce');
+                triggerQuantimeProtocolLaunch();
+                
+                pollQuantimeApp(
+                    (url) => {
+                        removeLaunchToast();
+                        window.open(url, '_blank');
+                    },
+                    () => {
+                        // If polling fails, they likely don't have it installed
+                        removeLaunchToast();
+                        showQuantimeInstallModal();
+                    }
+                );
+            });
+    });
 };
 
 window.showQuantimeInstallModal = function() {

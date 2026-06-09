@@ -747,7 +747,7 @@
         els.questionsGrid.innerHTML = list.map((q, qIdx) => `
             <div class="py-5 first:pt-0 last:pb-0 space-y-3">
                 <div class="flex items-start space-x-3 text-xs">
-                    <span class="font-bold text-rose-455 font-mono">${qIdx + 1}.</span>
+                    <span class="font-bold text-rose-500 font-mono">${qIdx + 1}.</span>
                     <p class="text-slate-200 font-medium leading-relaxed">${escapeHtml(q.question)}</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pl-6">
