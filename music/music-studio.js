@@ -436,7 +436,7 @@
 
     function pollComfyStartup() {
         let attempts = 0;
-        const maxAttempts = 20;
+        const maxAttempts = 150; // Supports up to 10 minutes for slow disk/first-time weight loading
         const badge = document.getElementById('comfy-status-badge');
         const icon = document.getElementById('comfy-status-icon');
         const launchBtn = document.getElementById('btn-launch-service');
@@ -453,6 +453,8 @@
         if (icon) {
             icon.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-amber-400"></i>';
         }
+
+        showBannerNotification('Service launch triggered. Loading neural weights into memory (may take 2-5 mins)...', 'info');
 
         const interval = setInterval(async () => {
             attempts++;
@@ -481,7 +483,7 @@
                     checkMusicServiceStatus();
                 }
             }
-        }, 2000);
+        }, 4000);
     }
 
     function startInstallPolling() {
