@@ -12,6 +12,29 @@
         checkMusicServiceStatus();
     });
 
+    async function updatePathStatus(path) {
+        const statusDiv = document.getElementById('explorer-path-status');
+        if (!statusDiv) return;
+        if (!path) {
+            statusDiv.innerHTML = '<span class="text-slate-500 font-medium">Select a drive to browse files.</span>';
+            return;
+        }
+        statusDiv.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Probing folder contents...</span>';
+        try {
+            const res = await fetch('/api/music/status', {
+                headers: { 'X-ComfyUI-Path': path }
+            });
+            const data = await res.json();
+            if (data.comfy_installed) {
+                statusDiv.innerHTML = '<span class="text-teal-400 font-bold"><i class="fa-solid fa-circle-check mr-1.5"></i> ACE-Step 1.5 root detected here.</span>';
+            } else {
+                statusDiv.innerHTML = '<span class="text-amber-400"><i class="fa-solid fa-triangle-exclamation mr-1.5"></i> ACE-Step files not found in this folder.</span>';
+            }
+        } catch (e) {
+            statusDiv.innerHTML = '<span class="text-slate-500">Failed to probe directory.</span>';
+        }
+    }
+
     // Helper to query and render directory list
     async function loadDirectory(path) {
         const listContainer = document.getElementById('explorer-list');
@@ -24,6 +47,7 @@
             if (data.status === 'success') {
                 explorerCurrentPath = path;
                 pathDisplay.textContent = path || "My Computer (Root Drives)";
+                updatePathStatus(path);
                 
                 listContainer.innerHTML = '';
                 if (data.directories.length === 0) {
@@ -34,7 +58,12 @@
                 data.directories.forEach(item => {
                     const row = document.createElement('div');
                     row.className = 'flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/5 cursor-pointer text-xs text-slate-300 transition-colors border border-transparent hover:border-white/5';
-                    row.innerHTML = `<i class="fa-solid ${path ? 'fa-folder' : 'fa-hard-drive'} text-indigo-400"></i> <span class="truncate font-medium">${item.name}</span>`;
+                    
+                    let inner = `<i class="fa-solid ${path ? 'fa-folder' : 'fa-hard-drive'} text-indigo-400"></i> <span class="truncate font-medium">${item.name}</span>`;
+                    if (item.compatibility) {
+                        inner += `<span class="ml-auto text-[9px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 font-bold border border-indigo-500/20">${item.compatibility}</span>`;
+                    }
+                    row.innerHTML = inner;
                     
                     // Simple select on click, browse on dblclick
                     row.addEventListener('click', () => {
@@ -43,6 +72,7 @@
                         row.classList.add('bg-indigo-500/10', 'border-indigo-500/20');
                         explorerCurrentPath = item.path;
                         pathDisplay.textContent = item.path;
+                        updatePathStatus(item.path);
                     });
                     
                     row.addEventListener('dblclick', () => {
@@ -116,6 +146,31 @@
                 document.getElementById('path-modal').classList.add('hidden');
                 document.getElementById('path-modal').classList.remove('flex');
                 checkMusicServiceStatus();
+            }
+        });
+
+        // Auto-detect button click
+        document.getElementById('btn-auto-detect-path').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-auto-detect-path');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Detecting...';
+            
+            try {
+                const res = await fetch('/api/music/auto-detect');
+                const data = await res.json();
+                if (data.status === 'success' && data.candidates && data.candidates.length > 0) {
+                    const bestCandidate = data.candidates[0].path;
+                    showBannerNotification(`Auto-detected ACE-Step folder: ${bestCandidate}`, 'success');
+                    loadDirectory(bestCandidate);
+                } else {
+                    showBannerNotification('Could not auto-detect ACE-Step folder. Please browse manually.', 'error');
+                }
+            } catch (err) {
+                showBannerNotification('Auto-detect query failed: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             }
         });
 

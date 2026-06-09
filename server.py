@@ -60,6 +60,27 @@ def probe_port(port):
     except Exception:
         return False
 
+def check_ace_step_compatibility(path):
+    if not path or not os.path.isdir(path):
+        return None
+    # Check if this directory itself contains the openrouter server or checkpoints
+    has_api = os.path.exists(os.path.join(path, "openrouter", "openrouter_api_server.py")) or os.path.exists(os.path.join(path, "openrouter_api_server.py"))
+    has_checkpoints = os.path.exists(os.path.join(path, "checkpoints"))
+    if has_api and has_checkpoints:
+        return "ACE-Step 1.5 Root"
+    
+    # Check if it has a subdirectory that fits
+    try:
+        for item in os.listdir(path):
+            sub = os.path.join(path, item)
+            if os.path.isdir(sub) and not item.startswith('.'):
+                sub_api = os.path.exists(os.path.join(sub, "openrouter", "openrouter_api_server.py")) or os.path.exists(os.path.join(sub, "openrouter_api_server.py"))
+                sub_checkpoints = os.path.exists(os.path.join(sub, "checkpoints"))
+                if sub_api and sub_checkpoints:
+                    return f"Contains ACE-Step ({item})"
+    except Exception:
+        pass
+    return None
 
 def register_windows_protocol():
     if platform.system() == 'Windows':
@@ -299,7 +320,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 directories = []
                 system = platform.system()
 
-                if not target_path:
+                 if not target_path:
                     # List root drives on Windows, or root directory on Unix
                     if system == 'Windows':
                         import string
@@ -311,19 +332,23 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                                 drives.append(f"{letter}:\\")
                             bitmask >>= 1
                         for d in drives:
-                            directories.append({'name': d, 'path': d, 'isDir': True})
+                            compat = check_ace_step_compatibility(d)
+                            directories.append({'name': d, 'path': d, 'isDir': True, 'compatibility': compat})
                     else:
-                        directories.append({'name': '/', 'path': '/', 'isDir': True})
+                        compat = check_ace_step_compatibility('/')
+                        directories.append({'name': '/', 'path': '/', 'isDir': True, 'compatibility': compat})
                 else:
                     # List subdirectories inside target_path
                     if os.path.exists(target_path) and os.path.isdir(target_path):
                         for item in os.listdir(target_path):
                             full_path = os.path.join(target_path, item)
                             if os.path.isdir(full_path) and not item.startswith('.'):
+                                compat = check_ace_step_compatibility(full_path)
                                 directories.append({
                                     'name': item,
                                     'path': full_path,
-                                    'isDir': True
+                                    'isDir': True,
+                                    'compatibility': compat
                                 })
 
                 self.send_response(200)
@@ -659,6 +684,61 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps(install_status).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/auto-detect':
+            try:
+                import string
+                from ctypes import windll
+                drives = []
+                system = platform.system()
+                if system == 'Windows':
+                    bitmask = windll.kernel32.GetLogicalDrives()
+                    for letter in string.ascii_uppercase:
+                        if bitmask & 1:
+                            drives.append(f"{letter}:\\")
+                        bitmask >>= 1
+                else:
+                    drives.append('/')
+
+                candidates = []
+                common_names = ['ComfyUI', 'ComfyUI_windows_portable', 'ACE-Step-1.5', 'AI']
+                
+                # Check root drives and major folders
+                for drive in drives:
+                    compat = check_ace_step_compatibility(drive)
+                    if compat:
+                        candidates.append({'path': drive, 'compat': compat})
+                    
+                    try:
+                        for name in common_names:
+                            candidate = os.path.join(drive, name)
+                            if os.path.exists(candidate) and os.path.isdir(candidate):
+                                compat = check_ace_step_compatibility(candidate)
+                                if compat:
+                                    candidates.append({'path': candidate, 'compat': compat})
+                                # Check one level deep
+                                try:
+                                    for sub in os.listdir(candidate):
+                                        sub_path = os.path.join(candidate, sub)
+                                        if os.path.isdir(sub_path):
+                                            compat = check_ace_step_compatibility(sub_path)
+                                            if compat:
+                                                candidates.append({'path': sub_path, 'compat': compat})
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'candidates': candidates}).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')

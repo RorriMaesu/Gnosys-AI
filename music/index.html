@@ -361,14 +361,22 @@
                 Specify the installation directory of your portable or native ComfyUI. We will search this folder for custom nodes and models.
             </p>
             <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-slate-400">Current Target Path:</span>
-                    <button id="btn-explorer-back" class="text-xs px-2.5 py-1 rounded-lg glass-card text-indigo-400 hover:text-indigo-300 font-bold border border-white/5 transition-colors">
-                        <i class="fa-solid fa-chevron-left mr-1"></i> Back
-                    </button>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-slate-400">Target Path:</span>
+                    <div class="flex gap-2">
+                        <button id="btn-auto-detect-path" class="text-xs px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white font-bold border border-indigo-500/20 transition-all">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Auto-Detect
+                        </button>
+                        <button id="btn-explorer-back" class="text-xs px-2.5 py-1 rounded-lg glass-card text-indigo-400 hover:text-indigo-300 font-bold border border-white/5 transition-colors">
+                            <i class="fa-solid fa-chevron-left mr-1"></i> Back
+                        </button>
+                    </div>
                 </div>
                 <div class="p-4 rounded-2xl studio-input font-mono text-xs text-indigo-400 border border-white/10 select-all overflow-x-auto whitespace-nowrap" id="explorer-current-path">
                     D:\ComfyUI
+                </div>
+                <div id="explorer-path-status" class="text-[11px] font-semibold mt-1">
+                    <!-- Dynamic folder compatibility statement -->
                 </div>
                 
                 <div class="relative">
