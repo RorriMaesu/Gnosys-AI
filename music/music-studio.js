@@ -287,6 +287,26 @@
             if (!res.ok) throw new Error();
             const data = await res.json();
 
+            // Render diagnostic indicators if path exists
+            const diagBox = document.getElementById('comfy-diagnostics-box');
+            if (diagBox) {
+                diagBox.innerHTML = '';
+                if (data.diagnostics) {
+                    const makeBadge = (label, status) => {
+                        const baseClass = "text-[9px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 shrink-0";
+                        const themeClass = status ? "bg-teal-500/10 text-teal-400 border-teal-500/20" : "bg-red-500/10 text-red-400 border-red-500/20";
+                        const iconHtml = status ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-circle-xmark"></i>';
+                        return `<span class="${baseClass} ${themeClass}">${iconHtml}${label}</span>`;
+                    };
+                    diagBox.innerHTML += makeBadge("XL SFT", data.diagnostics.xl_sft);
+                    diagBox.innerHTML += makeBadge("XL Base", data.diagnostics.xl_base);
+                    diagBox.innerHTML += makeBadge("XL Turbo", data.diagnostics.xl_turbo);
+                    diagBox.innerHTML += makeBadge("Vocoder", data.diagnostics.vocoder);
+                    diagBox.innerHTML += makeBadge("DCAE Encoder", data.diagnostics.dcae);
+                    diagBox.innerHTML += makeBadge("UMT5 Text", data.diagnostics.umt5);
+                }
+            }
+
             if (data.comfy_running) {
                 badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 uppercase font-extrabold tracking-wider';
                 badge.textContent = 'Running';
@@ -543,9 +563,31 @@ signature: (recommend "4", "3", or "6" for time signature)
 
         btn.disabled = true;
         progressContainer.classList.remove('hidden');
-        statusText.textContent = 'Generating study music... (Running inference)';
-        fill.style.width = '20%';
-        percent.textContent = '20%';
+        
+        let progressPercent = 10;
+        fill.style.width = '10%';
+        percent.textContent = '10%';
+        statusText.textContent = 'Pre-processing audio configurations...';
+
+        const loadingStages = [
+            { pct: 20, text: 'Allocating VRAM workspace (RTX 5060 Ti)...' },
+            { pct: 35, text: 'Loading 4B Diffusion Transformer (DiT) weights...' },
+            { pct: 50, text: 'Resolving UMT5 Text Encoder weights...' },
+            { pct: 65, text: 'Running neural audio synthesis steps...' },
+            { pct: 80, text: 'Decoding features using DCAE f8c8 model...' },
+            { pct: 92, text: 'Reconstructing WAV output using Music Vocoder...' }
+        ];
+
+        let stageIndex = 0;
+        let stageInterval = setInterval(() => {
+            if (stageIndex < loadingStages.length) {
+                const stage = loadingStages[stageIndex];
+                fill.style.width = stage.pct + '%';
+                percent.textContent = stage.pct + '%';
+                statusText.textContent = stage.text;
+                stageIndex++;
+            }
+        }, 3000);
 
         const modelVal = document.getElementById('music-model').value;
         const promptVal = document.getElementById('music-prompt').value;
@@ -593,8 +635,10 @@ signature: (recommend "4", "3", or "6" for time signature)
                 body: JSON.stringify(payload)
             });
             
-            fill.style.width = '70%';
-            percent.textContent = '70%';
+            clearInterval(stageInterval);
+            fill.style.width = '95%';
+            percent.textContent = '95%';
+            statusText.textContent = 'Decoding final WAV file...';
 
             if (!res.ok) {
                 throw new Error(await res.text());
@@ -613,9 +657,11 @@ signature: (recommend "4", "3", or "6" for time signature)
                 throw new Error("No audio block returned in API response.");
             }
         } catch (err) {
+            if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             statusText.textContent = 'Generation failed: ' + err.message;
             showBannerNotification('Generation failed.', 'error');
         } finally {
+            if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             btn.disabled = false;
         }
     }
