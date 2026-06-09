@@ -1,5 +1,6 @@
 (function() {
     let comfyPath = localStorage.getItem('gnosys_comfy_path') || 'D:\\ComfyUI';
+    let vramProfile = localStorage.getItem('gnosys_music_vram_profile') || 'high';
     const clientId = Math.random().toString(36).substring(2, 15);
     let ws = null;
     let installPollInterval = null;
@@ -60,6 +61,16 @@
 
     function initUI() {
         document.getElementById('current-comfy-path').textContent = comfyPath;
+        
+        // VRAM profile initialization and change handler
+        const vramSelector = document.getElementById('music-vram-profile');
+        if (vramSelector) {
+            vramSelector.value = vramProfile;
+            vramSelector.addEventListener('change', (e) => {
+                vramProfile = e.target.value;
+                localStorage.setItem('gnosys_music_vram_profile', vramProfile);
+            });
+        }
         document.getElementById('explorer-current-path').textContent = comfyPath;
         document.getElementById('install-dir-input').value = comfyPath;
 
@@ -114,7 +125,7 @@
                 const res = await fetch('/api/music/launch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ comfy_path: comfyPath })
+                    body: JSON.stringify({ comfy_path: comfyPath, vram_profile: vramProfile })
                 });
                 const data = await res.json();
                 if (data.status === 'success') {

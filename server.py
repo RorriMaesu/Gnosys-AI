@@ -499,10 +499,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif self.path == '/api/music/launch':
             try:
                 ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
+                vram_profile = 'high'
                 content_length = int(self.headers.get('Content-Length', 0))
                 if content_length > 0:
                     body = json.loads(self.rfile.read(content_length).decode('utf-8'))
                     ace_path = body.get('comfy_path', ace_path)
+                    vram_profile = body.get('vram_profile', 'high')
 
                 python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
@@ -512,13 +514,17 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if os.path.exists(python_exe):
                     # Launch API server using venv Python
                     cmd = [python_exe, '-m', 'openrouter.openrouter_api_server', '--host', '127.0.0.1', '--port', '8002']
+                    if vram_profile == 'low':
+                        cmd.append('--lowvram')
                     subprocess.Popen(cmd, cwd=ace_path)
-                    msg = "Launched ACE-Step API Server via venv python"
+                    msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via venv python"
                 else:
                     # Fallback to system python
                     cmd = ['python', '-m', 'openrouter.openrouter_api_server', '--host', '127.0.0.1', '--port', '8002']
+                    if vram_profile == 'low':
+                        cmd.append('--lowvram')
                     subprocess.Popen(cmd, cwd=ace_path)
-                    msg = "Launched ACE-Step API Server via system python"
+                    msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via system python"
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')

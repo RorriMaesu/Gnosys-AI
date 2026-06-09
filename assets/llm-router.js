@@ -597,6 +597,7 @@
                         messages,
                         stream,
                         options: requestOptions,
+                        keep_alive: 0,
                     }),
                 });
 
