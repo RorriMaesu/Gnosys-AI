@@ -504,6 +504,21 @@
                 clearInterval(downloadPollInterval);
                 downloadPollInterval = null;
             }
+
+            // Attempt to auto-launch the local assistant server via custom protocol
+            if (!window._assistantLaunchAttempted) {
+                window._assistantLaunchAttempted = true;
+                console.log("[MusicStudio] Local server offline. Triggering custom protocol launch...");
+                try {
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = 'gnosys-assistant://';
+                    document.body.appendChild(iframe);
+                    setTimeout(() => iframe.remove(), 1000);
+                } catch (err) {
+                    console.warn('[MusicStudio] Custom protocol invocation failed:', err);
+                }
+            }
         }
     }
 
