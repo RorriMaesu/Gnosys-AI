@@ -12,6 +12,13 @@ echo Registering custom browser URL protocol for Ollama...
 reg add "HKCU\Software\Classes\gnosys-ollama" /v "URL Protocol" /t REG_SZ /d "" /f >nul 2>&1
 reg add "HKCU\Software\Classes\gnosys-ollama\shell\open\command" /ve /t REG_SZ /d "\"%%LOCALAPPDATA%%\Programs\Ollama\ollama app.exe\"" /f >nul 2>&1
 
+echo Registering custom browser URL protocol for Gnosys Assistant...
+pushd "%~dp0..\.."
+set "ROOT_DIR=%CD%"
+popd
+reg add "HKCU\Software\Classes\gnosys-assistant" /v "URL Protocol" /t REG_SZ /d "" /f >nul 2>&1
+reg add "HKCU\Software\Classes\gnosys-assistant\shell\open\command" /ve /t REG_SZ /d "\"%ROOT_DIR%\run_backend.bat\"" /f >nul 2>&1
+
 echo Starting Ollama background service...
 taskkill /f /im ollama.exe >nul 2>&1
 taskkill /f /im "ollama app.exe" >nul 2>&1

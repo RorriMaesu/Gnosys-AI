@@ -282,6 +282,43 @@
                 showBannerNotification("Local run command copied to clipboard!", "success");
             });
         }
+
+        // Auto-launch assistant server helper
+        const launchAssistantBtn = document.getElementById('btn-launch-assistant');
+        if (launchAssistantBtn) {
+            launchAssistantBtn.addEventListener('click', () => {
+                showBannerNotification("Launching local assistant server...", "info");
+                try {
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = 'gnosys-assistant://';
+                    document.body.appendChild(iframe);
+                    setTimeout(() => iframe.remove(), 1000);
+                } catch (err) {
+                    console.warn('[MusicStudio] Custom protocol invocation failed:', err);
+                }
+
+                // Poll for status to verify if it launched
+                let attempts = 0;
+                const maxAttempts = 15;
+                const interval = setInterval(async () => {
+                    attempts++;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/music/status`, {
+                            headers: { 'X-ComfyUI-Path': comfyPath }
+                        });
+                        if (res.ok) {
+                            clearInterval(interval);
+                            showBannerNotification("Local assistant server successfully connected!", "success");
+                            checkMusicServiceStatus();
+                        }
+                    } catch (e) {}
+                    if (attempts >= maxAttempts) {
+                        clearInterval(interval);
+                    }
+                }, 1500);
+            });
+        }
     }
 
     async function checkMusicServiceStatus() {
