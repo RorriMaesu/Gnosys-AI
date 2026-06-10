@@ -1,6 +1,7 @@
 (function () {
     const OLLAMA_BASE_URL = 'http://localhost:11434';
     const OLLAMA_TAGS_URL = `${OLLAMA_BASE_URL}/api/tags`;
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
 
     const MODEL_CACHE_NAME = 'gnosys-litert-model-cache-v1';
 
@@ -141,7 +142,7 @@
         // Try Python server first if we are on desktop
         if (!isMobileDevice) {
             try {
-                const res = await fetch('/api/hardware-info', { signal: AbortSignal.timeout(1500) });
+                const res = await fetch(`${API_BASE}/api/hardware-info`, { signal: AbortSignal.timeout(1500) });
                 if (res.ok) {
                     const data = await res.json();
                     if (data.status === 'success' && data.hardware) {
@@ -1866,7 +1867,7 @@
 
             let apiSuccess = false;
             try {
-                const response = await fetch('/api/launch-ollama', { method: 'POST' });
+                const response = await fetch(`${API_BASE}/api/launch-ollama`, { method: 'POST' });
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === 'success') {

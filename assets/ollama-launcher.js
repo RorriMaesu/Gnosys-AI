@@ -14,7 +14,8 @@
     function getConfiguredLauncherApiBase() {
         return normalizeUrlBase(
             localStorage.getItem('gnosys_launcher_api_base') ||
-            localStorage.getItem('gnosys_server_origin')
+            localStorage.getItem('gnosys_server_origin') ||
+            ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020')
         );
     }
 
