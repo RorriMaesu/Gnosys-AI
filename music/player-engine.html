@@ -443,6 +443,22 @@
                             broadcastState();
                         });
                     break;
+                case 'clear_track':
+                    audio.pause();
+                    audio.removeAttribute('src');
+                    try {
+                        audio.load();
+                    } catch (err) {
+                        console.warn('[Engine] Error loading empty audio:', err);
+                    }
+                    currentTrackUrl = null;
+                    currentTrack = null;
+                    currentClassId = null;
+                    currentClassName = 'Idle';
+                    document.getElementById('track-name-display').textContent = 'No track playing';
+                    document.getElementById('class-name-display').textContent = 'Subject: None';
+                    broadcastState();
+                    break;
             }
         };
 

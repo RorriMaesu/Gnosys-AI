@@ -428,6 +428,19 @@
                         console.log('Inline playback error (handled by error listener if it fired an error):', err); 
                     });
                 break;
+            case 'clear_track':
+                inlineFallbackAudio.pause();
+                inlineFallbackAudio.removeAttribute('src');
+                try {
+                    inlineFallbackAudio.load();
+                } catch (e) {}
+                inlineTrackUrl = null;
+                currentTrack = null;
+                playingClassId = null;
+                currentTime = 0;
+                duration = 0;
+                broadcastInlineState();
+                break;
         }
     }
 
@@ -862,6 +875,11 @@
             return;
         }
 
+        if (!currentTrack) {
+            playTrack(0);
+            return;
+        }
+
         if (isPaused) {
             sendEngineCommand({ type: 'play' });
         } else {
@@ -943,7 +961,10 @@
 
         if (currentTrack) {
             if (trackDisplay) trackDisplay.textContent = currentTrack.name;
-            if (subjectDisplay) subjectDisplay.textContent = `Subject: ${CLASS_NAMES[activeClassId] || 'Unknown'}`;
+            if (subjectDisplay) subjectDisplay.textContent = `Subject: ${CLASS_NAMES[playingClassId || activeClassId] || 'Unknown'}`;
+        } else {
+            if (trackDisplay) trackDisplay.textContent = 'No track playing';
+            if (subjectDisplay) subjectDisplay.textContent = 'Subject: None';
         }
         
         if (playBtnIcon) {
@@ -958,7 +979,7 @@
             }
         }
 
-        if (duration) {
+        if (duration && currentTrack) {
             const pct = (currentTime / duration) * 100;
             if (fill) fill.style.width = pct + '%';
             if (currTimeText) currTimeText.textContent = formatTime(currentTime);
@@ -1146,7 +1167,7 @@
             const data = await res.json();
             if (data.status === 'success') {
                 if (currentTrack && currentTrack.id === trackId) {
-                    sendEngineCommand({ type: 'pause' });
+                    sendEngineCommand({ type: 'clear_track' });
                     currentTrack = null;
                 }
                 await fetchPlaylists();
