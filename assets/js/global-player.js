@@ -77,6 +77,49 @@
         return 'medical-terminology';
     }
 
+    // Synchronize floating player badge position to align with stats button in child iframe
+    function syncPlayerPosition() {
+        const badge = document.getElementById('gnosys-global-player-widget');
+        if (!badge) return;
+
+        const iframe = document.getElementById('gnosys-content-frame');
+        let rightOffset = 24; // Default fallback right (px)
+        let bottomOffset = 92; // Default fallback bottom (px)
+
+        if (iframe && iframe.contentWindow && iframe.contentDocument) {
+            try {
+                const doc = iframe.contentDocument;
+                // Find stats button inside child iframe
+                const statsBtn = doc.getElementById('floating-stats-btn-container') || doc.getElementById('stats-modal-trigger-btn');
+                
+                if (statsBtn) {
+                    const rect = statsBtn.getBoundingClientRect();
+                    if (rect.width > 0 && rect.right > 0) {
+                        rightOffset = window.innerWidth - rect.right;
+                        bottomOffset = (window.innerHeight - rect.top) + 12;
+                    } else {
+                        // Exists but not rendered, fall back to scrollbar calculation
+                        const win = iframe.contentWindow;
+                        const docEl = doc.documentElement;
+                        const scrollbarWidth = win.innerWidth - docEl.clientWidth;
+                        rightOffset = 24 + (scrollbarWidth > 0 ? scrollbarWidth : 0);
+                    }
+                } else {
+                    // Fall back to scrollbar calculation
+                    const win = iframe.contentWindow;
+                    const docEl = doc.documentElement;
+                    const scrollbarWidth = win.innerWidth - docEl.clientWidth;
+                    rightOffset = 24 + (scrollbarWidth > 0 ? scrollbarWidth : 0);
+                }
+            } catch (e) {
+                console.warn('[Global Player] Dynamic position alignment fallback:', e);
+            }
+        }
+
+        badge.style.right = `${rightOffset}px`;
+        badge.style.bottom = `${bottomOffset}px`;
+    }
+
     // Initialize UI on load and wrap page in full-screen iframe
     document.addEventListener('DOMContentLoaded', () => {
         const body = document.body;
@@ -106,11 +149,15 @@
         restoreStateFromStorage();
         fetchPlaylists();
 
+        let iframeObserver = null;
+
         // Start checking Pomodoro state in the parent
         pingInterval = setInterval(() => {
             checkPomodoroState();
+            syncPlayerPosition();
         }, 1000);
         checkPomodoroState();
+        syncPlayerPosition();
 
         // Sync URL & Title when iframe navigates
         iframe.addEventListener('load', () => {
@@ -123,12 +170,48 @@
             } catch (e) {
                 console.warn('[Global Player] URL sync blocked or failed:', e);
             }
+
+            // Sync position on page load
+            syncPlayerPosition();
+
+            // Set up listener for resizing inside iframe
+            try {
+                if (iframe.contentWindow) {
+                    iframe.contentWindow.removeEventListener('resize', syncPlayerPosition);
+                    iframe.contentWindow.addEventListener('resize', syncPlayerPosition);
+                }
+            } catch (e) {
+                console.warn('[Global Player] Failed to bind inner resize:', e);
+            }
+
+            // Set up MutationObserver inside iframe to react to dynamic scrollbar/layout updates
+            try {
+                if (iframeObserver) {
+                    iframeObserver.disconnect();
+                }
+                if (iframe.contentDocument && iframe.contentDocument.body) {
+                    iframeObserver = new MutationObserver(() => {
+                        syncPlayerPosition();
+                    });
+                    iframeObserver.observe(iframe.contentDocument.body, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ['style', 'class']
+                    });
+                }
+            } catch (e) {
+                console.warn('[Global Player] Failed to set up inner MutationObserver:', e);
+            }
         });
 
         // Listen for browser navigation buttons to sync back with iframe
         window.addEventListener('popstate', () => {
             iframe.src = window.location.href;
         });
+
+        // Listen to parent window resize
+        window.addEventListener('resize', syncPlayerPosition);
     });
 
     // Restore player state from localStorage for cross-module persistence
@@ -1493,7 +1576,7 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s;
             }
             .gnosys-player-badge:hover {
                 transform: scale(1.12) rotate(15deg);
@@ -1510,6 +1593,14 @@
             }
             .gnosys-player-badge i {
                 font-size: 20px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 20px;
+                height: 20px;
+                line-height: 1;
+                vertical-align: middle;
+                transform-origin: center center;
             }
             
             /* Status dot inside badge */
