@@ -1572,11 +1572,49 @@ Note: Place constructive critique explanations inside the <chat_response> tag, w
         }
     }
 
+    function cleanJsonString(jsonStr) {
+        let cleaned = "";
+        let inString = false;
+        for (let i = 0; i < jsonStr.length; i++) {
+            let char = jsonStr[i];
+            if (char === '"' && (i === 0 || jsonStr[i-1] !== '\\')) {
+                // Structural quote checks
+                let isStructural = false;
+                let after = jsonStr.substring(i + 1).trim();
+                let before = jsonStr.substring(0, i).trim();
+                
+                if (before.endsWith('{') || before.endsWith('[') || before.endsWith(',')) {
+                    isStructural = true;
+                    inString = true;
+                } else if (after.startsWith(':')) {
+                    isStructural = true;
+                    inString = false;
+                } else if (before.endsWith(':')) {
+                    isStructural = true;
+                    inString = true;
+                } else if (after.startsWith(',') || after.startsWith('}') || after.startsWith(']')) {
+                    isStructural = true;
+                    inString = false;
+                }
+                
+                if (isStructural) {
+                    cleaned += char;
+                } else {
+                    cleaned += '\\"'; // Escape internal unescaped double quote
+                }
+            } else {
+                cleaned += char;
+            }
+        }
+        return cleaned;
+    }
+
     function parseCritiqueData(rawText) {
         const match = rawText.match(/<critique_data>([\s\S]*?)<\/critique_data>/i);
         if (match) {
             try {
-                return JSON.parse(match[1].trim());
+                const cleanedContent = cleanJsonString(match[1].trim());
+                return JSON.parse(cleanedContent);
             } catch (e) {
                 console.error("Failed to parse critique JSON:", e, match[1]);
             }
@@ -1588,7 +1626,8 @@ Note: Place constructive critique explanations inside the <chat_response> tag, w
         const match = rawText.match(/<update_settings>([\s\S]*?)<\/update_settings>/i);
         if (match) {
             try {
-                return JSON.parse(match[1].trim());
+                const cleanedContent = cleanJsonString(match[1].trim());
+                return JSON.parse(cleanedContent);
             } catch (e) {
                 console.error("Failed to parse settings update JSON:", e, match[1]);
             }
