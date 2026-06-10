@@ -15,6 +15,10 @@
     let downloadPollInterval = null;
 
     document.addEventListener('DOMContentLoaded', () => {
+        // If we are in the top-level parent window wrapper (where the page is wrapped in an iframe), abort
+        if (window.self === window.top && document.getElementById('gnosys-content-frame')) {
+            return;
+        }
         initUI();
         checkMusicServiceStatus();
     });
@@ -152,7 +156,9 @@
     }
 
     function initUI() {
-        document.getElementById('current-comfy-path').textContent = comfyPath;
+        const pathEl = document.getElementById('current-comfy-path');
+        if (!pathEl) return;
+        pathEl.textContent = comfyPath;
         
         // Auto-start and Auto-download checkboxes
         const autoStartChk = document.getElementById('auto-start-checkbox');
@@ -728,6 +734,7 @@
 
     async function checkMusicServiceStatus() {
         const badge = document.getElementById('comfy-status-badge');
+        if (!badge) return;
         const icon = document.getElementById('comfy-status-icon');
         const launchBtn = document.getElementById('btn-launch-service');
         const installBtn = document.getElementById('btn-install-wizard');
@@ -948,6 +955,7 @@
 
     async function fetchModelsList() {
         const select = document.getElementById('music-model');
+        if (!select) return;
         try {
             const res = await fetch(`${API_BASE}/api/music/models`, { signal: AbortSignal.timeout(4000) });
             if (res.ok) {
