@@ -23,6 +23,8 @@
     const MAX_HISTORY = 30;
     let studioConversationHistory = [];
     let isChatResponding = false;
+    let isCritiqueMode = false;
+    let activeCritiqueData = null;
 
     document.addEventListener('DOMContentLoaded', () => {
         // If we are in the top-level parent window wrapper (where the page is wrapped in an iframe), abort
@@ -569,6 +571,19 @@
         const btnClearSel = document.getElementById('btn-clear-selection');
         if (btnClearSel) {
             btnClearSel.addEventListener('click', clearLyricsSelection);
+        }
+
+        // Assistant Mode Toggles & Critique Button
+        const btnModeWrite = document.getElementById('btn-mode-write');
+        const btnModeCritique = document.getElementById('btn-mode-critique');
+        if (btnModeWrite && btnModeCritique) {
+            btnModeWrite.addEventListener('click', () => toggleAssistantMode('write'));
+            btnModeCritique.addEventListener('click', () => toggleAssistantMode('critique'));
+        }
+
+        const btnCritiqueLyrics = document.getElementById('btn-critique-lyrics');
+        if (btnCritiqueLyrics) {
+            btnCritiqueLyrics.addEventListener('click', triggerLyricCritiqueRun);
         }
 
         // Toolbar Buttons
@@ -1360,6 +1375,419 @@
         }
     }
 
+    function toggleAssistantMode(mode) {
+        const btnWrite = document.getElementById('btn-mode-write');
+        const btnCritique = document.getElementById('btn-mode-critique');
+        const chatHistory = document.getElementById('studio-chat-history');
+        const critiquePanel = document.getElementById('studio-critique-panel');
+        const chatInput = document.getElementById('studio-chat-input');
+        
+        if (mode === 'critique') {
+            isCritiqueMode = true;
+            if (btnCritique) {
+                btnCritique.classList.add('active');
+                btnCritique.classList.remove('bg-transparent');
+                btnCritique.classList.add('bg-white/5');
+            }
+            if (btnWrite) {
+                btnWrite.classList.remove('active', 'bg-white/5');
+                btnWrite.classList.add('bg-transparent');
+            }
+            
+            if (chatHistory) chatHistory.classList.add('hidden');
+            if (critiquePanel) critiquePanel.classList.remove('hidden');
+            
+            if (chatInput) {
+                chatInput.placeholder = "Ask the chatbot to critique or help revise a section...";
+            }
+        } else {
+            isCritiqueMode = false;
+            if (btnWrite) {
+                btnWrite.classList.add('active');
+                btnWrite.classList.remove('bg-transparent');
+                btnWrite.classList.add('bg-white/5');
+            }
+            if (btnCritique) {
+                btnCritique.classList.remove('active', 'bg-white/5');
+                btnCritique.classList.add('bg-transparent');
+            }
+            
+            if (critiquePanel) critiquePanel.classList.add('hidden');
+            if (chatHistory) chatHistory.classList.remove('hidden');
+            
+            if (chatInput) {
+                chatInput.placeholder = "Ask the chatbot to write or modify lyrics...";
+            }
+        }
+    }
+
+    async function triggerLyricCritiqueRun() {
+        if (isChatResponding) return;
+        
+        // Force critique mode active
+        toggleAssistantMode('critique');
+        
+        const lyricsTextarea = document.getElementById('generated-lyrics');
+        const currentLyrics = lyricsTextarea ? lyricsTextarea.value : '';
+        
+        if (!currentLyrics.trim()) {
+            showBannerNotification("Write or generate some lyrics in the workspace first!", "warning");
+            return;
+        }
+        
+        // Show loading state in annotations list
+        const listContainer = document.getElementById('critique-annotations-list');
+        if (listContainer) {
+            listContainer.innerHTML = `<div class="text-xs text-slate-400 py-6 text-center italic bg-slate-950/20 rounded-2xl border border-white/5"><i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-fuchsia-400 animate-spin"></i> Running lyric structure and rhythm analysis...</div>`;
+        }
+        
+        // Construct user critique prompt
+        const userPrompt = "Perform a complete critique analysis of my current lyrics. Provide quality scores and line-by-line annotations.";
+        
+        // Send critique request
+        await runCritiqueAPI(userPrompt);
+    }
+
+    async function runCritiqueAPI(userPrompt) {
+        if (isChatResponding) return;
+        isChatResponding = true;
+        
+        const sendBtn = document.getElementById('btn-send-chat');
+        const critiqueBtn = document.getElementById('btn-critique-lyrics');
+        
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-sm"></i>';
+        }
+        if (critiqueBtn) {
+            critiqueBtn.disabled = true;
+            critiqueBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-fuchsia-400 animate-spin"></i> Analyzing...';
+        }
+
+        const subjectSelector = document.getElementById('subject-selector');
+        let subjectName = '';
+        if (subjectSelector) {
+            if (subjectSelector.value === 'custom') {
+                const customSubjectVal = document.getElementById('custom-subject-input')?.value.trim();
+                subjectName = customSubjectVal || 'a custom academic study subject';
+            } else {
+                subjectName = subjectSelector.options[subjectSelector.selectedIndex]?.text || 'Study Topic';
+            }
+        } else {
+            subjectName = 'Study Topic';
+        }
+
+        const lyricsTextarea = document.getElementById('generated-lyrics');
+        const currentLyrics = lyricsTextarea ? lyricsTextarea.value : '';
+
+        const systemPrompt = `You are a creative, expert educational songwriter and music producer for Gnosys AI.
+Your objective is to help the student write, refine, and structure catchy, mnemonically dense, and rhythmically aligned study lyrics for their target subject.
+
+The target subject is: "${subjectName}".
+
+CURRENT LYRICS WORKSPACE CONTENT:
+"""
+${currentLyrics}
+"""
+
+CRITIQUE & REVIEW MODE IS ACTIVE:
+The user is focusing on reviewing and critiquing the current lyrics.
+You MUST analyze the lyrics across four dimensions and return a scorecard and specific line annotations.
+Place this data in a <critique_data>...</critique_data> tag containing a JSON object in this format:
+{
+  "scores": {
+    "mnemonic": 85, // Mnemonic Density (0-100)
+    "rhythm": 70,    // Rhythm & Flow (0-100)
+    "accuracy": 90,  // Scientific Accuracy (0-100)
+    "rhyme": 80      // Rhyme & Catchiness (0-100)
+  },
+  "annotations": [
+    {
+      "startLine": 5,
+      "endLine": 6,
+      "category": "rhythm", // "rhythm", "mnemonic", "accuracy", "rhyme"
+      "message": "Line 6 is metrically heavy. Suggest shortening to balance syllables.",
+      "suggestion": "Physiology is how it works, the chemistry!"
+    }
+  ]
+}
+Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. Let the user decide when to apply changes. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
+`;
+
+        try {
+            if (window.GnosysLLM) {
+                let responseText = '';
+                
+                await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
+                    stream: true,
+                    history: studioConversationHistory.slice(0, -1),
+                    onToken: (token, fullText) => {
+                        responseText = fullText;
+                    }
+                });
+
+                // Add to chat history
+                studioConversationHistory.push({ role: "user", content: userPrompt });
+                studioConversationHistory.push({ role: "assistant", content: responseText });
+
+                // Also append the chat response to the chat history bubble so they can read it when switching back
+                const bubble = appendChatMessage("Gnosys AI", "", "agent");
+                const bubbleBody = bubble.querySelector('.agent-message-body');
+                const chatText = parseChatResponse(responseText);
+                if (chatText) {
+                    bubbleBody.innerHTML = parseMarkdown(chatText);
+                } else {
+                    bubbleBody.innerHTML = "Lyrical critique completed. See scorecard and cards on the Critique Panel.";
+                }
+
+                const critiqueData = parseCritiqueData(responseText);
+                if (critiqueData) {
+                    renderCritiqueDashboard(critiqueData);
+                } else {
+                    const listContainer = document.getElementById('critique-annotations-list');
+                    if (listContainer) {
+                        listContainer.innerHTML = `<div class="text-xs text-slate-400 py-6 text-center italic bg-slate-950/20 rounded-2xl border border-white/5">Failed to extract structured critique data. The model might not have structured it properly. Please try again.</div>`;
+                    }
+                }
+                
+                const settings = parseUpdateSettings(responseText);
+                if (settings) {
+                    applySettingsUpdate(settings);
+                }
+            } else {
+                showBannerNotification("Gnosys LLM Engine is unavailable.", "error");
+            }
+        } catch (err) {
+            showBannerNotification(`Critique run failed: ${err.message}`, "error");
+        } finally {
+            isChatResponding = false;
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i class="fa-solid fa-paper-plane text-sm"></i>';
+            }
+            if (critiqueBtn) {
+                critiqueBtn.disabled = false;
+                critiqueBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles animate-pulse"></i> <span>Critique</span>';
+            }
+        }
+    }
+
+    function parseCritiqueData(rawText) {
+        const match = rawText.match(/<critique_data>([\s\S]*?)<\/critique_data>/i);
+        if (match) {
+            try {
+                return JSON.parse(match[1].trim());
+            } catch (e) {
+                console.error("Failed to parse critique JSON:", e, match[1]);
+            }
+        }
+        return null;
+    }
+
+    function parseUpdateSettings(rawText) {
+        const match = rawText.match(/<update_settings>([\s\S]*?)<\/update_settings>/i);
+        if (match) {
+            try {
+                return JSON.parse(match[1].trim());
+            } catch (e) {
+                console.error("Failed to parse settings update JSON:", e, match[1]);
+            }
+        }
+        return null;
+    }
+
+    function renderCritiqueDashboard(data) {
+        if (!data) return;
+        activeCritiqueData = data;
+        
+        // Update scorecard numbers and bars
+        const fields = ['mnemonic', 'rhythm', 'accuracy', 'rhyme'];
+        fields.forEach(f => {
+            const valEl = document.getElementById(`score-${f}-val`);
+            const barEl = document.getElementById(`score-${f}-bar`);
+            if (valEl && barEl && data.scores && typeof data.scores[f] !== 'undefined') {
+                const score = data.scores[f];
+                valEl.textContent = `${score}%`;
+                barEl.style.width = `${score}%`;
+            }
+        });
+        
+        // Update annotations list
+        const listContainer = document.getElementById('critique-annotations-list');
+        if (!listContainer) return;
+        
+        if (!data.annotations || data.annotations.length === 0) {
+            listContainer.innerHTML = `<div class="text-xs text-slate-400 py-6 text-center italic bg-slate-950/20 rounded-2xl border border-white/5">
+                No critiques found! Your lyrics look great.
+            </div>`;
+            return;
+        }
+        
+        listContainer.innerHTML = '';
+        data.annotations.forEach((item, idx) => {
+            const card = document.createElement('div');
+            const categoryClass = item.category ? `critique-indicator-${item.category.toLowerCase()}` : '';
+            card.className = `critique-card p-4 space-y-3 ${categoryClass}`;
+            
+            // Format line range label
+            const linesLabel = item.startLine === item.endLine ? `Line ${item.startLine}` : `Lines ${item.startLine}-${item.endLine}`;
+            
+            // Format category badge label
+            const catLabel = item.category ? item.category.charAt(0).toUpperCase() + item.category.slice(1) : 'Critique';
+            let badgeColor = 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20';
+            if (item.category === 'rhythm') badgeColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+            else if (item.category === 'mnemonic') badgeColor = 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20';
+            else if (item.category === 'accuracy') badgeColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+            else if (item.category === 'rhyme') badgeColor = 'text-pink-400 bg-pink-500/10 border-pink-500/20';
+
+            let suggestionHtml = '';
+            if (item.suggestion) {
+                suggestionHtml = `
+                <div class="mt-2.5 p-2.5 rounded-xl bg-slate-950/40 border border-white/5 space-y-2">
+                    <p class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 text-left">Suggested Replacement</p>
+                    <pre class="font-mono text-[11px] text-slate-300 whitespace-pre-wrap leading-normal text-left">${escapeHtml(item.suggestion)}</pre>
+                    <button class="btn-apply-critique-suggestion w-full py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-[10px] font-bold text-indigo-300 hover:text-white transition-all border border-indigo-500/20 cursor-pointer" 
+                        data-idx="${idx}">
+                        <i class="fa-solid fa-check mr-1"></i> Apply Refinement
+                    </button>
+                </div>`;
+            }
+
+            card.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="text-[9px] px-2 py-0.5 rounded-full border ${badgeColor} font-bold uppercase tracking-wider">${catLabel}</span>
+                    <span class="text-[10px] text-slate-400 font-mono font-bold">${linesLabel}</span>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed text-left">${escapeHtml(item.message)}</p>
+                ${suggestionHtml}
+            `;
+            
+            // Hover events to highlight editor gutter line range
+            card.addEventListener('mouseenter', () => {
+                highlightEditorGutterRange(item.startLine, item.endLine);
+            });
+            card.addEventListener('mouseleave', () => {
+                clearEditorGutterHighlight();
+            });
+
+            listContainer.appendChild(card);
+        });
+
+        // Attach apply button listeners
+        listContainer.querySelectorAll('.btn-apply-critique-suggestion').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
+                applyCritiqueSuggestion(idx);
+            });
+        });
+    }
+
+    function highlightEditorGutterRange(startLine, endLine) {
+        const gutter = document.getElementById('lyrics-gutter');
+        if (!gutter) return;
+        
+        const lines = gutter.querySelectorAll('.lyrics-gutter-line');
+        for (let i = 1; i <= lines.length; i++) {
+            if (i >= startLine && i <= endLine) {
+                lines[i - 1]?.classList.add('active-highlight');
+            } else {
+                lines[i - 1]?.classList.remove('active-highlight');
+            }
+        }
+    }
+
+    function clearEditorGutterHighlight() {
+        const gutter = document.getElementById('lyrics-gutter');
+        if (!gutter) return;
+        
+        const highlight = window.lyricStudioState.highlight;
+        const lines = gutter.querySelectorAll('.lyrics-gutter-line');
+        
+        for (let i = 1; i <= lines.length; i++) {
+            const isActive = highlight && i >= highlight.startLine && i <= highlight.endLine;
+            if (isActive) {
+                lines[i - 1]?.classList.add('active-highlight');
+            } else {
+                lines[i - 1]?.classList.remove('active-highlight');
+            }
+        }
+    }
+
+    function applyCritiqueSuggestion(idx) {
+        if (!activeCritiqueData || !activeCritiqueData.annotations || !activeCritiqueData.annotations[idx]) return;
+        const item = activeCritiqueData.annotations[idx];
+        if (!item.suggestion) return;
+        
+        const lyricsTextarea = document.getElementById('generated-lyrics');
+        if (!lyricsTextarea) return;
+        
+        const edit = {
+            target: 'range',
+            start: item.startLine,
+            end: item.endLine,
+            content: item.suggestion
+        };
+        
+        applyLyricsEdit(edit);
+        
+        // Remove this card from active data and re-render
+        activeCritiqueData.annotations.splice(idx, 1);
+        renderCritiqueDashboard(activeCritiqueData);
+    }
+
+    function applySettingsUpdate(settings) {
+        if (!settings) return;
+        
+        let updatedAny = false;
+        
+        for (const [key, val] of Object.entries(settings)) {
+            const el = document.getElementById(key);
+            if (el) {
+                if (el.type === 'checkbox') {
+                    const boolVal = (val === true || val === 'true');
+                    if (el.checked !== boolVal) {
+                        el.checked = boolVal;
+                        updatedAny = true;
+                        triggerSettingFlash(el);
+                    }
+                } else {
+                    const strVal = String(val);
+                    if (el.value !== strVal) {
+                        el.value = strVal;
+                        updatedAny = true;
+                        triggerSettingFlash(el);
+                        
+                        // If it's a slider, update the value text display
+                        if (key === 'music-lm-cfg') {
+                            const valText = document.getElementById('lm-cfg-val');
+                            if (valText) valText.textContent = parseFloat(strVal).toFixed(1);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (updatedAny) {
+            saveMusicStudioSettings();
+            showBannerNotification("Assistant updated generation settings autonomously.", "success");
+            
+            // If the model changed, we might need to recheck service status (e.g. downloads)
+            if (settings['music-model']) {
+                checkMusicServiceStatus();
+            }
+        }
+    }
+
+    function triggerSettingFlash(element) {
+        if (!element) return;
+        element.classList.remove('setting-glow-flash');
+        void element.offsetWidth; // Force reflow to restart animation
+        element.classList.add('setting-glow-flash');
+        setTimeout(() => {
+            element.classList.remove('setting-glow-flash');
+        }, 2000);
+    }
+
     function appendChatMessage(sender, text, role = 'agent') {
         const chatHistory = document.getElementById('studio-chat-history');
         if (!chatHistory) return;
@@ -1399,19 +1827,26 @@
         const startTag = '<chat_response>';
         const endTag = '</chat_response>';
         const startIndex = rawText.toLowerCase().indexOf(startTag);
+        let chatText = "";
+        
         if (startIndex !== -1) {
             const contentStart = startIndex + startTag.length;
             const endIndex = rawText.toLowerCase().indexOf(endTag, contentStart);
             if (endIndex !== -1) {
-                return rawText.substring(contentStart, endIndex).trim();
+                chatText = rawText.substring(contentStart, endIndex).trim();
             } else {
-                return rawText.substring(contentStart).trim();
+                chatText = rawText.substring(contentStart).trim();
             }
+        } else if (!rawText.includes('<chat_response>') && !rawText.includes('<edit_lyrics>') && !rawText.includes('<critique_data>') && !rawText.includes('<update_settings>')) {
+            chatText = rawText.trim();
         }
-        if (!rawText.includes('<chat_response>') && !rawText.includes('<edit_lyrics>')) {
-            return rawText.trim();
-        }
-        return "";
+        
+        // Clean up any other XML tags that might leak in during streaming
+        chatText = chatText.replace(/<critique_data>[\s\S]*/i, '')
+                           .replace(/<update_settings>[\s\S]*/i, '')
+                           .replace(/<edit_lyrics[^>]*>[\s\S]*/i, '');
+                           
+        return chatText.trim();
     }
 
     function parseEditLyrics(rawText) {
@@ -1559,7 +1994,9 @@
         const bubbleBody = bubble.querySelector('.agent-message-body');
         bubbleBody.innerHTML = `<div class="flex items-center space-x-1.5"><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce"></div><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce" style="animation-delay: 0.15s"></div><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce" style="animation-delay: 0.3s"></div></div>`;
 
-        const systemPrompt = `You are a creative, expert educational songwriter and music producer for Gnosys AI.
+        const wantsCritique = isCritiqueMode || /critique|review|score|evaluate|analyse|analyze/i.test(userText);
+
+        let systemPrompt = `You are a creative, expert educational songwriter and music producer for Gnosys AI.
 Your objective is to help the student write, refine, and structure catchy, mnemonically dense, and rhythmically aligned study lyrics for their target subject.
 
 The target subject is: "${subjectName}".
@@ -1583,8 +2020,46 @@ INSTRUCTIONS FOR CONVERSATION AND EDITING:
      <edit_lyrics target="all">ENTIRE LYRICS CONTENT HERE</edit_lyrics>
 4. Keep the lyrics easy to read, rhyming, and packed with actual educational keywords, facts, and definitions.
 5. In your chat responses, you can also suggest changes and invite the user to highlight sections for refinement.
+6. You can autonomously update generation settings to match the musical style, rhythm, or user requests (e.g. changing the style from lofi to synthwave, adjusting BPM, or enabling/disabling vocals), by outputting an <update_settings> tag containing a JSON object mapping setting field keys to their new values. The keys you can update are:
+   - "music-prompt" (e.g. "chill lofi hiphop beat, study, piano")
+   - "music-bpm" (e.g. "80", "100", "120")
+   - "music-vocals" (e.g. "on", "off")
+   - "music-steps" (e.g. "8", "20", "50")
+   - "music-key" (e.g. "C Major", "A Minor", etc.)
+   - "music-signature" (e.g. "4", "3", "6")
+   Ensure the JSON inside the tag is strictly valid.
+`;
 
-EXAMPLE OUTPUT FORMAT:
+        if (wantsCritique) {
+            systemPrompt += `
+CRITIQUE & REVIEW INSTRUCTIONS:
+The user wants to review and critique the current lyrics.
+You MUST analyze the lyrics across four dimensions and return a scorecard and specific line annotations.
+Place this data in a <critique_data>...</critique_data> tag containing a JSON object in this format:
+{
+  "scores": {
+    "mnemonic": 85, // Mnemonic Density (0-100)
+    "rhythm": 70,    // Rhythm & Flow (0-100)
+    "accuracy": 90,  // Scientific Accuracy (0-100)
+    "rhyme": 80      // Rhyme & Catchiness (0-100)
+  },
+  "annotations": [
+    {
+      "startLine": 5,
+      "endLine": 6,
+      "category": "rhythm", // "rhythm", "mnemonic", "accuracy", "rhyme"
+      "message": "Line 6 is metrically heavy. Suggest shortening to balance syllables.",
+      "suggestion": "Physiology is how it works, the chemistry!"
+    }
+  ]
+}
+Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
+`;
+        }
+
+        systemPrompt += `
+EXAMPLE OUTPUT FORMATS:
+1. Normal Chat Response:
 <chat_response>I've made the chorus catchier by adding some rhythm terms! Let me update that section for you now.</chat_response>
 <edit_lyrics target="range" start="5" end="8">
 [Chorus]
@@ -1593,6 +2068,37 @@ Physiology is how it works, the chemistry!
 From cells to tissues, organs working day and night,
 Keep the body balanced in the homeostatic light!
 </edit_lyrics>
+
+2. Setting Update:
+<chat_response>Sure, I'll switch the style to lofi beats and adjust the BPM to 80 for a more relaxed study vibe.</chat_response>
+<update_settings>
+{
+  "music-prompt": "lofi study beats, soft chill ambient synth, relaxing piano",
+  "music-bpm": "80"
+}
+</update_settings>
+
+3. Critique Mode Response:
+<chat_response>I've analyzed your lyrics and found some areas to refine. Specifically, line 6 has too many syllables, and we could increase mnemonic density on line 12. Take a look at the annotations on your Critique panel.</chat_response>
+<critique_data>
+{
+  "scores": {
+    "mnemonic": 75,
+    "rhythm": 60,
+    "accuracy": 95,
+    "rhyme": 80
+  },
+  "annotations": [
+    {
+      "startLine": 6,
+      "endLine": 6,
+      "category": "rhythm",
+      "message": "Line 6 breaks the syllable count of the meter.",
+      "suggestion": "Keep the body balanced in the homeostatic light!"
+    }
+  ]
+}
+</critique_data>
 `;
 
         const userPrompt = userText;
@@ -1613,6 +2119,8 @@ Keep the body balanced in the homeostatic light!
                         } else {
                             if (fullText.includes('<edit_lyrics')) {
                                 bubbleBody.innerHTML = `<span class="text-slate-400 italic"><i class="fa-solid fa-pen-nib mr-1.5 animate-pulse"></i> Writing new lyric edits directly to workspace...</span>`;
+                            } else if (fullText.includes('<critique_data>')) {
+                                bubbleBody.innerHTML = `<span class="text-slate-400 italic"><i class="fa-solid fa-wand-magic-sparkles mr-1.5 animate-pulse"></i> Generating lyric scorecard analysis...</span>`;
                             }
                         }
                         const chatHistory = document.getElementById('studio-chat-history');
@@ -1625,6 +2133,19 @@ Keep the body balanced in the homeostatic light!
                 const edit = parseEditLyrics(responseText);
                 if (edit) {
                     applyLyricsEdit(edit);
+                }
+
+                const critiqueData = parseCritiqueData(responseText);
+                if (critiqueData) {
+                    renderCritiqueDashboard(critiqueData);
+                    if (isCritiqueMode === false && wantsCritique) {
+                        toggleAssistantMode('critique');
+                    }
+                }
+
+                const settings = parseUpdateSettings(responseText);
+                if (settings) {
+                    applySettingsUpdate(settings);
                 }
             } else {
                 bubbleBody.innerHTML = "Gnosys LLM Engine is currently loading or unavailable on this device tab.";

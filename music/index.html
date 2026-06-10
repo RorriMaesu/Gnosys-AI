@@ -264,6 +264,44 @@
                 flex-direction: column !important;
             }
         }
+
+        /* Critique Mode Layout and Classes */
+        .critique-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-left-width: 4px;
+            border-radius: 12px;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .critique-card:hover {
+            transform: translateY(-2px);
+            background: rgba(15, 23, 42, 0.85);
+            border-color: rgba(168, 85, 247, 0.2);
+            box-shadow: 0 4px 20px rgba(168, 85, 247, 0.08);
+        }
+        
+        .critique-indicator-rhythm { border-left-color: #f59e0b; }
+        .critique-indicator-mnemonic { border-left-color: #06b6d4; }
+        .critique-indicator-accuracy { border-left-color: #10b981; }
+        .critique-indicator-rhyme { border-left-color: #ec4899; }
+        
+        .mode-toggle-btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .mode-toggle-btn.active {
+            background-color: rgba(168, 85, 247, 0.15) !important;
+            color: #d946ef !important;
+            border-color: rgba(217, 70, 239, 0.3) !important;
+        }
+
+        @keyframes settingGlow {
+            0% { border-color: rgba(168, 85, 247, 0.8) !important; box-shadow: 0 0 15px rgba(168, 85, 247, 0.4) !important; }
+            50% { border-color: rgba(236, 72, 153, 0.8) !important; box-shadow: 0 0 25px rgba(236, 72, 153, 0.6) !important; }
+            100% { }
+        }
+        .setting-glow-flash {
+            animation: settingGlow 2s cubic-bezier(0.25, 1, 0.5, 1) !important;
+        }
     </style>
 </head>
 <body class="min-h-screen selection:bg-fuchsia-500/30 pb-10">
@@ -396,7 +434,7 @@
                     </div>
 
                     <!-- Subject Selector inside Chat Options -->
-                    <div class="mb-4 space-y-2 shrink-0">
+                    <div class="mb-3 space-y-2 shrink-0">
                         <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Target Field of Study</label>
                         <div class="flex gap-2">
                             <select id="subject-selector" class="flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors cursor-pointer">
@@ -408,6 +446,16 @@
                             </select>
                             <input type="text" id="custom-subject-input" placeholder="Custom Topic Details..." class="hidden flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
                         </div>
+                    </div>
+
+                    <!-- Assistant Mode Toggle -->
+                    <div class="mb-4 grid grid-cols-2 gap-2 shrink-0 border-b border-white/5 pb-3">
+                        <button id="btn-mode-write" class="mode-toggle-btn active flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl border border-white/5 bg-white/5 text-[10px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer">
+                            <i class="fa-solid fa-pen-fancy text-xs"></i> Write & Edit
+                        </button>
+                        <button id="btn-mode-critique" class="mode-toggle-btn flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl border border-white/5 bg-transparent text-[10px] font-bold text-slate-400 hover:text-white transition-all cursor-pointer">
+                            <i class="fa-solid fa-graduation-cap text-xs"></i> Review & Critique
+                        </button>
                     </div>
 
                     <!-- Chat Messages Area -->
@@ -423,6 +471,66 @@
                                 <li>Highlight any portion of the lyrics on the right to edit or ask questions about just that section.</li>
                                 <li>Directly edit any line on the right yourself.</li>
                             </ul>
+                        </div>
+                    </div>
+
+                    <!-- Critique Dashboard Panel (Hidden by default) -->
+                    <div id="studio-critique-panel" class="hidden flex-grow overflow-y-auto space-y-4 p-1 mb-4 chat-history-container pr-2">
+                        <!-- Scorecard Grid -->
+                        <div class="glass-card rounded-2xl p-4 border border-white/5 bg-slate-950/40 space-y-3 shrink-0">
+                            <h4 class="text-[10px] font-extrabold uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-chart-simple text-fuchsia-400"></i> Lyrical Quality Scorecard
+                            </h4>
+                            <div class="grid grid-cols-2 gap-3" id="critique-scorecard-grid">
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-[9px] font-bold text-slate-400">
+                                        <span>Mnemonic Density</span>
+                                        <span class="text-cyan-400 font-mono" id="score-mnemonic-val">0%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-950/80 border border-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div class="bg-cyan-500 h-full rounded-full transition-all duration-700" id="score-mnemonic-bar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-[9px] font-bold text-slate-400">
+                                        <span>Rhythm & Flow</span>
+                                        <span class="text-amber-400 font-mono" id="score-rhythm-val">0%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-950/80 border border-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div class="bg-amber-500 h-full rounded-full transition-all duration-700" id="score-rhythm-bar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-[9px] font-bold text-slate-400">
+                                        <span>Scientific Accuracy</span>
+                                        <span class="text-emerald-400 font-mono" id="score-accuracy-val">0%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-950/80 border border-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div class="bg-emerald-500 h-full rounded-full transition-all duration-700" id="score-accuracy-bar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-[9px] font-bold text-slate-400">
+                                        <span>Rhyme & Catchiness</span>
+                                        <span class="text-pink-400 font-mono" id="score-rhyme-val">0%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-950/80 border border-white/5 rounded-full h-1.5 overflow-hidden">
+                                        <div class="bg-pink-500 h-full rounded-full transition-all duration-700" id="score-rhyme-bar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Suggestions List -->
+                        <div class="space-y-2.5">
+                            <h4 class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-highlighter text-fuchsia-400"></i> Critique Annotations
+                            </h4>
+                            <div id="critique-annotations-list" class="space-y-2.5">
+                                <div class="text-xs text-slate-400 py-6 text-center italic bg-slate-950/20 rounded-2xl border border-white/5">
+                                    No critique run. Click "Critique Lyrics" in the editor toolbar to run a scan.
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -461,6 +569,10 @@
                             <h3 class="text-xs font-bold text-white uppercase tracking-wider">Lyrics Workspace</h3>
                         </div>
                         <div class="flex items-center gap-1.5">
+                            <button id="btn-critique-lyrics" class="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 hover:text-fuchsia-300 border border-fuchsia-500/20 transition-all text-xs font-semibold cursor-pointer" title="Critique Lyrics">
+                                <i class="fa-solid fa-wand-magic-sparkles animate-pulse"></i>
+                                <span>Critique</span>
+                            </button>
                             <button id="btn-undo-lyrics" disabled class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Undo change">
                                 <i class="fa-solid fa-rotate-left"></i>
                             </button>
