@@ -897,13 +897,22 @@
             }
         });
 
-        // Update badge playing state
+        // Update badge playing state & icon animation
         const badge = document.getElementById('gnosys-global-player-widget');
         if (badge) {
+            const icon = badge.querySelector('i');
             if (!isPaused && currentTrack) {
                 badge.classList.add('playing');
+                if (icon) {
+                    icon.classList.remove('fa-music', 'text-pink-400');
+                    icon.classList.add('fa-compact-disc', 'text-pink-500');
+                }
             } else {
                 badge.classList.remove('playing');
+                if (icon) {
+                    icon.classList.remove('fa-compact-disc', 'text-pink-500');
+                    icon.classList.add('fa-music', 'text-pink-400');
+                }
             }
         }
     }
@@ -1470,10 +1479,10 @@
             /* Widget style */
             .gnosys-player-badge {
                 position: fixed;
-                bottom: 84px; /* Stacked right above Pomodoro widget (which is at ~20px) */
+                bottom: 92px; /* Stacked right above Stats widget (which is at ~24px) */
                 right: 24px;
-                width: 50px;
-                height: 50px;
+                width: 56px;
+                height: 56px;
                 border-radius: 50%;
                 background: rgba(15, 23, 42, 0.85);
                 backdrop-filter: blur(12px);
@@ -1500,14 +1509,14 @@
                 justify-content: center;
             }
             .gnosys-player-badge i {
-                font-size: 18px;
+                font-size: 20px;
             }
             
             /* Status dot inside badge */
             .status-dot {
                 position: absolute;
-                bottom: 4px;
-                right: 4px;
+                bottom: 6px;
+                right: 6px;
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
