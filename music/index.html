@@ -230,18 +230,18 @@
                 grid-column: span 3 / span 3 !important;
             }
             .cockpit-panel {
-                height: 750px !important;
+                height: 640px !important;
                 display: flex !important;
                 flex-direction: column !important;
             }
         }
     </style>
 </head>
-<body class="min-h-screen selection:bg-fuchsia-500/30 pb-20">
+<body class="min-h-screen selection:bg-fuchsia-500/30 pb-10">
 
     <!-- Navbar -->
     <nav class="w-full border-b border-white/5 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+        <div class="max-w-[95%] mx-auto px-6 py-2.5 flex justify-between items-center">
             <div class="flex items-center gap-3">
                 <a href="../index.html" class="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-indigo-700 flex items-center justify-center text-white shadow-lg overflow-hidden shrink-0 border border-white/10 hover:scale-105 transition-transform">
                     <img src="../assets/GnosysAILogo.jpg" alt="Gnosys-AI" class="w-full h-full object-cover">
@@ -260,7 +260,7 @@
     </nav>
 
     <!-- Main Workspace -->
-    <main class="max-w-7xl mx-auto px-6 py-12">
+    <main class="max-w-[95%] mx-auto px-6 py-4">
         
         <!-- Mobile Warning Banner (hidden by default) -->
         <div id="mobile-inline-warning" class="glass-card rounded-3xl p-5 mb-8 border-amber-500/20 bg-amber-950/10 flex items-center gap-4 hidden">
@@ -276,69 +276,74 @@
         </div>
 
         <!-- Connection Banner -->
-        <div id="connection-banner" class="glass-card rounded-3xl p-6 mb-10 border-violet-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-4">
-                <div class="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center text-xl border border-white/5" id="comfy-status-icon">
-                    <i class="fa-solid fa-server text-slate-400"></i>
+        <div id="connection-banner" class="glass-card rounded-2xl py-3 px-5 mb-5 border-violet-500/25 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-sm border border-white/5" id="comfy-status-icon">
+                        <i class="fa-solid fa-server text-slate-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xs font-bold text-white flex items-center gap-1.5">
+                            ACE Step Status: 
+                            <span id="comfy-status-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 border border-white/5 uppercase font-extrabold tracking-wider">Checking...</span>
+                        </h2>
+                    </div>
                 </div>
-                <div>
-                    <h2 class="text-base font-bold text-white flex items-center gap-2">
-                        ACE Step Local Service Status: 
-                        <span id="comfy-status-badge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-400 border border-white/5 uppercase font-extrabold tracking-wider">Checking...</span>
-                    </h2>
-                    <p class="text-xs text-slate-400 mt-1">
-                        Local Service Path: <span id="current-comfy-path" class="font-mono text-slate-300">D:\ComfyUI\ACE-Step-1.5</span>
-                    </p>
-                    <div id="comfy-diagnostics-box" class="flex flex-wrap gap-2 mt-2.5">
-                        <!-- Diagnostic Badges like: [XL SFT] [XL Base] [Vocoder] [DCAE] [UMT5] -->
-                    </div>
-                    <div class="flex flex-wrap items-center gap-4 mt-3">
-                        <label class="flex items-center gap-2 cursor-pointer select-none">
-                            <input type="checkbox" id="auto-start-checkbox" checked class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5">
-                            <span class="text-[11px] text-slate-400 font-semibold">Auto-Start Server</span>
-                        </label>
-                        <label class="flex items-center gap-2 cursor-pointer select-none">
-                            <input type="checkbox" id="auto-download-checkbox" checked class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5">
-                            <span class="text-[11px] text-slate-400 font-semibold">Auto-Download Weights</span>
-                        </label>
-                        <button id="btn-download-all" class="text-[10px] px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-400 hover:bg-violet-500/25 border border-violet-500/20 transition-all font-bold cursor-pointer hidden">
-                            <i class="fa-solid fa-download mr-1"></i> Download All Missing Models
-                        </button>
-                    </div>
+                <div class="text-[11px] text-slate-400">
+                    Path: <span id="current-comfy-path" class="font-mono text-slate-300">D:\ComfyUI\ACE-Step-1.5</span>
+                </div>
+                <div id="comfy-diagnostics-box" class="flex flex-wrap gap-1">
+                    <!-- Diagnostic Badges -->
                 </div>
             </div>
-            <div class="flex gap-3">
-                <button id="btn-configure-path" class="px-4 py-2 rounded-xl glass-card text-xs font-bold text-slate-300 hover:text-white transition-all border border-white/5">
-                    <i class="fa-solid fa-folder-open mr-1.5"></i> Change Path
-                </button>
-                <button id="btn-launch-service" class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white transition-all shadow-md shadow-violet-600/20 hidden">
-                    <i class="fa-solid fa-rocket mr-1.5"></i> Launch Service
-                </button>
-                <button id="btn-install-wizard" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 text-xs font-bold text-white transition-all glow-button hidden">
-                    <i class="fa-solid fa-download mr-1.5"></i> Install ACE Step 1.5
-                </button>
+            
+            <div class="flex items-center gap-4 flex-wrap">
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input type="checkbox" id="auto-start-checkbox" checked class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3 h-3">
+                        <span class="text-[10px] text-slate-400 font-semibold">Auto-Start</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input type="checkbox" id="auto-download-checkbox" checked class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3 h-3">
+                        <span class="text-[10px] text-slate-400 font-semibold">Auto-Download</span>
+                    </label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-download-all" class="text-[9px] px-2 py-1 rounded-lg bg-violet-500/10 text-violet-400 hover:bg-violet-500/25 border border-violet-500/20 transition-all font-bold cursor-pointer hidden">
+                        <i class="fa-solid fa-download mr-1"></i> Download Models
+                    </button>
+                    <button id="btn-configure-path" class="px-3 py-1.5 rounded-lg glass-card text-[10px] font-bold text-slate-300 hover:text-white transition-all border border-white/5">
+                        <i class="fa-solid fa-folder-open mr-1"></i> Change Path
+                    </button>
+                    <button id="btn-launch-service" class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-[10px] font-bold text-white transition-all shadow-md shadow-violet-600/20 hidden">
+                        <i class="fa-solid fa-rocket mr-1"></i> Launch Service
+                    </button>
+                    <button id="btn-install-wizard" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-500 to-violet-600 text-[10px] font-bold text-white transition-all glow-button hidden">
+                        <i class="fa-solid fa-download mr-1"></i> Install ACE
+                    </button>
+                </div>
             </div>
         </div>
 
         <!-- Local Backend Onboarding Warning -->
-        <div id="backend-onboarding-card" class="glass-card rounded-3xl p-6 mb-10 border-amber-500/20 bg-amber-950/10 flex flex-col sm:flex-row justify-between items-center gap-4 hidden">
-            <div class="flex items-center gap-4">
-                <div class="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-xl border border-amber-500/20 text-amber-400">
+        <div id="backend-onboarding-card" class="glass-card rounded-2xl py-3 px-5 mb-5 border-amber-500/20 bg-amber-950/10 flex flex-col sm:flex-row justify-between items-center gap-4 hidden">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center text-sm border border-amber-500/20 text-amber-400 shrink-0">
                     <i class="fa-solid fa-triangle-exclamation"></i>
                 </div>
                 <div>
-                    <h2 class="text-sm font-bold text-white">Local Assistant Server is Offline</h2>
-                    <p class="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
-                        Because this application is hosted statically, browsers cannot launch local programs automatically. Please open your installation folder and run <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux) to start the local helper.
+                    <h2 class="text-xs font-bold text-white">Local Assistant Server is Offline</h2>
+                    <p class="text-[11px] text-slate-300 mt-0.5 max-w-xl leading-relaxed">
+                        Please open your installation folder and run <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux) to start local helper.
                     </p>
                 </div>
             </div>
             <div class="flex items-center gap-2 flex-wrap">
-                <button id="btn-launch-assistant" class="px-4 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/30 text-xs font-bold text-teal-300 hover:text-white transition-all whitespace-nowrap">
-                    <i class="fa-solid fa-play mr-1.5"></i> Start Local Server
+                <button id="btn-launch-assistant" class="px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/30 text-[10px] font-bold text-teal-300 hover:text-white transition-all whitespace-nowrap">
+                    <i class="fa-solid fa-play mr-1"></i> Start Local Server
                 </button>
-                <button id="btn-copy-launch-cmd" class="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-xs font-bold text-amber-300 hover:text-white transition-all whitespace-nowrap">
-                    <i class="fa-solid fa-copy mr-1.5"></i> Copy Run Command
+                <button id="btn-copy-launch-cmd" class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-[10px] font-bold text-amber-300 hover:text-white transition-all whitespace-nowrap">
+                    <i class="fa-solid fa-copy mr-1"></i> Copy Run Command
                 </button>
             </div>
         </div>

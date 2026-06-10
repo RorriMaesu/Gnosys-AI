@@ -505,7 +505,7 @@
 
         // Subject change custom toggle
         document.getElementById('subject-selector').addEventListener('change', (e) => {
-            const container = document.getElementById('custom-subject-container');
+            const container = document.getElementById('custom-subject-input');
             if (e.target.value === 'custom') {
                 container.classList.remove('hidden');
             } else {
