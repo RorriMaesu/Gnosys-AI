@@ -9,6 +9,7 @@
     // State variables
     let playlists = {};
     let activeClassId = getCurrentClassId();
+    let playingClassId = null;
     let currentTrack = null;
     let isPaused = true;
     let currentTime = 0;
@@ -132,6 +133,7 @@
             duration = data.duration;
             volume = data.volume;
             currentTrack = data.track;
+            playingClassId = data.classId;
             
             // Auto update active playlist if loading a track from another class
             if (data.classId && data.classId !== activeClassId && document.getElementById('gnosys-player-overlay').classList.contains('active')) {
@@ -324,6 +326,7 @@
                         <div class="name-display">${track.name}</div>
                     </div>
                     <div class="actions">
+                        <button class="row-btn download-track-btn" data-url="${track.url}" data-name="${track.name}" title="Download"><i class="fa-solid fa-download"></i></button>
                         <button class="row-btn rename-btn" data-id="${track.id}" title="Rename"><i class="fa-solid fa-pencil"></i></button>
                         <button class="row-btn delete-btn" data-id="${track.id}" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
                     </div>
@@ -345,6 +348,18 @@
             el.addEventListener('click', (e) => {
                 const idx = parseInt(el.getAttribute('data-idx'));
                 playTrack(idx);
+            });
+        });
+
+        // Click track to download
+        list.querySelectorAll('.download-track-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const trackUrl = btn.getAttribute('data-url');
+                const trackName = btn.getAttribute('data-name');
+                const ext = trackUrl.split('.').pop() || 'mp3';
+                const filename = `${trackName.replace(/[^a-z0-9_-]/gi, '_')}.${ext}`;
+                await downloadTrackFile(trackUrl, filename);
             });
         });
 
@@ -397,7 +412,12 @@
     }
 
     function playTrack(idx) {
-        const playlist = playlists[activeClassId];
+        playingClassId = activeClassId;
+        playTrackOfClass(activeClassId, idx);
+    }
+
+    function playTrackOfClass(classId, idx) {
+        const playlist = playlists[classId];
         if (!playlist || !playlist.tracks || playlist.tracks.length === 0) return;
         
         // Clamp bounds
@@ -409,43 +429,51 @@
         if (!isEngineAlive) {
             launchEngineWindow();
             setTimeout(() => {
-                sendLoadTrackMessage(track);
+                sendLoadTrackMessageOfClass(classId, track);
             }, 800);
         } else {
-            sendLoadTrackMessage(track);
+            sendLoadTrackMessageOfClass(classId, track);
         }
     }
 
-    function sendLoadTrackMessage(track) {
+    function sendLoadTrackMessageOfClass(classId, track) {
         channel.postMessage({
             type: 'load_track',
             url: track.url,
             track: track,
-            classId: activeClassId,
-            className: CLASS_NAMES[activeClassId] || 'Idle'
+            classId: classId,
+            className: CLASS_NAMES[classId] || 'Idle'
         });
     }
 
     function playNextTrack() {
-        if (!currentTrack) return;
-        const playlist = playlists[activeClassId];
-        if (!playlist || !playlist.tracks) return;
+        const targetClassId = playingClassId || activeClassId;
+        const playlist = playlists[targetClassId];
+        if (!playlist || !playlist.tracks || playlist.tracks.length === 0) return;
         
-        const idx = playlist.tracks.findIndex(t => t.id === currentTrack.id);
-        if (idx !== -1) {
-            playTrack(idx + 1);
+        let idx = 0; // Default to first track
+        if (currentTrack) {
+            const currentIdx = playlist.tracks.findIndex(t => t.id === currentTrack.id);
+            if (currentIdx !== -1) {
+                idx = currentIdx + 1;
+            }
         }
+        playTrackOfClass(targetClassId, idx);
     }
 
     function playPrevTrack() {
-        if (!currentTrack) return;
-        const playlist = playlists[activeClassId];
-        if (!playlist || !playlist.tracks) return;
+        const targetClassId = playingClassId || activeClassId;
+        const playlist = playlists[targetClassId];
+        if (!playlist || !playlist.tracks || playlist.tracks.length === 0) return;
         
-        const idx = playlist.tracks.findIndex(t => t.id === currentTrack.id);
-        if (idx !== -1) {
-            playTrack(idx - 1);
+        let idx = playlist.tracks.length - 1; // Default to last track
+        if (currentTrack) {
+            const currentIdx = playlist.tracks.findIndex(t => t.id === currentTrack.id);
+            if (currentIdx !== -1) {
+                idx = currentIdx - 1;
+            }
         }
+        playTrackOfClass(targetClassId, idx);
     }
 
     // Syncing UI changes
@@ -772,6 +800,77 @@
         }
         
         miniAnimFrame = requestAnimationFrame(drawMiniVisualizer);
+    }
+
+    async function downloadTrackFile(url, filename) {
+        let targetUrl = url;
+        if (!targetUrl.startsWith('http') && !targetUrl.startsWith('data:')) {
+            const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+            if (targetUrl.startsWith('/')) {
+                targetUrl = window.location.origin + baseHref + targetUrl.substring(1);
+            } else {
+                targetUrl = window.location.origin + baseHref + targetUrl;
+            }
+        }
+        
+        // Use API_BASE if on GitHub Pages
+        if (API_BASE && !url.startsWith('http') && !url.startsWith('data:')) {
+            targetUrl = API_BASE + url;
+        }
+
+        try {
+            const res = await fetch(targetUrl);
+            const blob = await res.blob();
+            
+            // Allow user to choose folder if showSaveFilePicker is supported
+            if ('showSaveFilePicker' in window) {
+                const ext = filename.split('.').pop() || 'mp3';
+                const fileHandle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: 'Audio File',
+                        accept: {
+                            [`audio/${ext === 'mp3' ? 'mpeg' : ext}`]: [`.${ext}`]
+                        }
+                    }]
+                });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                showGlobalToast('Track successfully saved to your system!');
+            } else {
+                // Fallback to standard <a> tag click
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+                showGlobalToast('Track download started!');
+            }
+        } catch (err) {
+            console.error('Download failed:', err);
+            // Fallback for user cancellation or cross-origin block
+            if (err.name !== 'AbortError') {
+                const a = document.createElement('a');
+                a.href = targetUrl;
+                a.download = filename;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        }
+    }
+
+    function showGlobalToast(msg) {
+        if (window.GnosysLLM && typeof window.GnosysLLM.showTransientToast === 'function') {
+            window.GnosysLLM.showTransientToast(msg, 'success');
+        } else {
+            alert(msg);
+        }
     }
 
     // Inject CSS styles
@@ -1142,6 +1241,9 @@
             }
             .delete-btn:hover {
                 color: #ef4444;
+            }
+            .download-track-btn:hover {
+                color: #10b981;
             }
             
             .empty-state {

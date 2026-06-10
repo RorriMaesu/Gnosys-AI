@@ -366,11 +366,16 @@
                     // Load track url and start playing
                     let targetUrl = data.url;
                     if (!targetUrl.startsWith('http')) {
-                        const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
-                        if (targetUrl.startsWith('/')) {
-                            targetUrl = window.location.origin + baseHref + targetUrl.substring(1);
+                        const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
+                        if (API_BASE) {
+                            targetUrl = API_BASE + targetUrl;
                         } else {
-                            targetUrl = window.location.origin + baseHref + targetUrl;
+                            const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+                            if (targetUrl.startsWith('/')) {
+                                targetUrl = window.location.origin + baseHref + targetUrl.substring(1);
+                            } else {
+                                targetUrl = window.location.origin + baseHref + targetUrl;
+                            }
                         }
                     }
                     audio.src = targetUrl;

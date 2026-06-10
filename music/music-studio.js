@@ -267,6 +267,12 @@
                         btnAddPlaylist.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>Added!</span>`;
                         showBannerNotification('Track successfully added to playlist!', 'success');
 
+                        // Automatically download to user's system
+                        if (resData.track && resData.track.url) {
+                            const ext = resData.track.filename.split('.').pop() || 'mp3';
+                            downloadTrackFile(resData.track.url, `${nameToSave}.${ext}`);
+                        }
+
                         // Trigger broadcast channel reload
                         const globalChannel = new BroadcastChannel('gnosys_audio_channel');
                         globalChannel.postMessage({ type: 'ping' });
@@ -306,6 +312,24 @@
                         loadAudioToPlayer(url);
                     }
                 }, 100);
+            });
+        }
+
+        // Preview player download button click handler
+        const downloadPreviewBtn = document.getElementById('btn-download-audio');
+        if (downloadPreviewBtn) {
+            downloadPreviewBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const audioPlayer = document.getElementById('audio-player');
+                if (!audioPlayer.src || audioPlayer.src.startsWith('#') || audioPlayer.src === window.location.href) {
+                    showBannerNotification('No audio track loaded to download.', 'error');
+                    return;
+                }
+                const promptVal = document.getElementById('music-prompt').value;
+                const bpmVal = document.getElementById('music-bpm').value;
+                const ext = audioPlayer.src.startsWith('data:') ? (audioPlayer.src.split(';')[0].split('/').pop() === 'mpeg' ? 'mp3' : audioPlayer.src.split(';')[0].split('/').pop() || 'mp3') : (audioPlayer.src.split('.').pop() || 'mp3');
+                const defaultName = `${promptVal.substring(0, 35).replace(/[^a-z0-9_-]/gi, '_')}__${bpmVal}_BPM.${ext}`;
+                await downloadTrackFile(audioPlayer.src, defaultName);
             });
         }
 
@@ -1416,6 +1440,69 @@ signature: (recommend "4", "3", or "6" for time signature)
         } finally {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             btn.disabled = false;
+        }
+    }
+
+    async function downloadTrackFile(url, filename) {
+        let targetUrl = url;
+        if (!targetUrl.startsWith('http') && !targetUrl.startsWith('data:')) {
+            const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+            if (targetUrl.startsWith('/')) {
+                targetUrl = window.location.origin + baseHref + targetUrl.substring(1);
+            } else {
+                targetUrl = window.location.origin + baseHref + targetUrl;
+            }
+        }
+        
+        // Use API_BASE if on GitHub Pages
+        if (typeof API_BASE !== 'undefined' && API_BASE && !url.startsWith('http') && !url.startsWith('data:')) {
+            targetUrl = API_BASE + url;
+        }
+
+        try {
+            const res = await fetch(targetUrl);
+            const blob = await res.blob();
+            
+            // Allow user to choose folder if showSaveFilePicker is supported
+            if ('showSaveFilePicker' in window) {
+                const ext = filename.split('.').pop() || 'mp3';
+                const fileHandle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: 'Audio File',
+                        accept: {
+                            [`audio/${ext === 'mp3' ? 'mpeg' : ext}`]: [`.${ext}`]
+                        }
+                    }]
+                });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                showBannerNotification('Track successfully saved to your system!', 'success');
+            } else {
+                // Fallback to standard <a> tag click
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+                showBannerNotification('Track download started!', 'success');
+            }
+        } catch (err) {
+            console.error('Download failed:', err);
+            // Fallback for user cancellation or cross-origin block
+            if (err.name !== 'AbortError') {
+                const a = document.createElement('a');
+                a.href = targetUrl;
+                a.download = filename;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
         }
     }
 
