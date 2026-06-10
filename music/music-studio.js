@@ -217,7 +217,7 @@
                 else if (val === 'chemistry') selectPlaylist.value = 'intro-to-chemistry';
                 else if (val === 'psychology') selectPlaylist.value = 'psychology-care';
                 else if (val === 'anatomy') selectPlaylist.value = 'anatomy-physiology-1';
-                else selectPlaylist.value = 'gnosys-music';
+                else selectPlaylist.value = 'medical-terminology';
             });
         }
 
@@ -233,7 +233,7 @@
                     return;
                 }
 
-                const classId = selectPlaylist ? selectPlaylist.value : 'gnosys-music';
+                const classId = selectPlaylist ? selectPlaylist.value : 'medical-terminology';
                 
                 // Prompt user for track name
                 const promptVal = document.getElementById('music-prompt').value;
@@ -277,6 +277,15 @@
                     btnAddPlaylist.disabled = false;
                     showBannerNotification('Failed to save track: ' + err.message, 'error');
                 }
+            });
+        }
+
+        // Overlap Prevention: Pause background audio engine when local player starts playing
+        const localAudio = document.getElementById('audio-player');
+        if (localAudio) {
+            localAudio.addEventListener('play', () => {
+                const globalChannel = new BroadcastChannel('gnosys_audio_channel');
+                globalChannel.postMessage({ type: 'pause' });
             });
         }
 
@@ -1158,6 +1167,7 @@ signature: (recommend "4", "3", or "6" for time signature)
         } finally {
             btn.disabled = false;
             btn.innerHTML = originalText;
+            saveMusicStudioSettings();
         }
     }
 
@@ -1192,10 +1202,30 @@ signature: (recommend "4", "3", or "6" for time signature)
             else if (val === 'chemistry') selectPlaylist.value = 'intro-to-chemistry';
             else if (val === 'psychology') selectPlaylist.value = 'psychology-care';
             else if (val === 'anatomy') selectPlaylist.value = 'anatomy-physiology-1';
-            else selectPlaylist.value = 'gnosys-music';
+            else selectPlaylist.value = 'medical-terminology';
         }
-        
-        showBannerNotification('Track successfully loaded!', 'success');
+
+        // Smart Autoplay Check: check if background audio engine is currently playing a track
+        let isBackgroundPlaying = false;
+        try {
+            const stateStr = localStorage.getItem('gnosys_audio_engine_state');
+            if (stateStr) {
+                const state = JSON.parse(stateStr);
+                if (state && !state.paused && state.track) {
+                    isBackgroundPlaying = true;
+                }
+            }
+        } catch (e) {}
+
+        if (isBackgroundPlaying) {
+            // Background playlist is active: do not autoplay local preview to avoid cacophony
+            alert("New track generation completed! Your study beat is ready for preview in the player below.");
+        } else {
+            // Background playlist is idle: silently autoplay local player preview
+            audio.play().catch(err => {
+                console.log('Autoplay blocked by browser policy:', err);
+            });
+        }
     }
 
     async function generateStudyTrack() {

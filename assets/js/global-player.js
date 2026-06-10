@@ -31,7 +31,6 @@
         "chemistry-math-refresher": "Chemistry Math Refresher",
         "clinical-mathematics": "Clinical Mathematics",
         "psychology-care": "Intro to Psychology",
-        "gnosys-music": "Music Studio",
         "anatomy-physiology-1": "Anatomy & Physiology I",
         "anatomy-physiology-2": "Anatomy & Physiology II",
         "anatomy-physiology-3": "Anatomy & Physiology III"
@@ -44,11 +43,11 @@
         if (path.includes('/chemistry/')) return 'intro-to-chemistry';
         if (path.includes('/math/')) return 'clinical-mathematics';
         if (path.includes('/syngnosia/')) return 'medical-terminology';
-        if (path.includes('/music/')) return 'gnosys-music';
+        if (path.includes('/music/')) return 'medical-terminology';
         if (path.includes('/anatomy1/')) return 'anatomy-physiology-1';
         if (path.includes('/anatomy2/')) return 'anatomy-physiology-2';
         if (path.includes('/anatomy3/')) return 'anatomy-physiology-3';
-        return 'gnosys-music';
+        return 'medical-terminology';
     }
 
     // Initialize UI on load
