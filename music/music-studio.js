@@ -1510,8 +1510,63 @@ signature: (recommend "4", "3", or "6" for time signature)
     function showBannerNotification(msg, variant = 'success') {
         if (window.GnosysLLM && typeof window.GnosysLLM.showTransientToast === 'function') {
             window.GnosysLLM.showTransientToast(msg, variant);
-        } else {
-            alert(msg);
+            return;
         }
+
+        // Custom DOM toast system fallback (non-blocking)
+        let toastContainer = document.getElementById('gnosys-custom-toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'gnosys-custom-toast-container';
+            toastContainer.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                left: 24px;
+                z-index: 99999;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                pointer-events: none;
+            `;
+            document.body.appendChild(toastContainer);
+        }
+
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 500;
+            background: ${variant === 'error' ? 'rgba(239, 68, 68, 0.95)' : variant === 'info' ? 'rgba(99, 102, 241, 0.95)' : 'rgba(15, 23, 42, 0.95)'};
+            border: 1px solid ${variant === 'error' ? 'rgba(239, 68, 68, 0.2)' : variant === 'info' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.08)'};
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            backdrop-filter: blur(8px);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto;
+            font-family: 'Outfit', sans-serif;
+        `;
+        
+        const icon = variant === 'error' ? '<i class="fa-solid fa-triangle-exclamation mr-2 text-red-400"></i>' :
+                     variant === 'info' ? '<i class="fa-solid fa-circle-info mr-2 text-indigo-400"></i>' :
+                     '<i class="fa-solid fa-circle-check mr-2 text-green-400"></i>';
+                     
+        toast.innerHTML = `${icon}<span>${msg}</span>`;
+        toastContainer.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        });
+
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-20px)';
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, 3000);
     }
 })();
