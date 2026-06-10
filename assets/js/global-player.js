@@ -108,7 +108,8 @@
 
     // Launch hidden/popout window
     function launchEngineWindow() {
-        const engineUrl = window.location.origin + '/music/player-engine.html';
+        const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+        const engineUrl = window.location.origin + baseHref + 'music/player-engine.html';
         const w = window.open(
             engineUrl,
             'GnosysPlayerEngine',

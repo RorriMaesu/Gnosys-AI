@@ -364,8 +364,16 @@
                     break;
                 case 'load_track':
                     // Load track url and start playing
-                    const absoluteUrl = data.url.startsWith('http') ? data.url : (window.location.origin + data.url);
-                    audio.src = absoluteUrl;
+                    let targetUrl = data.url;
+                    if (!targetUrl.startsWith('http')) {
+                        const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+                        if (targetUrl.startsWith('/')) {
+                            targetUrl = window.location.origin + baseHref + targetUrl.substring(1);
+                        } else {
+                            targetUrl = window.location.origin + baseHref + targetUrl;
+                        }
+                    }
+                    audio.src = targetUrl;
                     currentTrack = data.track;
                     currentClassId = data.classId;
                     currentClassName = data.className || 'Idle';
