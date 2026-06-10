@@ -5,6 +5,8 @@
     const clientId = Math.random().toString(36).substring(2, 15);
     let ws = null;
     let installPollInterval = null;
+    let pendingGeneration = false;
+    let isLaunchingService = false;
 
     let explorerCurrentPath = comfyPath;
 
@@ -95,6 +97,42 @@
     function initUI() {
         document.getElementById('current-comfy-path').textContent = comfyPath;
         
+        // Auto-start and Auto-download checkboxes
+        const autoStartChk = document.getElementById('auto-start-checkbox');
+        const autoDownloadChk = document.getElementById('auto-download-checkbox');
+        
+        if (autoStartChk) {
+            const savedAutoStart = localStorage.getItem('gnosys_music_auto_start');
+            autoStartChk.checked = savedAutoStart === null ? true : savedAutoStart === 'true';
+            autoStartChk.addEventListener('change', (e) => {
+                localStorage.setItem('gnosys_music_auto_start', e.target.checked);
+                if (e.target.checked) checkMusicServiceStatus();
+            });
+        }
+        
+        if (autoDownloadChk) {
+            const savedAutoDownload = localStorage.getItem('gnosys_music_auto_download');
+            autoDownloadChk.checked = savedAutoDownload === null ? true : savedAutoDownload === 'true';
+            autoDownloadChk.addEventListener('change', (e) => {
+                localStorage.setItem('gnosys_music_auto_download', e.target.checked);
+                if (e.target.checked) checkMusicServiceStatus();
+            });
+        }
+
+        // Models selector change checker
+        const modelSelector = document.getElementById('music-model');
+        if (modelSelector) {
+            modelSelector.addEventListener('change', () => {
+                checkMusicServiceStatus();
+            });
+        }
+
+        // Download All button
+        const downloadAllBtn = document.getElementById('btn-download-all');
+        if (downloadAllBtn) {
+            downloadAllBtn.addEventListener('click', triggerDownloadAllMissing);
+        }
+        
         // VRAM profile initialization and change handler
         const vramSelector = document.getElementById('music-vram-profile');
         if (vramSelector) {
@@ -178,23 +216,8 @@
         });
 
         // Launch service click
-        document.getElementById('btn-launch-service').addEventListener('click', async () => {
-            try {
-                const res = await fetch(`${API_BASE}/api/music/launch`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ comfy_path: comfyPath, vram_profile: vramProfile })
-                });
-                const data = await res.json();
-                if (data.status === 'success') {
-                    showBannerNotification('Starting ComfyUI background service...', 'success');
-                    pollComfyStartup();
-                } else {
-                    showBannerNotification('Failed to launch: ' + data.message, 'error');
-                }
-            } catch (err) {
-                showBannerNotification('Error launching ComfyUI service: ' + err.message, 'error');
-            }
+        document.getElementById('btn-launch-service').addEventListener('click', () => {
+            launchService();
         });
 
         // Installer wizard modal
@@ -364,6 +387,125 @@
         }
     }
 
+    async function launchService() {
+        if (isLaunchingService) return;
+        isLaunchingService = true;
+        const badge = document.getElementById('comfy-status-badge');
+        if (badge) {
+            badge.className = 'text-xs px-2.5 py-0.5 rounded-full uppercase font-extrabold tracking-wider badge-pulse-amber';
+            badge.textContent = 'Starting (0/150)';
+        }
+        try {
+            const res = await fetch(`${API_BASE}/api/music/launch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comfy_path: comfyPath, vram_profile: vramProfile })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                showBannerNotification('Starting ComfyUI background service...', 'success');
+                pollComfyStartup();
+            } else {
+                showBannerNotification('Failed to launch: ' + data.message, 'error');
+                isLaunchingService = false;
+            }
+        } catch (err) {
+            showBannerNotification('Error launching ComfyUI service: ' + err.message, 'error');
+            isLaunchingService = false;
+        }
+    }
+
+    function getMissingModelsList(data) {
+        if (!data || !data.diagnostics) return [];
+        const selectedModel = document.getElementById('music-model').value;
+        const missing = [];
+        
+        if (!data.diagnostics.vocoder) {
+            missing.push({
+                label: "Vocoder",
+                repoId: "Comfy-Org/ACE-Step_ComfyUI_repackaged",
+                targetSubdir: "models/TTS/ACE-Step-v1-3.5B/music_vocoder"
+            });
+        }
+        if (!data.diagnostics.dcae) {
+            missing.push({
+                label: "DCAE Encoder",
+                repoId: "Comfy-Org/ACE-Step_ComfyUI_repackaged",
+                targetSubdir: "models/TTS/ACE-Step-v1-3.5B/music_dcae_f8c8"
+            });
+        }
+        if (!data.diagnostics.umt5) {
+            missing.push({
+                label: "UMT5 Text",
+                repoId: "Comfy-Org/ACE-Step_ComfyUI_repackaged",
+                targetSubdir: "models/TTS/ACE-Step-v1-3.5B/umt5-base"
+            });
+        }
+
+        if (selectedModel === "acemusic/acestep-v15-xl-sft" && !data.diagnostics.xl_sft) {
+            missing.push({
+                label: "XL SFT Model",
+                repoId: "ACE-Step/acestep-v15-xl-sft",
+                targetSubdir: "checkpoints/acestep-v15-xl-sft"
+            });
+        } else if (selectedModel === "acemusic/acestep-v15-xl-base" && !data.diagnostics.xl_base) {
+            missing.push({
+                label: "XL Base Model",
+                repoId: "ACE-Step/acestep-v15-xl-base",
+                targetSubdir: "checkpoints/acestep-v15-xl-base"
+            });
+        } else if (selectedModel === "acemusic/acestep-v15-xl-turbo" && !data.diagnostics.xl_turbo) {
+            missing.push({
+                label: "XL Turbo Model",
+                repoId: "ACE-Step/acestep-v15-xl-turbo",
+                targetSubdir: "checkpoints/acestep-v15-xl-turbo"
+            });
+        }
+
+        return missing;
+    }
+
+    async function triggerBackgroundDownload(label, repoId, targetSubdir) {
+        const targetPath = `${comfyPath}\\${targetSubdir.replace(/\//g, '\\')}`;
+        try {
+            if (!window.latestStatusData) window.latestStatusData = {};
+            if (!window.latestStatusData.active_downloads) window.latestStatusData.active_downloads = {};
+            window.latestStatusData.active_downloads[repoId] = 'downloading';
+            
+            const dlRes = await fetch(`${API_BASE}/api/music/download`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repo_id: repoId, target_dir: targetPath })
+            });
+            const dlData = await dlRes.json();
+            if (dlData.status === 'success') {
+                showBannerNotification(`Background download initiated for ${label}!`, 'success');
+                checkMusicServiceStatus();
+            }
+        } catch (err) {
+            console.error(`Failed to start download for ${label}:`, err);
+        }
+    }
+
+    async function triggerDownloadAllMissing() {
+        const data = window.latestStatusData;
+        if (!data || !data.diagnostics) {
+            showBannerNotification("Unable to determine missing models. Please wait for status scan.", "error");
+            return;
+        }
+
+        const missing = getMissingModelsList(data);
+        if (missing.length === 0) {
+            showBannerNotification("All required models are already installed!", "info");
+            return;
+        }
+
+        showBannerNotification(`Starting downloads for ${missing.length} missing models in background...`, "info");
+        for (const item of missing) {
+            await triggerBackgroundDownload(item.label, item.repoId, item.targetSubdir);
+        }
+    }
+
     async function checkMusicServiceStatus() {
         const badge = document.getElementById('comfy-status-badge');
         const icon = document.getElementById('comfy-status-icon');
@@ -455,6 +597,9 @@
                 }
             }
 
+            // Cache latest status data
+            window.latestStatusData = data;
+
             if (data.comfy_running) {
                 badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 uppercase font-extrabold tracking-wider';
                 badge.textContent = 'Running';
@@ -464,12 +609,56 @@
                 
                 // Fetch models dynamically from local API server
                 fetchModelsList();
+
+                // Check missing models
+                const missing = getMissingModelsList(data);
+                const downloadAllBtn = document.getElementById('btn-download-all');
+                
+                if (downloadAllBtn) {
+                    if (missing.length > 0) {
+                        downloadAllBtn.classList.remove('hidden');
+                        
+                        const downloadsActive = data.active_downloads && Object.values(data.active_downloads).some(status => status === 'downloading');
+                        downloadAllBtn.disabled = downloadsActive;
+                        if (downloadsActive) {
+                            downloadAllBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Downloading Models...';
+                            downloadAllBtn.classList.add('opacity-75');
+                        } else {
+                            downloadAllBtn.innerHTML = '<i class="fa-solid fa-download mr-1"></i> Download All Missing Models';
+                            downloadAllBtn.classList.remove('opacity-75');
+                        }
+                    } else {
+                        downloadAllBtn.classList.add('hidden');
+                    }
+                }
+
+                // Auto-download missing models if enabled
+                const autoDownloadEnabled = document.getElementById('auto-download-checkbox')?.checked ?? true;
+                if (autoDownloadEnabled && missing.length > 0) {
+                    const activeRepos = data.active_downloads ? Object.keys(data.active_downloads).filter(k => data.active_downloads[k] === 'downloading') : [];
+                    for (const item of missing) {
+                        if (!activeRepos.includes(item.repoId)) {
+                            triggerBackgroundDownload(item.label, item.repoId, item.targetSubdir);
+                        }
+                    }
+                }
             } else if (data.comfy_installed) {
-                badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider';
-                badge.textContent = 'Offline';
-                icon.innerHTML = '<i class="fa-solid fa-server text-amber-400"></i>';
-                launchBtn.classList.remove('hidden');
-                installBtn.classList.add('hidden');
+                const isStarting = badge && badge.textContent.startsWith('Starting');
+                if (isStarting) {
+                    // Keep the starting layout
+                } else {
+                    badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider';
+                    badge.textContent = 'Offline';
+                    icon.innerHTML = '<i class="fa-solid fa-server text-amber-400"></i>';
+                    launchBtn.classList.remove('hidden');
+                    installBtn.classList.add('hidden');
+
+                    // Auto-start server if enabled
+                    const autoStartEnabled = document.getElementById('auto-start-checkbox')?.checked ?? true;
+                    if (autoStartEnabled && !isLaunchingService) {
+                        launchService();
+                    }
+                }
             } else {
                 badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 uppercase font-extrabold tracking-wider';
                 badge.textContent = 'Not Found';
@@ -477,6 +666,13 @@
                 launchBtn.classList.add('hidden');
                 installBtn.classList.remove('hidden');
             }
+            
+            // Hide download-all button if server is not running
+            if (!data.comfy_running) {
+                const downloadAllBtn = document.getElementById('btn-download-all');
+                if (downloadAllBtn) downloadAllBtn.classList.add('hidden');
+            }
+
             // Control polling for active downloads
             const downloadsActive = data.active_downloads && Object.values(data.active_downloads).some(status => status === 'downloading');
             if (downloadsActive) {
@@ -487,6 +683,16 @@
                 if (downloadPollInterval) {
                     clearInterval(downloadPollInterval);
                     downloadPollInterval = null;
+                }
+                
+                // If downloads just completed and we have a queued generation, run it!
+                if (pendingGeneration && data.comfy_running) {
+                    const missing = getMissingModelsList(data);
+                    if (missing.length === 0) {
+                        pendingGeneration = false;
+                        showBannerNotification('All required models are now ready! Starting generation...', 'success');
+                        generateStudyTrack();
+                    }
                 }
             }
         } catch (err) {
@@ -578,22 +784,51 @@
                 const res = await fetch('http://127.0.0.1:8002/health', { signal: AbortSignal.timeout(1000) });
                 if (res.ok) {
                     clearInterval(interval);
+                    isLaunchingService = false;
                     if (launchBtn) {
                         launchBtn.disabled = false;
                         launchBtn.innerHTML = '<i class="fa-solid fa-rocket mr-1.5"></i> Launch Service';
                     }
                     showBannerNotification('ACE-Step API Server connected successfully!', 'success');
                     checkMusicServiceStatus();
+                    
+                    if (pendingGeneration) {
+                        // Wait for status data to be fetched and stored
+                        setTimeout(() => {
+                            const data = window.latestStatusData;
+                            const missing = getMissingModelsList(data);
+                            if (missing.length === 0) {
+                                pendingGeneration = false;
+                                showBannerNotification('API server online! Starting queued track generation...', 'success');
+                                generateStudyTrack();
+                            } else {
+                                // Keep pendingGeneration true, we will wait for auto-download status checking to trigger it!
+                                showBannerNotification('API server online! Waiting for missing model weights to download...', 'info');
+                                const progressContainer = document.getElementById('generation-progress-container');
+                                const statusText = document.getElementById('gen-status-text');
+                                if (statusText) statusText.textContent = 'Queued: Waiting for required models to finish downloading...';
+                            }
+                        }, 500);
+                    }
                 }
             } catch (e) {
                 if (attempts >= maxAttempts) {
                     clearInterval(interval);
+                    isLaunchingService = false;
                     if (launchBtn) {
                         launchBtn.disabled = false;
                         launchBtn.innerHTML = '<i class="fa-solid fa-rocket mr-1.5"></i> Launch Service';
                     }
                     showBannerNotification('ACE-Step API Server launch timed out. Please check if it is running.', 'error');
                     checkMusicServiceStatus();
+                    
+                    if (pendingGeneration) {
+                        pendingGeneration = false;
+                        const progressContainer = document.getElementById('generation-progress-container');
+                        if (progressContainer) progressContainer.classList.add('hidden');
+                        const genBtn = document.getElementById('btn-generate-track');
+                        if (genBtn) genBtn.disabled = false;
+                    }
                 }
             }
         }, 4000);
@@ -790,13 +1025,51 @@ signature: (recommend "4", "3", or "6" for time signature)
         const statusTextVal = document.getElementById('comfy-status-badge').textContent.trim();
         if (statusTextVal !== 'Running') {
             if (statusTextVal.startsWith('Starting')) {
-                showBannerNotification('ACE-Step API Server is still loading model weights in the background. Please wait for the service to finish starting up.', 'info');
+                pendingGeneration = true;
+                btn.disabled = true;
+                progressContainer.classList.remove('hidden');
+                fill.style.width = '10%';
+                percent.textContent = '10%';
+                statusText.textContent = 'Queued: Waiting for ACE-Step API Server to finish starting...';
+                showBannerNotification('Generation queued. It will run automatically once the server starts.', 'info');
             } else if (statusTextVal === 'Not Found') {
                 showBannerNotification('ACE-Step service not found. Please run the install wizard to set it up.', 'error');
             } else {
-                showBannerNotification('Local ACE-Step API Server is offline. Please launch the service first.', 'error');
+                pendingGeneration = true;
+                btn.disabled = true;
+                progressContainer.classList.remove('hidden');
+                fill.style.width = '10%';
+                percent.textContent = '10%';
+                statusText.textContent = 'Auto-starting background server and queuing generation...';
+                showBannerNotification('Auto-starting background server to generate track...', 'info');
+                launchService();
             }
             return;
+        }
+
+        // Check if any required weights are missing
+        const data = window.latestStatusData;
+        if (data && data.diagnostics) {
+            const missing = getMissingModelsList(data);
+            if (missing.length > 0) {
+                const downloadsActive = data.active_downloads && Object.values(data.active_downloads).some(status => status === 'downloading');
+                
+                pendingGeneration = true;
+                btn.disabled = true;
+                progressContainer.classList.remove('hidden');
+                fill.style.width = '15%';
+                percent.textContent = '15%';
+                
+                if (downloadsActive) {
+                    statusText.textContent = 'Queued: Waiting for required models to finish downloading...';
+                    showBannerNotification('Required weights are currently downloading. Track generation will start automatically when downloads complete.', 'info');
+                } else {
+                    statusText.textContent = 'Queued: Initiating required model downloads...';
+                    showBannerNotification('Required weights are missing. Initiating automatic background download...', 'warning');
+                    triggerDownloadAllMissing();
+                }
+                return;
+            }
         }
 
         btn.disabled = true;

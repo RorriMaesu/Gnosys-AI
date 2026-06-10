@@ -130,6 +130,19 @@
                     <div id="comfy-diagnostics-box" class="flex flex-wrap gap-2 mt-2.5">
                         <!-- Diagnostic Badges like: [XL SFT] [XL Base] [Vocoder] [DCAE] [UMT5] -->
                     </div>
+                    <div class="flex flex-wrap items-center gap-4 mt-3">
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="auto-start-checkbox" checked class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5">
+                            <span class="text-[11px] text-slate-400 font-semibold">Auto-Start Server</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="auto-download-checkbox" checked class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5">
+                            <span class="text-[11px] text-slate-400 font-semibold">Auto-Download Weights</span>
+                        </label>
+                        <button id="btn-download-all" class="text-[10px] px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-400 hover:bg-violet-500/25 border border-violet-500/20 transition-all font-bold cursor-pointer hidden">
+                            <i class="fa-solid fa-download mr-1"></i> Download All Missing Models
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="flex gap-3">
