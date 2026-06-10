@@ -112,12 +112,12 @@ def register_windows_protocol():
         except Exception as e:
             print(f"[Launcher] Warning: Could not register gnosys-quantime:// protocol: {e}")
 
-        # 3. Register Gnosys Assistant protocol to run run_backend.bat
+        # 3. Register Gnosys Assistant protocol to run run_backend_hidden.vbs via wscript.exe
         try:
             server_dir = os.path.dirname(os.path.abspath(__file__))
-            bat_path = os.path.join(server_dir, 'run_backend.bat')
-            if os.path.exists(bat_path):
-                cmd_path = f'"{bat_path}"'
+            vbs_path = os.path.join(server_dir, 'run_backend_hidden.vbs')
+            if os.path.exists(vbs_path):
+                cmd_path = f'wscript.exe "{vbs_path}"'
                 subprocess.run(['reg', 'add', 'HKCU\\Software\\Classes\\gnosys-assistant', '/v', 'URL Protocol', '/t', 'REG_SZ', '/d', '', '/f'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.run(['reg', 'add', 'HKCU\\Software\\Classes\\gnosys-assistant\\shell\\open\\command', '/ve', '/t', 'REG_SZ', '/d', cmd_path, '/f'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 print("[Launcher] Programmatically registered gnosys-assistant:// protocol in HKCU.")

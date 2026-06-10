@@ -7,6 +7,7 @@
     let installPollInterval = null;
     let pendingGeneration = false;
     let isLaunchingService = false;
+    let isLaunchingAssistant = false;
 
     let explorerCurrentPath = comfyPath;
 
@@ -312,63 +313,7 @@
         const launchAssistantBtn = document.getElementById('btn-launch-assistant');
         if (launchAssistantBtn) {
             launchAssistantBtn.addEventListener('click', () => {
-                const originalText = launchAssistantBtn.innerHTML;
-                launchAssistantBtn.disabled = true;
-                launchAssistantBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Launching...';
-
-                const onboardingCard = document.getElementById('backend-onboarding-card');
-                const titleEl = onboardingCard ? onboardingCard.querySelector('h2') : null;
-                const descEl = onboardingCard ? onboardingCard.querySelector('p') : null;
-
-                if (titleEl) titleEl.textContent = 'Starting Local Assistant Server...';
-                if (descEl) descEl.innerHTML = 'Connecting to custom protocol <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">gnosys-assistant://</code>... Attempting connection (1/15)';
-
-                showBannerNotification("Launching local assistant server...", "info");
-                try {
-                    const iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = 'gnosys-assistant://';
-                    document.body.appendChild(iframe);
-                    setTimeout(() => iframe.remove(), 1000);
-                } catch (err) {
-                    console.warn('[MusicStudio] Custom protocol invocation failed:', err);
-                }
-
-                // Poll for status to verify if it launched
-                let attempts = 0;
-                const maxAttempts = 15;
-                const interval = setInterval(async () => {
-                    attempts++;
-                    if (descEl) descEl.innerHTML = `Connecting to custom protocol <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">gnosys-assistant://</code>... Attempting connection (${attempts}/${maxAttempts})`;
-                    try {
-                        const res = await fetch(`${API_BASE}/api/music/status`, {
-                            headers: { 'X-ComfyUI-Path': comfyPath }
-                        });
-                        if (res.ok) {
-                            clearInterval(interval);
-                            showBannerNotification("Local assistant server successfully connected!", "success");
-                            launchAssistantBtn.disabled = false;
-                            launchAssistantBtn.innerHTML = originalText;
-                            if (titleEl) titleEl.textContent = 'Local Assistant Server is Offline';
-                            checkMusicServiceStatus();
-                        }
-                    } catch (e) {}
-                    if (attempts >= maxAttempts) {
-                        clearInterval(interval);
-                        launchAssistantBtn.disabled = false;
-                        launchAssistantBtn.innerHTML = originalText;
-                        if (titleEl) titleEl.textContent = 'Local Assistant Server is Offline';
-                        if (descEl) descEl.innerHTML = 'Because this application is hosted statically, browsers cannot launch local programs automatically. Please open your installation folder and run <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux) to start the local helper.';
-                        
-                        // Automatically pop up the setup wizard guide modal
-                        const setupModal = document.getElementById('assistant-setup-modal');
-                        if (setupModal) {
-                            setupModal.classList.remove('hidden');
-                            setupModal.classList.add('flex');
-                        }
-                        showBannerNotification('Connection attempt timed out. Opening assistant setup guide...', 'warning');
-                    }
-                }, 1500);
+                launchAssistantServer(true);
             });
         }
 
@@ -385,6 +330,81 @@
                 checkMusicServiceStatus();
             });
         }
+    }
+
+    function launchAssistantServer(isManual = false) {
+        if (isLaunchingAssistant) return;
+        isLaunchingAssistant = true;
+
+        const launchAssistantBtn = document.getElementById('btn-launch-assistant');
+        const onboardingCard = document.getElementById('backend-onboarding-card');
+        const titleEl = onboardingCard ? onboardingCard.querySelector('h2') : null;
+        const descEl = onboardingCard ? onboardingCard.querySelector('p') : null;
+
+        const originalBtnText = launchAssistantBtn ? launchAssistantBtn.innerHTML : '';
+        if (launchAssistantBtn) {
+            launchAssistantBtn.disabled = true;
+            launchAssistantBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Launching...';
+        }
+
+        if (titleEl) titleEl.textContent = 'Starting Local Assistant Server...';
+        if (descEl) descEl.innerHTML = 'Connecting to custom protocol <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">gnosys-assistant://</code>... Attempting connection (1/15)';
+
+        if (onboardingCard) onboardingCard.classList.remove('hidden');
+
+        showBannerNotification("Launching local assistant server...", "info");
+        try {
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'gnosys-assistant://';
+            document.body.appendChild(iframe);
+            setTimeout(() => iframe.remove(), 1000);
+        } catch (err) {
+            console.warn('[MusicStudio] Custom protocol invocation failed:', err);
+        }
+
+        let attempts = 0;
+        const maxAttempts = 15;
+        const interval = setInterval(async () => {
+            attempts++;
+            if (descEl) descEl.innerHTML = `Connecting to custom protocol <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">gnosys-assistant://</code>... Attempting connection (${attempts}/${maxAttempts})`;
+            try {
+                const res = await fetch(`${API_BASE}/api/music/status`, {
+                    headers: { 'X-ComfyUI-Path': comfyPath }
+                });
+                if (res.ok) {
+                    clearInterval(interval);
+                    showBannerNotification("Local assistant server successfully connected!", "success");
+                    isLaunchingAssistant = false;
+                    
+                    if (launchAssistantBtn) {
+                        launchAssistantBtn.disabled = false;
+                        launchAssistantBtn.innerHTML = originalBtnText;
+                    }
+                    if (titleEl) titleEl.textContent = 'Local Assistant Server is Offline';
+                    if (onboardingCard) onboardingCard.classList.add('hidden');
+                    checkMusicServiceStatus();
+                }
+            } catch (e) {}
+            if (attempts >= maxAttempts) {
+                clearInterval(interval);
+                isLaunchingAssistant = false;
+                
+                if (launchAssistantBtn) {
+                    launchAssistantBtn.disabled = false;
+                    launchAssistantBtn.innerHTML = originalBtnText;
+                }
+                if (titleEl) titleEl.textContent = 'Local Assistant Server is Offline';
+                if (descEl) descEl.innerHTML = 'Because this application is hosted statically, browsers cannot launch local programs automatically. Please open your installation folder and run <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux) to start the local helper.';
+                
+                const setupModal = document.getElementById('assistant-setup-modal');
+                if (setupModal) {
+                    setupModal.classList.remove('hidden');
+                    setupModal.classList.add('flex');
+                }
+                showBannerNotification('Connection attempt timed out. Opening assistant setup guide...', 'warning');
+            }
+        }, 1500);
     }
 
     async function launchService() {
@@ -714,16 +734,7 @@
             // Attempt to auto-launch the local assistant server via custom protocol
             if (!window._assistantLaunchAttempted) {
                 window._assistantLaunchAttempted = true;
-                console.log("[MusicStudio] Local server offline. Triggering custom protocol launch...");
-                try {
-                    const iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = 'gnosys-assistant://';
-                    document.body.appendChild(iframe);
-                    setTimeout(() => iframe.remove(), 1000);
-                } catch (err) {
-                    console.warn('[MusicStudio] Custom protocol invocation failed:', err);
-                }
+                launchAssistantServer(false);
             }
         }
     }
