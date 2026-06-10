@@ -332,7 +332,10 @@
         document.body.appendChild(inlineFallbackAudio);
 
         // Wire up events to mirror the popup engine behaviour
-        inlineFallbackAudio.addEventListener('play', broadcastInlineState);
+        inlineFallbackAudio.addEventListener('play', () => {
+            broadcastInlineState();
+            channel.postMessage({ type: 'global_play' });
+        });
         inlineFallbackAudio.addEventListener('pause', broadcastInlineState);
         inlineFallbackAudio.addEventListener('timeupdate', broadcastInlineState);
         inlineFallbackAudio.addEventListener('durationchange', broadcastInlineState);
@@ -524,6 +527,14 @@
         } else if (data.type === 'playlist_updated') {
             // Another window (Music Studio) added/changed a track — refresh list
             fetchPlaylists();
+        } else if (data.type === 'pause') {
+            if (usingInlineFallback && inlineFallbackAudio) {
+                inlineFallbackAudio.pause();
+            } else {
+                sendEngineCommand({ type: 'pause' });
+            }
+            isPaused = true;
+            updateUIState();
         }
     };
 

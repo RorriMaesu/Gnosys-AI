@@ -576,6 +576,19 @@
                 }
             }
         }
+
+        // BroadcastChannel listener to pause local preview audio when global playlist music plays
+        const studioChannel = new BroadcastChannel('gnosys_audio_channel');
+        studioChannel.onmessage = (event) => {
+            const data = event.data;
+            if (!data) return;
+            if (data.type === 'global_play' || data.type === 'play' || data.type === 'load_track' || (data.type === 'engine_state' && !data.paused)) {
+                const localAudio = document.getElementById('audio-player');
+                if (localAudio && !localAudio.paused) {
+                    localAudio.pause();
+                }
+            }
+        };
     }
 
     function launchAssistantServer(isManual = false) {
