@@ -1452,7 +1452,7 @@ signature: (recommend "4", "3", or "6" for time signature)
         }
     }
 
-    async function downloadTrackFile(url, filename) {
+    async function downloadTrackFile(url, filename, isManual = true) {
         let targetUrl = url;
         if (!targetUrl.startsWith('http') && !targetUrl.startsWith('data:')) {
             const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
@@ -1504,13 +1504,17 @@ signature: (recommend "4", "3", or "6" for time signature)
             console.error('Download failed:', err);
             // Fallback for user cancellation or cross-origin block
             if (err.name !== 'AbortError') {
-                const a = document.createElement('a');
-                a.href = targetUrl;
-                a.download = filename;
-                a.target = '_blank';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                if (isManual) {
+                    const a = document.createElement('a');
+                    a.href = targetUrl;
+                    a.download = filename;
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } else {
+                    showBannerNotification('Auto-download blocked by browser security.', 'warning');
+                }
             }
         }
     }
