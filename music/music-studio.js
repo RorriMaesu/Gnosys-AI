@@ -468,12 +468,6 @@
                 repoId: "ACE-Step/acestep-v15-xl-sft",
                 targetSubdir: "checkpoints/acestep-v15-xl-sft"
             });
-        } else if (selectedModel === "acemusic/acestep-v15-xl-base" && !data.diagnostics.xl_base) {
-            missing.push({
-                label: "XL Base Model",
-                repoId: "ACE-Step/acestep-v15-xl-base",
-                targetSubdir: "checkpoints/acestep-v15-xl-base"
-            });
         } else if (selectedModel === "acemusic/acestep-v15-xl-turbo" && !data.diagnostics.xl_turbo) {
             missing.push({
                 label: "XL Turbo Model",
@@ -609,7 +603,6 @@
                     };
 
                     diagBox.appendChild(makeBadge("XL SFT", data.diagnostics.xl_sft, "ACE-Step/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft"));
-                    diagBox.appendChild(makeBadge("XL Base", data.diagnostics.xl_base, "ACE-Step/acestep-v15-xl-base", "checkpoints/acestep-v15-xl-base"));
                     diagBox.appendChild(makeBadge("XL Turbo", data.diagnostics.xl_turbo, "ACE-Step/acestep-v15-xl-turbo", "checkpoints/acestep-v15-xl-turbo"));
                     diagBox.appendChild(makeBadge("Vocoder", data.diagnostics.vocoder, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_vocoder"));
                     diagBox.appendChild(makeBadge("DCAE Encoder", data.diagnostics.dcae, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_dcae_f8c8"));
