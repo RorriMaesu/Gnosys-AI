@@ -286,12 +286,17 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Audio Length</label>
-                                <select id="music-length" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
-                                    <option value="10">10 seconds (Quick Test)</option>
-                                    <option value="30">30 seconds (Short Loop)</option>
-                                    <option value="60">60 seconds (Full Verse)</option>
-                                </select>
+                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Audio Length</label>
+                                 <div class="relative flex items-center mb-1.5">
+                                     <input type="number" id="music-length" value="30" min="5" max="300" class="w-full studio-input rounded-2xl pl-4 pr-12 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors font-mono" placeholder="30">
+                                     <span class="absolute right-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Sec</span>
+                                 </div>
+                                 <div class="flex gap-1.5 flex-wrap">
+                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="30">30s</button>
+                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="60">60s</button>
+                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="90">90s</button>
+                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="120">120s</button>
+                                 </div>
                             </div>
                         </div>
 

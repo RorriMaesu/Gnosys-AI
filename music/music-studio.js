@@ -128,6 +128,17 @@
             });
         }
 
+        // Preset length buttons handler
+        document.querySelectorAll('.preset-length-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const val = e.currentTarget.getAttribute('data-value');
+                const lengthInput = document.getElementById('music-length');
+                if (lengthInput) {
+                    lengthInput.value = val;
+                }
+            });
+        });
+
         // Download All button
         const downloadAllBtn = document.getElementById('btn-download-all');
         if (downloadAllBtn) {
