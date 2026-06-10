@@ -111,6 +111,13 @@
             transform: scale(1) !important;
             transition: all 0.3s ease;
         }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .fade-in {
+            animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
     </style>
 </head>
 <body class="min-h-screen selection:bg-fuchsia-500/30 pb-20">
@@ -138,6 +145,19 @@
     <!-- Main Workspace -->
     <main class="max-w-7xl mx-auto px-6 py-12">
         
+        <!-- Mobile Warning Banner (hidden by default) -->
+        <div id="mobile-inline-warning" class="glass-card rounded-3xl p-5 mb-8 border-amber-500/20 bg-amber-950/10 flex items-center gap-4 hidden">
+            <div class="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-lg border border-amber-500/20 text-amber-400 shrink-0">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+            </div>
+            <div class="flex-grow">
+                <h3 class="text-sm font-bold text-white">Mobile Read-Only Mode</h3>
+                <p class="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                    AI Music generation requires running the ACE Step local python service on a desktop environment. You can browse tracks but generation is unavailable.
+                </p>
+            </div>
+        </div>
+
         <!-- Connection Banner -->
         <div id="connection-banner" class="glass-card rounded-3xl p-6 mb-10 border-violet-500/20 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div class="flex items-center gap-4">
@@ -603,6 +623,37 @@
                 </button>
                 <button id="btn-cancel-install" class="px-6 py-3.5 rounded-2xl glass-card text-slate-300 hover:text-white font-bold text-sm transition-all border border-white/5">
                     Close
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Mobile Alert Modal Overlay -->
+    <div id="mobile-warning-overlay" class="fixed inset-0 z-[20000] hidden items-center justify-center p-4 bg-slate-950/90 backdrop-blur-lg animate-fade-in">
+        <div class="glass-card rounded-3xl p-8 max-w-md w-full border border-white/10 shadow-2xl relative overflow-hidden text-left">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-fuchsia-600 flex items-center justify-center text-white shadow-lg mx-auto mb-4 border border-white/10">
+                    <i class="fa-solid fa-desktop text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-black text-white tracking-tight">Desktop Environment Required</h3>
+                <p class="text-xs text-amber-400 font-bold uppercase tracking-wider mt-1.5">AI Music Generation</p>
+            </div>
+            
+            <div class="space-y-4 text-slate-300 text-sm mb-8 leading-relaxed text-center">
+                <p>
+                    Gnosys-AI Music Studio leverages local neural network models via the ACE Step 1.5 Python backend running directly on your computer.
+                </p>
+                <p class="text-xs text-slate-400">
+                    Mobile and tablet devices lack the local system access and hardware execution capabilities to generate music.
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <a href="../index.html" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 hover:from-fuchsia-400 hover:to-indigo-500 text-white font-extrabold text-sm text-center shadow-lg shadow-indigo-500/20 transition-all border-0 cursor-pointer">
+                    <i class="fa-solid fa-house mr-1.5"></i> Return to Dashboard
+                </a>
+                <button id="btn-dismiss-mobile-warning" class="w-full py-3.5 rounded-2xl glass-card text-slate-300 hover:text-white font-bold text-xs transition-all border border-white/5 cursor-pointer">
+                    Continue to Read-Only Studio
                 </button>
             </div>
         </div>

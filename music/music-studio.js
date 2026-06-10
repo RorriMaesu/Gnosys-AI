@@ -542,6 +542,40 @@
                 checkMusicServiceStatus();
             });
         }
+
+        // Mobile / Tablet Warning Dialog & Banner Check
+        const isMobile = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile) {
+            const dismissed = sessionStorage.getItem('gnosys_mobile_warning_dismissed') === 'true';
+            const overlay = document.getElementById('mobile-warning-overlay');
+            const inlineWarning = document.getElementById('mobile-inline-warning');
+            
+            if (inlineWarning) {
+                inlineWarning.classList.remove('hidden');
+            }
+            
+            const generateBtn = document.getElementById('btn-generate-track');
+            if (generateBtn) {
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<i class="fa-solid fa-desktop mr-1.5"></i> Desktop Only';
+                generateBtn.style.opacity = '0.5';
+                generateBtn.style.cursor = 'not-allowed';
+            }
+            
+            if (overlay && !dismissed) {
+                overlay.style.display = 'flex';
+                overlay.classList.remove('hidden');
+                
+                const dismissBtn = document.getElementById('btn-dismiss-mobile-warning');
+                if (dismissBtn) {
+                    dismissBtn.addEventListener('click', () => {
+                        overlay.style.display = 'none';
+                        overlay.classList.add('hidden');
+                        sessionStorage.setItem('gnosys_mobile_warning_dismissed', 'true');
+                    });
+                }
+            }
+        }
     }
 
     function launchAssistantServer(isManual = false) {
