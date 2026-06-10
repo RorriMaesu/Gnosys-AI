@@ -30,6 +30,7 @@
     let duration = 0;
     let volume = 0.8;
     let isEngineAlive = false;
+    let isTrackLoadedInEngine = false;
     let pingInterval = null;
     let dragSrcEl = null;
 
@@ -492,6 +493,9 @@
             volume = data.volume;
             currentTrack = data.track;
             playingClassId = data.classId;
+            if (currentTrack) {
+                isTrackLoadedInEngine = true;
+            }
             
             // Auto update active playlist if loading a track from another class
             if (data.classId && data.classId !== activeClassId && document.getElementById('gnosys-player-overlay').classList.contains('active')) {
@@ -868,7 +872,11 @@
             // Engine is closed, launch and queue commands
             launchEngineWindow();
             if (currentTrack) {
-                sendEngineCommand({ type: 'play' });
+                if (!isTrackLoadedInEngine) {
+                    sendLoadTrackMessageOfClass(playingClassId || activeClassId, currentTrack);
+                } else {
+                    sendEngineCommand({ type: 'play' });
+                }
             } else {
                 playTrack(0);
             }
@@ -877,6 +885,11 @@
 
         if (!currentTrack) {
             playTrack(0);
+            return;
+        }
+
+        if (!isTrackLoadedInEngine) {
+            sendLoadTrackMessageOfClass(playingClassId || activeClassId, currentTrack);
             return;
         }
 
@@ -910,6 +923,7 @@
 
     function sendLoadTrackMessageOfClass(classId, track) {
         const resolvedUrl = resolveTrackUrl(track.url);
+        isTrackLoadedInEngine = true;
         sendEngineCommand({
             type: 'load_track',
             url: resolvedUrl,
@@ -1169,6 +1183,7 @@
                 if (currentTrack && currentTrack.id === trackId) {
                     sendEngineCommand({ type: 'clear_track' });
                     currentTrack = null;
+                    isTrackLoadedInEngine = false;
                 }
                 await fetchPlaylists();
             }
