@@ -211,7 +211,7 @@
     </div>
 
     <!-- The actual core audio context element -->
-    <audio id="core-audio-element" crossorigin="anonymous"></audio>
+    <audio id="core-audio-element"></audio>
 
     <script>
         const audio = document.getElementById('core-audio-element');
@@ -220,6 +220,8 @@
         let currentTrack = null;
         let currentClassId = null;
         let currentClassName = 'Idle';
+        let currentTrackUrl = null;
+        let hasTriedFallback = false;
         
         // Setup simple HTML5 Canvas visualizer
         const canvas = document.getElementById('canvas-visualizer');
@@ -336,6 +338,49 @@
             channel.postMessage({ type: 'track_ended', classId: currentClassId });
         });
 
+        function broadcastError(msg) {
+            channel.postMessage({
+                type: 'engine_error',
+                track: currentTrack,
+                classId: currentClassId,
+                className: currentClassName,
+                error: msg,
+                url: audio.src
+            });
+        }
+
+        audio.addEventListener('error', (e) => {
+            console.error('Audio element error:', audio.error);
+            const errorMsg = audio.error ? (audio.error.message || `Code ${audio.error.code}`) : 'Unknown error';
+            
+            if (!hasTriedFallback && currentTrackUrl) {
+                hasTriedFallback = true;
+                let fallbackUrl = currentTrackUrl;
+                if (!fallbackUrl.startsWith('http')) {
+                    const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+                    if (fallbackUrl.startsWith('/')) {
+                        fallbackUrl = window.location.origin + baseHref + fallbackUrl.substring(1);
+                    } else {
+                        fallbackUrl = window.location.origin + baseHref + fallbackUrl;
+                    }
+                }
+                console.log('Attempting fallback audio URL:', fallbackUrl);
+                audio.src = fallbackUrl;
+                audio.play()
+                    .then(() => {
+                        broadcastState();
+                        updateMediaSession();
+                    })
+                    .catch(err => {
+                        console.error('Fallback playback also failed:', err);
+                        broadcastError(errorMsg);
+                    });
+                return;
+            }
+            
+            broadcastError(errorMsg);
+        });
+
         // Listen for requests from controller scripts
         channel.onmessage = (event) => {
             const data = event.data;
@@ -364,6 +409,8 @@
                     break;
                 case 'load_track':
                     // Load track url and start playing
+                    currentTrackUrl = data.url;
+                    hasTriedFallback = false;
                     let targetUrl = data.url;
                     if (!targetUrl.startsWith('http')) {
                         const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';

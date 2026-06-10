@@ -267,10 +267,11 @@
                         btnAddPlaylist.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>Added!</span>`;
                         showBannerNotification('Track successfully added to playlist!', 'success');
 
-                        // Automatically download to user's system
+                        // Automatically download to user's persistent local folder
                         if (resData.track && resData.track.url) {
-                            const ext = resData.track.filename.split('.').pop() || 'mp3';
-                            downloadTrackFile(resData.track.url, `${nameToSave}.${ext}`);
+                            window.dispatchEvent(new CustomEvent('gnosys_auto_download', {
+                                detail: { track: resData.track, classId: classId }
+                            }));
                         }
 
                         // Trigger broadcast channel refresh of all global player instances

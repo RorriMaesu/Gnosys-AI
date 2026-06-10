@@ -27,7 +27,9 @@
 
     // Inline fallback audio element for popup blocker scenarios
     let inlineFallbackAudio = null;
-    let usingInlineFallback = false;
+    let usingInlineFallback = true;
+    let inlineTrackUrl = null;
+    let inlineHasTriedFallback = false;
 
     // Mini visualizer variables & Pomodoro tracking
     let miniCanvas = null;
@@ -66,15 +68,17 @@
         injectStyles();
         createFloatingWidget();
         initMiniVisualizer();
+        
+        // Use inline audio player as the default playback engine (no popup window)
+        activateInlineFallback();
+        
         restoreStateFromStorage();
         fetchPlaylists();
         
-        // Start pinging and state checks
+        // Start checking Pomodoro state
         pingInterval = setInterval(() => {
-            checkEngineStatus();
             checkPomodoroState();
         }, 1000);
-        checkEngineStatus();
         checkPomodoroState();
     });
 
@@ -191,7 +195,6 @@
 
         inlineFallbackAudio = document.createElement('audio');
         inlineFallbackAudio.id = 'gnosys-inline-fallback-audio';
-        inlineFallbackAudio.crossOrigin = 'anonymous';
         inlineFallbackAudio.style.display = 'none';
         document.body.appendChild(inlineFallbackAudio);
 
@@ -206,9 +209,41 @@
             playNextTrack();
         });
 
+        inlineFallbackAudio.addEventListener('error', (e) => {
+            console.error('[Global Player] Inline fallback audio error:', inlineFallbackAudio.error);
+            const errorMsg = inlineFallbackAudio.error ? (inlineFallbackAudio.error.message || `Code ${inlineFallbackAudio.error.code}`) : 'Unknown error';
+            
+            if (!inlineHasTriedFallback && inlineTrackUrl) {
+                inlineHasTriedFallback = true;
+                let fallbackUrl = inlineTrackUrl;
+                if (!fallbackUrl.startsWith('http')) {
+                    const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+                    if (fallbackUrl.startsWith('/')) {
+                        fallbackUrl = window.location.origin + baseHref + fallbackUrl.substring(1);
+                    } else {
+                        fallbackUrl = window.location.origin + baseHref + fallbackUrl;
+                    }
+                }
+                console.log('[Global Player] Attempting inline fallback audio URL:', fallbackUrl);
+                inlineFallbackAudio.src = fallbackUrl;
+                inlineFallbackAudio.play()
+                    .then(() => broadcastInlineState())
+                    .catch(err => {
+                        console.error('[Global Player] Inline fallback playback also failed:', err);
+                        showGlobalToast(`Playback Error: ${errorMsg}`, 'error');
+                        isPaused = true;
+                        broadcastInlineState();
+                    });
+                return;
+            }
+            
+            showGlobalToast(`Playback Error: ${errorMsg}`, 'error');
+            isPaused = true;
+            broadcastInlineState();
+        });
+
         updateEngineStatusUI();
         flushPendingCommands();
-        showGlobalToast('Audio engine running in inline mode.');
     }
 
     function broadcastInlineState() {
@@ -250,12 +285,16 @@
                 inlineFallbackAudio.currentTime = data.time;
                 break;
             case 'load_track':
+                inlineTrackUrl = data.track ? data.track.url : data.url;
+                inlineHasTriedFallback = false;
                 inlineFallbackAudio.src = data.url;
                 currentTrack = data.track;
                 playingClassId = data.classId;
                 inlineFallbackAudio.play()
                     .then(() => broadcastInlineState())
-                    .catch(err => { console.log('Inline playback error:', err); broadcastInlineState(); });
+                    .catch(err => { 
+                        console.log('Inline playback error (handled by error listener if it fired an error):', err); 
+                    });
                 break;
         }
     }
@@ -321,6 +360,11 @@
                 }
             }
             
+            updateUIState();
+        } else if (data.type === 'engine_error') {
+            console.error('[Global Player] Engine error received:', data.error);
+            showGlobalToast(`Playback Error: ${data.error}`, 'error');
+            isPaused = true;
             updateUIState();
         } else if (data.type === 'track_ended') {
             playNextTrack();
@@ -408,6 +452,35 @@
                     <span>Drag & Drop MP3 / WAV here</span>
                     <span class="subtext">Add to class playlist</span>
                 </div>
+
+                <!-- Collapsible Settings Section -->
+                <div class="player-settings-section">
+                    <div class="settings-header" id="gnosys-settings-toggle">
+                        <span><i class="fa-solid fa-gear mr-1"></i> Auto-Download Settings</span>
+                        <i class="fa-solid fa-chevron-down toggle-icon" id="gnosys-settings-chevron"></i>
+                    </div>
+                    <div class="settings-content hidden" id="gnosys-settings-content">
+                        <div class="settings-row">
+                            <span class="switch-label">Enable Auto-Download</span>
+                            <label class="switch">
+                                <input type="checkbox" id="gnosys-auto-download-toggle">
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div class="settings-row folder-row">
+                            <div class="folder-info">
+                                <span class="label">Download Folder</span>
+                                <span class="folder-name" id="gnosys-download-folder-display">Not Configured</span>
+                            </div>
+                            <button id="gnosys-change-folder-btn" class="select-folder-btn" style="border: none;">
+                                <i class="fa-solid fa-folder-open"></i> Select Folder
+                            </button>
+                        </div>
+                        <div class="settings-status-row">
+                            <span class="status-badge" id="gnosys-api-status-badge">Checking...</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Controls Footer -->
@@ -467,6 +540,68 @@
             dropZone.classList.remove('active');
         });
         dropZone.addEventListener('drop', handleFileDrop);
+
+        // Settings Section Event Listeners
+        const settingsToggle = document.getElementById('gnosys-settings-toggle');
+        const settingsContent = document.getElementById('gnosys-settings-content');
+        const autoDownloadToggle = document.getElementById('gnosys-auto-download-toggle');
+        const changeFolderBtn = document.getElementById('gnosys-change-folder-btn');
+
+        if (settingsToggle && settingsContent) {
+            settingsToggle.addEventListener('click', () => {
+                const isHidden = settingsContent.classList.contains('hidden');
+                if (isHidden) {
+                    settingsContent.classList.remove('hidden');
+                    settingsToggle.classList.add('active');
+                    localStorage.setItem('gnosys_player_settings_open', 'true');
+                } else {
+                    settingsContent.classList.add('hidden');
+                    settingsToggle.classList.remove('active');
+                    localStorage.setItem('gnosys_player_settings_open', 'false');
+                }
+            });
+
+            // Restore settings panel toggle state
+            const settingsOpen = localStorage.getItem('gnosys_player_settings_open');
+            if (settingsOpen === 'true') {
+                settingsContent.classList.remove('hidden');
+                settingsToggle.classList.add('active');
+            }
+        }
+
+        if (autoDownloadToggle) {
+            const autoDownloadEnabled = localStorage.getItem('gnosys_auto_download_enabled') !== 'false';
+            autoDownloadToggle.checked = autoDownloadEnabled;
+            autoDownloadToggle.addEventListener('change', (e) => {
+                localStorage.setItem('gnosys_auto_download_enabled', e.target.checked ? 'true' : 'false');
+                showGlobalToast(e.target.checked ? 'Auto-download enabled!' : 'Auto-download disabled.');
+            });
+        }
+
+        if (changeFolderBtn) {
+            changeFolderBtn.addEventListener('click', async () => {
+                if (!('showDirectoryPicker' in window)) {
+                    showGlobalToast('File System Access API not supported in this browser.', 'error');
+                    return;
+                }
+                try {
+                    const dirHandle = await window.showDirectoryPicker({
+                        mode: 'readwrite'
+                    });
+                    await setStoredDirectoryHandle(dirHandle);
+                    localStorage.setItem('gnosys_download_dir_name', dirHandle.name);
+                    updateSettingsUI();
+                    showGlobalToast(`Download folder set to: ${dirHandle.name}`, 'success');
+                } catch (err) {
+                    console.error('[Global Player] Failed to pick directory:', err);
+                    if (err.name !== 'AbortError') {
+                        showGlobalToast(`Failed to set folder: ${err.message}`, 'error');
+                    }
+                }
+            });
+        }
+
+        updateSettingsUI();
     }
 
     function toggleDrawer() {
@@ -1053,13 +1188,174 @@
         }
     }
 
-    function showGlobalToast(msg) {
+    function showGlobalToast(msg, type = 'success') {
         if (window.GnosysLLM && typeof window.GnosysLLM.showTransientToast === 'function') {
-            window.GnosysLLM.showTransientToast(msg, 'success');
+            window.GnosysLLM.showTransientToast(msg, type);
         } else {
             alert(msg);
         }
     }
+
+    // IndexedDB Helpers for Directory Handles
+    const DB_NAME = 'GnosysMusicDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'settings';
+    const KEY_DIR_HANDLE = 'download_directory_handle';
+
+    function getDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME);
+                }
+            };
+        });
+    }
+
+    function getStoredDirectoryHandle() {
+        return getDB().then(db => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(STORE_NAME, 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(KEY_DIR_HANDLE);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+            });
+        });
+    }
+
+    function setStoredDirectoryHandle(handle) {
+        return getDB().then(db => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.put(handle, KEY_DIR_HANDLE);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve();
+            });
+        });
+    }
+
+    async function verifyPermission(handle, readWrite) {
+        const options = {};
+        if (readWrite) {
+            options.mode = 'readwrite';
+        }
+        try {
+            if ((await handle.queryPermission(options)) === 'granted') {
+                return true;
+            }
+            if ((await handle.requestPermission(options)) === 'granted') {
+                return true;
+            }
+        } catch (e) {
+            console.error('[Global Player] Permission request failed:', e);
+        }
+        return false;
+    }
+
+    async function handleAutoDownload(track) {
+        // Check if auto-download is enabled
+        const autoDownloadEnabled = localStorage.getItem('gnosys_auto_download_enabled') !== 'false';
+        if (!autoDownloadEnabled) {
+            console.log('[Global Player] Auto-download is disabled in settings.');
+            return;
+        }
+
+        // Check if File System Access API is supported
+        if (!('showDirectoryPicker' in window)) {
+            console.warn('[Global Player] File System Access API not supported. Falling back to standard download.');
+            const ext = track.filename ? track.filename.split('.').pop() : 'wav';
+            const filename = track.filename || `${track.name.replace(/[\/\\:\*\?"<>\|]/g, '_')}.${ext}`;
+            downloadTrackFile(track.url, filename);
+            return;
+        }
+
+        try {
+            let dirHandle = await getStoredDirectoryHandle();
+            let needToPrompt = !dirHandle;
+
+            if (dirHandle) {
+                const hasPermission = await verifyPermission(dirHandle, true);
+                if (!hasPermission) {
+                    needToPrompt = true;
+                }
+            }
+
+            if (needToPrompt) {
+                showGlobalToast('Please select a local folder for automatic music downloads.', 'info');
+                dirHandle = await window.showDirectoryPicker({
+                    mode: 'readwrite'
+                });
+                await setStoredDirectoryHandle(dirHandle);
+                localStorage.setItem('gnosys_download_dir_name', dirHandle.name);
+                updateSettingsUI();
+            }
+
+            if (!dirHandle) return;
+
+            const resolvedUrl = resolveTrackUrl(track.url);
+            showGlobalToast(`Saving "${track.name}" to your local folder...`, 'info');
+            
+            const res = await fetch(resolvedUrl);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const blob = await res.blob();
+
+            const ext = track.filename ? track.filename.split('.').pop() : 'wav';
+            const filename = track.filename || `${track.name.replace(/[\/\\:\*\?"<>\|]/g, '_')}.${ext}`;
+            
+            const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+
+            showGlobalToast(`Saved "${track.name}" to folder: ${dirHandle.name}`, 'success');
+        } catch (err) {
+            console.error('[Global Player] Auto-download failed:', err);
+            if (err.name !== 'AbortError') {
+                showGlobalToast(`Auto-download failed: ${err.message}. Falling back to standard download.`, 'error');
+                const ext = track.filename ? track.filename.split('.').pop() : 'wav';
+                const filename = track.filename || `${track.name.replace(/[\/\\:\*\?"<>\|]/g, '_')}.${ext}`;
+                downloadTrackFile(track.url, filename);
+            }
+        }
+    }
+
+    function updateSettingsUI() {
+        const folderDisplay = document.getElementById('gnosys-download-folder-display');
+        const badge = document.getElementById('gnosys-api-status-badge');
+        
+        if (!folderDisplay || !badge) return;
+
+        const isSupported = 'showDirectoryPicker' in window;
+        if (isSupported) {
+            badge.textContent = 'API Supported';
+            badge.className = 'status-badge supported';
+        } else {
+            badge.textContent = 'API Not Supported';
+            badge.className = 'status-badge unsupported';
+            const changeFolderBtn = document.getElementById('gnosys-change-folder-btn');
+            if (changeFolderBtn) changeFolderBtn.disabled = true;
+        }
+
+        const dirName = localStorage.getItem('gnosys_download_dir_name');
+        if (dirName) {
+            folderDisplay.textContent = `📁 ${dirName}`;
+        } else {
+            folderDisplay.textContent = 'Not Configured';
+        }
+    }
+
+    window.addEventListener('gnosys_auto_download', async (e) => {
+        const { track } = e.detail;
+        if (track) {
+            await handleAutoDownload(track);
+        }
+    });
 
     // Inject CSS styles
     function injectStyles() {
@@ -1553,6 +1849,162 @@
             }
             .volume-slider::-webkit-slider-thumb:hover {
                 transform: scale(1.3);
+            }
+
+            /* Settings Section Styles */
+            .player-settings-section {
+                margin-top: 15px;
+                border-top: 1px solid rgba(255,255,255,0.05);
+                padding-top: 15px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .settings-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                color: #94a3b8;
+                font-size: 13px;
+                font-weight: 600;
+                transition: color 0.2s;
+                user-select: none;
+            }
+            .settings-header:hover {
+                color: #f8fafc;
+            }
+            .settings-header .toggle-icon {
+                font-size: 11px;
+                transition: transform 0.3s ease;
+            }
+            .settings-header.active .toggle-icon {
+                transform: rotate(180deg);
+            }
+            .settings-content {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding: 4px 0 8px;
+                transition: all 0.3s ease;
+            }
+            .settings-content.hidden {
+                display: none !important;
+            }
+            .settings-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 12px;
+            }
+            .settings-row.folder-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+                background: rgba(255,255,255,0.02);
+                border: 1px solid rgba(255,255,255,0.04);
+                padding: 10px;
+                border-radius: 8px;
+            }
+            .folder-info {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .folder-info .label {
+                color: #64748b;
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .folder-info .folder-name {
+                color: #cbd5e1;
+                font-weight: 500;
+                word-break: break-all;
+                font-family: monospace;
+            }
+            .select-folder-btn {
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(217, 70, 239, 0.2));
+                border: 1px solid rgba(255,255,255,0.08);
+                color: #f8fafc;
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 11px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                transition: all 0.2s;
+            }
+            .select-folder-btn:hover {
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(217, 70, 239, 0.3));
+                border-color: rgba(255,255,255,0.15);
+            }
+            .settings-status-row {
+                display: flex;
+                justify-content: flex-end;
+            }
+            .status-badge {
+                font-size: 10px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            .status-badge.supported {
+                background: rgba(34, 197, 94, 0.15);
+                color: #4ade80;
+                border: 1px solid rgba(34, 197, 94, 0.2);
+            }
+            .status-badge.unsupported {
+                background: rgba(239, 68, 68, 0.15);
+                color: #f87171;
+                border: 1px solid rgba(239, 68, 68, 0.2);
+            }
+            
+            /* Toggle Switch Style */
+            .switch {
+                position: relative;
+                display: inline-block;
+                width: 34px;
+                height: 20px;
+            }
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+            .slider {
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(255,255,255,0.1);
+                transition: .4s;
+            }
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 14px;
+                width: 14px;
+                left: 3px;
+                bottom: 3px;
+                background-color: #f8fafc;
+                transition: .4s;
+            }
+            input:checked + .slider {
+                background: linear-gradient(135deg, #6366f1, #d946ef);
+            }
+            input:checked + .slider:before {
+                transform: translateX(14px);
+            }
+            .slider.round {
+                border-radius: 20px;
+            }
+            .slider.round:before {
+                border-radius: 50%;
             }
         `;
         document.head.appendChild(style);
