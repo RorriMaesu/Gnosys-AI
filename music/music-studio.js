@@ -530,8 +530,16 @@
             const res = await fetch(`${API_BASE}/api/music/status`, {
                 headers: { 'X-ComfyUI-Path': comfyPath }
             });
-            if (!res.ok) throw new Error();
             const data = await res.json();
+
+            // Sync with backend corrected path if drive fallback occurred
+            if (data.comfy_path && data.comfy_path !== comfyPath) {
+                comfyPath = data.comfy_path;
+                localStorage.setItem('gnosys_comfy_path', comfyPath);
+                document.getElementById('current-comfy-path').textContent = comfyPath;
+                document.getElementById('explorer-current-path').textContent = comfyPath;
+                document.getElementById('install-dir-input').value = comfyPath;
+            }
 
             // Hide onboarding warning if port 8020 responds
             const onboardingCard = document.getElementById('backend-onboarding-card');

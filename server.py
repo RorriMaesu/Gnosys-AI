@@ -8,6 +8,7 @@ import threading
 
 PORT = 8020
 active_downloads = {}
+install_status = {'progress': 0, 'step': 'idle', 'error': None}
 
 def get_quantime_install_path():
     if platform.system() != 'Windows':
@@ -61,6 +62,51 @@ def probe_port(port):
         return True
     except Exception:
         return False
+
+def get_available_drives():
+    import platform
+    if platform.system() == 'Windows':
+        import string
+        from ctypes import windll
+        drives = []
+        bitmask = windll.kernel32.GetLogicalDrives()
+        for letter in string.ascii_uppercase:
+            if bitmask & 1:
+                drives.append(f"{letter}:\\")
+            bitmask >>= 1
+        return drives
+    return ['/']
+
+def resolve_fallback_path(path):
+    if not path:
+        return path
+    import platform
+    if platform.system() != 'Windows':
+        return path
+    
+    # Extract the drive letter
+    drive, tail = os.path.splitdrive(path)
+    if not drive:
+        return path
+        
+    drive_upper = drive.upper()
+    drive_check = drive_upper if drive_upper.endswith('\\') else (drive_upper + '\\')
+    
+    if os.path.exists(drive_check):
+        return path
+        
+    # Drive does not exist, find first available drive
+    drives = get_available_drives()
+    if not drives:
+        return path
+        
+    fallback_drive = 'C:\\'
+    if fallback_drive not in drives:
+        fallback_drive = drives[0]
+        
+    if tail.startswith('\\') or tail.startswith('/'):
+        tail = tail[1:]
+    return os.path.join(fallback_drive, tail)
 
 def check_ace_step_compatibility(path):
     if not path or not os.path.isdir(path):
@@ -500,6 +546,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 ace_path = self.headers.get('X-ComfyUI-Path', '').strip()
                 if not ace_path:
                     ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
+                ace_path = resolve_fallback_path(ace_path)
                     
                 ace_installed = os.path.exists(ace_path)
                 ace_running = probe_port(8002)
@@ -569,6 +616,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     body = json.loads(self.rfile.read(content_length).decode('utf-8'))
                     ace_path = body.get('comfy_path', ace_path)
                     vram_profile = body.get('vram_profile', 'high')
+                ace_path = resolve_fallback_path(ace_path)
 
                 python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
@@ -603,10 +651,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/install':
             # Run installation in background thread
+            global install_status
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
                 body = json.loads(self.rfile.read(content_length).decode('utf-8')) if content_length > 0 else {}
                 target_path = body.get('install_path', 'D:\\ComfyUI')
+                target_path = resolve_fallback_path(target_path)
                 
                 if 'install_status' not in globals():
                     install_status = {'progress': 0, 'step': 'idle', 'error': None}
@@ -689,6 +739,33 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         readme_content = "Please download the ACE-Step 1.5 safetensors models from HuggingFace and place them here."
                         with open(os.path.join(tts_base, 'README_INSTALL.txt'), 'w') as f:
                             f.write(readme_content)
+                            
+                        # Step 4: Create Python Virtual Environment (.venv)
+                        import sys
+                        venv_path = os.path.join(comfy_root, '.venv')
+                        python_exe = os.path.join(venv_path, 'Scripts', 'python.exe') if platform.system() == 'Windows' else os.path.join(venv_path, 'bin', 'python')
+                        
+                        if not os.path.exists(venv_path) or not os.path.exists(python_exe):
+                            install_status['step'] = 'Creating Python Virtual Environment (.venv)'
+                            install_status['progress'] = 82
+                            subprocess.run([sys.executable, '-m', 'venv', venv_path], check=True)
+                        
+                        # Step 5: Install Python dependencies
+                        pip_exe = os.path.join(venv_path, 'Scripts', 'pip.exe') if platform.system() == 'Windows' else os.path.join(venv_path, 'bin', 'pip')
+                        
+                        # Install ComfyUI Core dependencies
+                        comfy_reqs = os.path.join(comfy_root, 'requirements.txt')
+                        if os.path.exists(comfy_reqs):
+                            install_status['step'] = 'Installing ComfyUI Core Dependencies'
+                            install_status['progress'] = 85
+                            subprocess.run([pip_exe, 'install', '-r', comfy_reqs], check=True)
+                        
+                        # Install Custom Node requirements + huggingface_hub
+                        requirements_file = os.path.join(node_path, 'requirements.txt')
+                        if os.path.exists(requirements_file):
+                            install_status['step'] = 'Installing ACE-Step Node Dependencies'
+                            install_status['progress'] = 92
+                            subprocess.run([pip_exe, 'install', '-r', requirements_file, 'huggingface_hub'], check=True)
                             
                         install_status['progress'] = 100
                         install_status['step'] = 'done'
@@ -846,6 +923,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Check ACE-Step virtual environment python first (from path header)
                 ace_path = self.headers.get('X-ComfyUI-Path', '').strip() or 'D:\\ComfyUI\\ACE-Step-1.5'
+                ace_path = resolve_fallback_path(ace_path)
                 ace_python = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
                 # Check helper server virtual environment python
