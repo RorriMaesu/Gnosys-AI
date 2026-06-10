@@ -196,6 +196,17 @@
         if (modelSelector) {
             modelSelector.addEventListener('change', () => {
                 checkMusicServiceStatus();
+                
+                // Auto-adjust steps value based on model selection to prevent slow 50-step runs on Turbo
+                const stepsSelect = document.getElementById('music-steps');
+                if (stepsSelect) {
+                    if (modelSelector.value.includes('turbo')) {
+                        stepsSelect.value = '8';
+                    } else if (modelSelector.value.includes('sft')) {
+                        stepsSelect.value = '50';
+                    }
+                    saveMusicStudioSettings();
+                }
             });
         }
 
