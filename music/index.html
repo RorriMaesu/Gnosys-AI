@@ -212,6 +212,35 @@
             100% { background-color: transparent; }
         }
         
+        /* Chat Input field explicit styling to fix invisible text styling issues */
+        #studio-chat-input {
+            background-color: rgba(3, 7, 18, 0.85) !important;
+            color: #f1f5f9 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+        #studio-chat-input:focus {
+            border-color: #a855f7 !important;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.15) !important;
+        }
+        #studio-chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.35) !important;
+        }
+        
+        /* Explicit styling overrides for settings input and selection fields */
+        .studio-input, select.studio-input {
+            background-color: rgba(3, 7, 18, 0.8) !important;
+            color: #f1f5f9 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+        .studio-input:focus, select.studio-input:focus {
+            border-color: #a855f7 !important;
+            box-shadow: 0 0 12px rgba(168, 85, 247, 0.15) !important;
+        }
+        select option {
+            background-color: #0b0f19 !important;
+            color: #f1f5f9 !important;
+        }
+        
         /* Cockpit layout overrides for wide viewports */
         @media (min-width: 1024px) {
             .cockpit-grid {
