@@ -561,6 +561,14 @@
             </div>
             
             <div class="drawer-body">
+                <!-- Launch Music Studio Button -->
+                <div style="margin-bottom: 5px;">
+                    <a id="gnosys-player-studio-link" href="#" class="studio-link-btn">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>Launch Music Studio AI</span>
+                    </a>
+                </div>
+
                 <!-- Dropdown Class Selector -->
                 <div class="form-group">
                     <label>Active Subject Playlist</label>
@@ -650,6 +658,22 @@
         // Bind clicks
         widget.addEventListener('click', toggleDrawer);
         document.getElementById('gnosys-player-close').addEventListener('click', toggleDrawer);
+
+        // Bind Launch Music Studio AI Link
+        const studioLink = document.getElementById('gnosys-player-studio-link');
+        if (studioLink) {
+            const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+            const musicStudioUrl = window.location.origin + baseHref + 'music/index.html';
+            studioLink.href = musicStudioUrl;
+            studioLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                const iframe = document.getElementById('gnosys-content-frame');
+                if (iframe) {
+                    iframe.src = musicStudioUrl;
+                    toggleDrawer(); // Close the drawer on navigation
+                }
+            });
+        }
         
         const select = document.getElementById('gnosys-player-class-select');
         select.addEventListener('change', (e) => {
@@ -1802,6 +1826,36 @@
             .glass-select option {
                 background: #0f172a;
                 color: #f8fafc;
+            }
+
+            /* Studio launch button styling */
+            .studio-link-btn {
+                background: linear-gradient(135deg, rgba(217, 70, 239, 0.12) 0%, rgba(99, 102, 241, 0.12) 100%);
+                border: 1px solid rgba(217, 70, 239, 0.25);
+                border-radius: 12px;
+                color: #f5f3ff;
+                padding: 10px 14px;
+                font-size: 13px;
+                font-weight: 700;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                text-decoration: none;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 12px rgba(217, 70, 239, 0.04);
+            }
+            .studio-link-btn:hover {
+                background: linear-gradient(135deg, rgba(217, 70, 239, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+                border-color: rgba(217, 70, 239, 0.45);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 18px rgba(217, 70, 239, 0.12);
+                color: #ffffff;
+            }
+            .studio-link-btn i {
+                font-size: 14px;
+                color: #d946ef;
             }
 
             /* Current song area */
