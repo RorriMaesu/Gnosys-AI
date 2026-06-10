@@ -14,6 +14,16 @@
 
     let downloadPollInterval = null;
 
+    // Chat and Lyric Editor State
+    window.lyricStudioState = {
+        history: [], // Undo stack
+        currentText: "",
+        highlight: null // { text, startLine, endLine, startChar, endChar }
+    };
+    const MAX_HISTORY = 30;
+    let studioConversationHistory = [];
+    let isChatResponding = false;
+
     document.addEventListener('DOMContentLoaded', () => {
         // If we are in the top-level parent window wrapper (where the page is wrapped in an iframe), abort
         if (window.self === window.top && document.getElementById('gnosys-content-frame')) {
@@ -113,7 +123,6 @@
         'music-signature',
         'music-seed',
         'music-lm-cfg',
-        'lyrics-prompt',
         'generated-lyrics'
     ];
 
@@ -204,6 +213,13 @@
 
         // Load persisted studio settings
         loadMusicStudioSettings();
+
+        // Initialize lyric state from loaded textarea value
+        const initialLyricsTextarea = document.getElementById('generated-lyrics');
+        if (initialLyricsTextarea) {
+            window.lyricStudioState.currentText = initialLyricsTextarea.value;
+            setTimeout(updateLyricsGutter, 100); // Small timeout to ensure fonts/layout are ready
+        }
 
         // Attach event listeners to auto-persist changes
         PERSISTED_FIELDS.forEach(id => {
@@ -506,8 +522,73 @@
             document.getElementById('lm-cfg-val').textContent = parseFloat(e.target.value).toFixed(1);
         });
 
-        // Gemma lyric brainstorm trigger
-        document.getElementById('btn-brainstorm').addEventListener('click', handleBrainstormLyrics);
+        // Lyrics Textarea listeners
+        const lyricsTextarea = document.getElementById('generated-lyrics');
+        if (lyricsTextarea) {
+            lyricsTextarea.addEventListener('scroll', () => {
+                const gutter = document.getElementById('lyrics-gutter');
+                if (gutter) gutter.scrollTop = lyricsTextarea.scrollTop;
+            });
+            lyricsTextarea.addEventListener('input', () => {
+                window.lyricStudioState.currentText = lyricsTextarea.value;
+                updateLyricsGutter();
+            });
+            
+            // Caret selection listener for highlight capture
+            const handleSelectEvent = () => handleLyricsSelection();
+            lyricsTextarea.addEventListener('select', handleSelectEvent);
+            lyricsTextarea.addEventListener('mouseup', handleSelectEvent);
+            lyricsTextarea.addEventListener('keyup', handleSelectEvent);
+        }
+
+        // Chat Input and Send listeners
+        const btnSendChat = document.getElementById('btn-send-chat');
+        const chatInput = document.getElementById('studio-chat-input');
+        if (btnSendChat && chatInput) {
+            btnSendChat.addEventListener('click', handleSendChatMessage);
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendChatMessage();
+                }
+            });
+        }
+
+        // Floating badge clear selection listener
+        const btnClearSel = document.getElementById('btn-clear-selection');
+        if (btnClearSel) {
+            btnClearSel.addEventListener('click', clearLyricsSelection);
+        }
+
+        // Toolbar Buttons
+        const btnUndo = document.getElementById('btn-undo-lyrics');
+        if (btnUndo) btnUndo.addEventListener('click', handleUndoLyrics);
+
+        const btnClear = document.getElementById('btn-clear-lyrics');
+        if (btnClear) {
+            btnClear.addEventListener('click', () => {
+                if (lyricsTextarea) {
+                    pushLyricHistory(lyricsTextarea.value);
+                    lyricsTextarea.value = '';
+                    window.lyricStudioState.currentText = '';
+                    clearLyricsSelection();
+                    saveMusicStudioSettings();
+                    showBannerNotification("Workspace cleared.", "info");
+                }
+            });
+        }
+
+        const btnCopy = document.getElementById('btn-copy-lyrics');
+        if (btnCopy) {
+            btnCopy.addEventListener('click', () => {
+                if (lyricsTextarea && lyricsTextarea.value.trim()) {
+                    navigator.clipboard.writeText(lyricsTextarea.value);
+                    showBannerNotification("Lyrics copied to clipboard!", "success");
+                } else {
+                    showBannerNotification("No lyrics to copy.", "warning");
+                }
+            });
+        }
 
         // Music generation trigger
         document.getElementById('btn-generate-track').addEventListener('click', generateStudyTrack);
@@ -1145,129 +1226,406 @@
         }, 1000);
     }
 
-    async function handleBrainstormLyrics() {
-        const btn = document.getElementById('btn-brainstorm');
-        const originalText = btn.innerHTML;
-        const generatedLyricsTextarea = document.getElementById('generated-lyrics');
-        const lyricsPromptVal = document.getElementById('lyrics-prompt').value.trim();
-        const subjectSelector = document.getElementById('subject-selector').value;
-        const customSubjectVal = document.getElementById('custom-subject-input').value.trim();
-        const audioLengthVal = document.getElementById('music-length').value;
+    // ==========================================
+    // CHATBOT & LYRICS WORKSPACE LOGIC
+    // ==========================================
 
-        let subjectName = '';
-        if (subjectSelector === 'custom') {
-            subjectName = customSubjectVal || 'a custom academic study subject';
+    function updateLyricsGutter() {
+        const textarea = document.getElementById('generated-lyrics');
+        const gutter = document.getElementById('lyrics-gutter');
+        if (!textarea || !gutter) return;
+
+        const lines = textarea.value.split('\n');
+        const totalLines = Math.max(1, lines.length);
+        
+        let gutterHtml = '';
+        const highlight = window.lyricStudioState.highlight;
+        
+        for (let i = 1; i <= totalLines; i++) {
+            const isActive = highlight && i >= highlight.startLine && i <= highlight.endLine;
+            gutterHtml += `<div class="lyrics-gutter-line${isActive ? ' active-highlight' : ''}">${i}</div>`;
+        }
+        
+        gutter.innerHTML = gutterHtml;
+        gutter.scrollTop = textarea.scrollTop;
+    }
+
+    function handleLyricsSelection() {
+        const textarea = document.getElementById('generated-lyrics');
+        const contextBadge = document.getElementById('selection-context-badge');
+        const badgeText = document.getElementById('selection-badge-text');
+        if (!textarea) return;
+
+        const text = textarea.value;
+        const startChar = textarea.selectionStart;
+        const endChar = textarea.selectionEnd;
+
+        if (startChar !== endChar) {
+            const beforeStart = text.substring(0, startChar);
+            const startLine = beforeStart.split('\n').length;
+            
+            const selectedText = text.substring(startChar, endChar);
+            const selectedLinesCount = selectedText.split('\n').length;
+            const endLine = startLine + selectedLinesCount - 1;
+
+            window.lyricStudioState.highlight = {
+                text: selectedText,
+                startLine,
+                endLine,
+                startChar,
+                endChar
+            };
+
+            updateLyricsGutter();
+
+            if (contextBadge && badgeText) {
+                badgeText.textContent = `Lines ${startLine} to ${endLine} selected`;
+                contextBadge.classList.remove('hidden');
+                contextBadge.classList.add('flex');
+            }
         } else {
-            subjectName = document.getElementById('subject-selector').options[document.getElementById('subject-selector').selectedIndex].text;
+            if (window.lyricStudioState.highlight) {
+                window.lyricStudioState.highlight = null;
+                updateLyricsGutter();
+                if (contextBadge) {
+                    contextBadge.classList.add('hidden');
+                    contextBadge.classList.remove('flex');
+                }
+            }
+        }
+    }
+
+    function clearLyricsSelection() {
+        const textarea = document.getElementById('generated-lyrics');
+        const contextBadge = document.getElementById('selection-context-badge');
+        if (textarea) {
+            textarea.selectionStart = textarea.selectionEnd = 0;
+        }
+        window.lyricStudioState.highlight = null;
+        updateLyricsGutter();
+        if (contextBadge) {
+            contextBadge.classList.add('hidden');
+            contextBadge.classList.remove('flex');
+        }
+    }
+
+    function pushLyricHistory(text) {
+        const history = window.lyricStudioState.history;
+        if (history.length === 0 || history[history.length - 1] !== text) {
+            history.push(text);
+            if (history.length > MAX_HISTORY) {
+                history.shift();
+            }
+            const undoBtn = document.getElementById('btn-undo-lyrics');
+            if (undoBtn) undoBtn.disabled = false;
+        }
+    }
+
+    function handleUndoLyrics() {
+        const history = window.lyricStudioState.history;
+        const textarea = document.getElementById('generated-lyrics');
+        if (history.length > 0 && textarea) {
+            const previousText = history.pop();
+            textarea.value = previousText;
+            window.lyricStudioState.currentText = previousText;
+            
+            window.lyricStudioState.highlight = null;
+            updateLyricsGutter();
+            
+            const contextBadge = document.getElementById('selection-context-badge');
+            if (contextBadge) {
+                contextBadge.classList.add('hidden');
+                contextBadge.classList.remove('flex');
+            }
+            
+            saveMusicStudioSettings();
+            
+            const undoBtn = document.getElementById('btn-undo-lyrics');
+            if (undoBtn) {
+                undoBtn.disabled = history.length === 0;
+            }
+            
+            showBannerNotification("Lyrics restored to previous state.", "info");
+        }
+    }
+
+    function appendChatMessage(sender, text, role = 'agent') {
+        const chatHistory = document.getElementById('studio-chat-history');
+        if (!chatHistory) return;
+
+        const bubble = document.createElement('div');
+        if (role === 'user') {
+            bubble.className = 'chat-bubble-user p-3.5 text-xs text-slate-200 leading-relaxed max-w-[90%] self-end ml-auto';
+            bubble.innerHTML = `<p class="font-bold text-indigo-400 mb-1">You:</p><div>${escapeHtml(text)}</div>`;
+        } else {
+            bubble.className = 'chat-bubble-agent p-3.5 text-xs text-slate-200 leading-relaxed max-w-[90%]';
+            bubble.innerHTML = `<p class="font-bold text-fuchsia-400 mb-1">${sender}:</p><div class="agent-message-body">${text}</div>`;
+        }
+        chatHistory.appendChild(bubble);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        return bubble;
+    }
+
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function parseMarkdown(text) {
+        if (window.marked && window.marked.parse) {
+            return window.marked.parse(text, { breaks: true });
+        }
+        return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                   .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                   .replace(/\n/g, '<br>');
+    }
+
+    function parseChatResponse(rawText) {
+        const startTag = '<chat_response>';
+        const endTag = '</chat_response>';
+        const startIndex = rawText.toLowerCase().indexOf(startTag);
+        if (startIndex !== -1) {
+            const contentStart = startIndex + startTag.length;
+            const endIndex = rawText.toLowerCase().indexOf(endTag, contentStart);
+            if (endIndex !== -1) {
+                return rawText.substring(contentStart, endIndex).trim();
+            } else {
+                return rawText.substring(contentStart).trim();
+            }
+        }
+        if (!rawText.includes('<chat_response>') && !rawText.includes('<edit_lyrics>')) {
+            return rawText.trim();
+        }
+        return "";
+    }
+
+    function parseEditLyrics(rawText) {
+        const match = rawText.match(/<edit_lyrics([^>]*)>([\s\S]*?)<\/edit_lyrics>/i);
+        if (match) {
+            const attributesStr = match[1];
+            const content = match[2].trim();
+            
+            const targetMatch = attributesStr.match(/target=["']([^"']+)["']/i);
+            const target = targetMatch ? targetMatch[1].toLowerCase() : 'all';
+            
+            const startMatch = attributesStr.match(/start=["'](\d+)["']/i);
+            const start = startMatch ? parseInt(startMatch[1]) : 1;
+            
+            const endMatch = attributesStr.match(/end=["'](\d+)["']/i);
+            const end = endMatch ? parseInt(endMatch[1]) : 1;
+            
+            return { target, start, end, content };
+        }
+        return null;
+    }
+
+    function applyLyricsEdit(edit) {
+        const textarea = document.getElementById('generated-lyrics');
+        if (!textarea) return;
+
+        const currentText = textarea.value;
+        pushLyricHistory(currentText);
+
+        let newText = currentText;
+
+        if (edit.target === 'all') {
+            newText = edit.content;
+            showBannerNotification("Full lyrics updated by Assistant.", "success");
+            flashArea();
+        } else if (edit.target === 'selection' && window.lyricStudioState.highlight) {
+            const highlight = window.lyricStudioState.highlight;
+            newText = currentText.substring(0, highlight.startChar) + 
+                      edit.content + 
+                      currentText.substring(highlight.endChar);
+            showBannerNotification("Highlighted section updated.", "success");
+            
+            const replacementLinesCount = edit.content.split('\n').length;
+            flashLines(highlight.startLine, highlight.startLine + replacementLinesCount - 1);
+        } else if (edit.target === 'range') {
+            const lines = currentText.split('\n');
+            const startIdx = Math.max(1, edit.start) - 1;
+            const endIdx = Math.min(lines.length, edit.end) - 1;
+            
+            const replacementLines = edit.content.split('\n');
+            lines.splice(startIdx, (endIdx - startIdx + 1), ...replacementLines);
+            newText = lines.join('\n');
+            
+            showBannerNotification(`Lines ${edit.start}-${edit.end} updated.`, "success");
+            flashLines(edit.start, edit.start + replacementLines.length - 1);
+        } else {
+            if (edit.target === 'selection') {
+                showBannerNotification("No text highlight active. Overwriting full lyrics instead.", "warning");
+            }
+            newText = edit.content;
+            flashArea();
         }
 
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Brainstorming lyric lines...';
-        generatedLyricsTextarea.value = '';
+        textarea.value = newText;
+        window.lyricStudioState.currentText = newText;
+        
+        window.lyricStudioState.highlight = null;
+        updateLyricsGutter();
+        const contextBadge = document.getElementById('selection-context-badge');
+        if (contextBadge) {
+            contextBadge.classList.add('hidden');
+            contextBadge.classList.remove('flex');
+        }
+
+        saveMusicStudioSettings();
+    }
+
+    function flashArea() {
+        const wrapper = document.querySelector('.lyrics-editor-wrapper');
+        if (wrapper) {
+            wrapper.classList.add('line-glow-flash');
+            setTimeout(() => wrapper.classList.remove('line-glow-flash'), 1500);
+        }
+    }
+
+    function flashLines(startLine, endLine) {
+        const gutter = document.getElementById('lyrics-gutter');
+        if (!gutter) return;
+        
+        const lines = gutter.querySelectorAll('.lyrics-gutter-line');
+        for (let i = startLine - 1; i < endLine; i++) {
+            if (lines[i]) {
+                lines[i].classList.add('line-glow-flash');
+                setTimeout((targetLine) => {
+                    if (targetLine) targetLine.classList.remove('line-glow-flash');
+                }, 1500, lines[i]);
+            }
+        }
+    }
+
+    async function handleSendChatMessage() {
+        if (isChatResponding) return;
+
+        const chatInput = document.getElementById('studio-chat-input');
+        const sendBtn = document.getElementById('btn-send-chat');
+        if (!chatInput || !chatInput.value.trim()) return;
+
+        const userText = chatInput.value.trim();
+        chatInput.value = '';
+        
+        appendChatMessage("You", userText, "user");
+        
+        studioConversationHistory.push({ role: "user", content: userText });
+        
+        isChatResponding = true;
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-sm"></i>';
+        }
+
+        const subjectSelector = document.getElementById('subject-selector');
+        let subjectName = '';
+        if (subjectSelector) {
+            if (subjectSelector.value === 'custom') {
+                const customSubjectVal = document.getElementById('custom-subject-input')?.value.trim();
+                subjectName = customSubjectVal || 'a custom academic study subject';
+            } else {
+                subjectName = subjectSelector.options[subjectSelector.selectedIndex]?.text || 'Study Topic';
+            }
+        } else {
+            subjectName = 'Study Topic';
+        }
+
+        const lyricsTextarea = document.getElementById('generated-lyrics');
+        const currentLyrics = lyricsTextarea ? lyricsTextarea.value : '';
+
+        let selectionContext = 'No text highlighted in the workspace.';
+        const highlight = window.lyricStudioState.highlight;
+        const hasSelection = highlight !== null;
+        if (hasSelection) {
+            selectionContext = `The user has highlighted the following lines (${highlight.startLine} to ${highlight.endLine}) in their workspace:\n"""\n${highlight.text}\n"""\nThe user wants your response and any editing actions to target this highlighted section.`;
+        }
+
+        const bubble = appendChatMessage("Gnosys AI", "", "agent");
+        const bubbleBody = bubble.querySelector('.agent-message-body');
+        bubbleBody.innerHTML = `<div class="flex items-center space-x-1.5"><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce"></div><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce" style="animation-delay: 0.15s"></div><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce" style="animation-delay: 0.3s"></div></div>`;
 
         const systemPrompt = `You are a creative, expert educational songwriter and music producer for Gnosys AI.
-Your objective is to brainstorm catchy, mnemonically dense, and rhythmically aligned study lyrics to help a student master a specific field of study.
-The user wants to generate song lyrics about: "${subjectName}".
-Keep the lines rhyming, easy to read/sing, and packed with actual educational keywords, facts, and definitions.
+Your objective is to help the student write, refine, and structure catchy, mnemonically dense, and rhythmically aligned study lyrics for their target subject.
 
-IMPORTANT: Always generate full, complete song lyrics including at least 2-3 Verses, a Chorus (repeated), and a Bridge to provide a comprehensive, high-quality study track. Do not truncate or abbreviate the song structure.
+The target subject is: "${subjectName}".
 
-Output your response using the following XML structure:
-<lyrics>
-[Verse 1]
-(lyrics here)
+CURRENT LYRICS WORKSPACE CONTENT:
+"""
+${currentLyrics}
+"""
 
+${selectionContext}
+
+INSTRUCTIONS FOR CONVERSATION AND EDITING:
+1. Always engage in a back-and-forth friendly conversation. Explain what changes you are suggesting.
+2. Place all conversational and explanatory responses inside <chat_response>...</chat_response> tags.
+3. If you want to modify, replace, or insert lyrics:
+   - To replace the highlighted selection, use:
+     <edit_lyrics target="selection">NEW LYRICS HERE</edit_lyrics>
+   - To replace a specific range of lines, use:
+     <edit_lyrics target="range" start="START_LINE" end="END_LINE">NEW LYRICS HERE</edit_lyrics>
+   - To overwrite or initialize the entire song lyrics, use:
+     <edit_lyrics target="all">ENTIRE LYRICS CONTENT HERE</edit_lyrics>
+4. Keep the lyrics easy to read, rhyming, and packed with actual educational keywords, facts, and definitions.
+5. In your chat responses, you can also suggest changes and invite the user to highlight sections for refinement.
+
+EXAMPLE OUTPUT FORMAT:
+<chat_response>I've made the chorus catchier by adding some rhythm terms! Let me update that section for you now.</chat_response>
+<edit_lyrics target="range" start="5" end="8">
 [Chorus]
-(lyrics here)
+Anatomy is study of the form we see,
+Physiology is how it works, the chemistry!
+From cells to tissues, organs working day and night,
+Keep the body balanced in the homeostatic light!
+</edit_lyrics>
+`;
 
-[Verse 2]
-(lyrics here)
-
-[Chorus]
-(lyrics here)
-
-[Bridge]
-(lyrics here)
-
-[Chorus]
-(lyrics here)
-</lyrics>
-<meta>
-genre: (recommend a prompt string like "synthwave, electronic, energetic, focus tempo")
-bpm: (recommend 80, 100, or 120)
-key: (recommend a key scale compatible with the UI: "C Major", "G Major", "A Minor", "E Minor", "D Minor", or "F Major")
-signature: (recommend "4", "3", or "6" for time signature)
-</meta>`;
-
-        const userPrompt = lyricsPromptVal || `Generate educational study lyrics for a song about ${subjectName}.`;
+        const userPrompt = userText;
 
         try {
             if (window.GnosysLLM) {
+                let responseText = '';
+                
                 await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
                     stream: true,
+                    history: studioConversationHistory.slice(0, -1),
                     onToken: (token, fullText) => {
-                        // Extract only the <lyrics> content for display
-                        const lyricsMatch = fullText.match(/<lyrics>([\s\S]*?)<\/lyrics>/i);
-                        if (lyricsMatch) {
-                            generatedLyricsTextarea.value = lyricsMatch[1].trim();
+                        responseText = fullText;
+                        
+                        const chatText = parseChatResponse(fullText);
+                        if (chatText) {
+                            bubbleBody.innerHTML = parseMarkdown(chatText);
                         } else {
-                            // Strip out any partial raw tags for a cleaner stream
-                            generatedLyricsTextarea.value = fullText.replace(/<lyrics>/i, '').replace(/<\/lyrics>/i, '').trim();
-                        }
-
-                        // Try to extract and apply the <meta> configuration if the stream is complete
-                        const metaMatch = fullText.match(/<meta>([\s\S]*?)<\/meta>/i);
-                        if (metaMatch) {
-                            try {
-                                const metaText = metaMatch[1].trim();
-                                const lines = metaText.split('\n');
-                                lines.forEach(line => {
-                                    const parts = line.split(':');
-                                    if (parts.length >= 2) {
-                                        const key = parts[0].trim().toLowerCase();
-                                        const val = parts.slice(1).join(':').trim();
-                                        
-                                        if (key === 'genre' && val) {
-                                            document.getElementById('music-prompt').value = val;
-                                        } else if (key === 'bpm') {
-                                            // Find closest matching option (80, 100, 120)
-                                            const bpmNum = parseInt(val);
-                                            const select = document.getElementById('music-bpm');
-                                            if (bpmNum <= 90) select.value = "80";
-                                            else if (bpmNum <= 110) select.value = "100";
-                                            else select.value = "120";
-                                        } else if (key === 'key') {
-                                            const select = document.getElementById('music-key');
-                                            // Map string to selector options
-                                            for (let i = 0; i < select.options.length; i++) {
-                                                if (select.options[i].value.toLowerCase() === val.toLowerCase()) {
-                                                    select.value = select.options[i].value;
-                                                    break;
-                                                }
-                                            }
-                                        } else if (key === 'signature') {
-                                            const select = document.getElementById('music-signature');
-                                            if (val === '4' || val === '3' || val === '6') {
-                                                select.value = val;
-                                            }
-                                        }
-                                    }
-                                });
-                            } catch (e) {
-                                console.log('Meta parsing error:', e);
+                            if (fullText.includes('<edit_lyrics')) {
+                                bubbleBody.innerHTML = `<span class="text-slate-400 italic"><i class="fa-solid fa-pen-nib mr-1.5 animate-pulse"></i> Writing new lyric edits directly to workspace...</span>`;
                             }
                         }
+                        const chatHistory = document.getElementById('studio-chat-history');
+                        if (chatHistory) chatHistory.scrollTop = chatHistory.scrollHeight;
                     }
                 });
+
+                studioConversationHistory.push({ role: "assistant", content: responseText });
+
+                const edit = parseEditLyrics(responseText);
+                if (edit) {
+                    applyLyricsEdit(edit);
+                }
             } else {
-                generatedLyricsTextarea.value = "Gnosys LLM Engine is currently loading or unavailable on this device tab.";
+                bubbleBody.innerHTML = "Gnosys LLM Engine is currently loading or unavailable on this device tab.";
             }
         } catch (err) {
-            generatedLyricsTextarea.value = "Failed to brainstorm lyrics: " + err.message;
+            bubbleBody.innerHTML = `Error generating response: ${err.message}`;
         } finally {
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-            saveMusicStudioSettings();
+            isChatResponding = false;
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i class="fa-solid fa-paper-plane text-sm"></i>';
+            }
         }
     }
 

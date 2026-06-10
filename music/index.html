@@ -118,6 +118,99 @@
         .fade-in {
             animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
+        /* Synced Chat and Lyrics Layout styles */
+        .chat-history-container::-webkit-scrollbar {
+            width: 5px;
+        }
+        .chat-history-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 9999px;
+        }
+        .chat-history-container::-webkit-scrollbar-thumb {
+            background: rgba(168, 85, 247, 0.15);
+            border-radius: 9999px;
+        }
+        .chat-history-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(168, 85, 247, 0.3);
+        }
+        .chat-bubble-user {
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 16px 16px 4px 16px;
+        }
+        .chat-bubble-agent {
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px 16px 16px 4px;
+        }
+        .lyrics-editor-wrapper {
+            position: relative;
+            display: flex;
+            background-color: rgba(3, 7, 18, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1.25rem;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .lyrics-editor-wrapper:focus-within {
+            border-color: #a855f7;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.15);
+        }
+        .lyrics-gutter-col {
+            width: 44px;
+            background: rgba(15, 23, 42, 0.45);
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 1rem 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.25);
+            user-select: none;
+            overflow-y: hidden;
+            box-sizing: border-box;
+        }
+        .lyrics-gutter-line {
+            height: 22px;
+            line-height: 22px;
+            padding-right: 10px;
+            width: 100%;
+            box-sizing: border-box;
+            transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        .lyrics-gutter-line.active-highlight {
+            color: #d946ef;
+            font-weight: bold;
+            background-color: rgba(217, 70, 239, 0.06);
+        }
+        .lyrics-textarea-field {
+            flex-grow: 1;
+            background: transparent;
+            border: none !important;
+            outline: none !important;
+            resize: none;
+            padding: 1rem !important;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.875rem;
+            line-height: 22px;
+            color: #f1f5f9;
+            overflow-y: auto;
+            box-sizing: border-box;
+            min-height: 100%;
+        }
+        .lyrics-textarea-field:focus {
+            outline: none !important;
+            box-shadow: none !important;
+        }
+        .line-glow-flash {
+            animation: lineFlash 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+        @keyframes lineFlash {
+            0% { background-color: rgba(217, 70, 239, 0.25); }
+            100% { background-color: transparent; }
+        }
     </style>
 </head>
 <body class="min-h-screen selection:bg-fuchsia-500/30 pb-20">
@@ -228,59 +321,117 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
-            <!-- LEFT PANEL: Gemma 4 Brainstormer -->
-            <div class="lg:col-span-8 flex flex-col">
-                <div class="glass-card rounded-3xl p-8 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[500px]">
-                    <div class="absolute -right-24 -top-24 w-48 h-48 bg-fuchsia-600/10 rounded-full blur-3xl"></div>
-                    
-                    <div class="flex items-center gap-3 mb-6">
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center text-white shadow-lg">
-                            <i class="fa-solid fa-brain text-xl"></i>
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-bold text-white">Agentic Lyrics & Prompt Brainstormer</h3>
-                            <p class="text-xs text-fuchsia-400 font-bold uppercase tracking-wider mt-0.5">Powered by Gemma 4</p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch flex-grow">
-                        <!-- Sub-column 1: Brainstorm Controls -->
-                        <div class="flex flex-col justify-between space-y-4">
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">1. Choose a Field of Study</label>
-                                    <select id="subject-selector" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
-                                        <option value="anatomy">Anatomy & Physiology (Muscles, Bones, Hormones)</option>
-                                        <option value="chemistry">General Chemistry (Molecules, Reactions, Periodic Table)</option>
-                                        <option value="psychology">Intro to Psychology (Behaviors, Brain Regions, Ethics)</option>
-                                        <option value="medicine">Medical Terminology (Prefixes, Roots, Diagnoses)</option>
-                                        <option value="custom">Custom Subject...</option>
-                                    </select>
-                                </div>
-                                
-                                <div id="custom-subject-container" class="hidden">
-                                    <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Custom Topic Details</label>
-                                    <input type="text" id="custom-subject-input" placeholder="e.g. Physics Wave Mechanics, Organic Chemistry Nomenclature" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">2. Lyrics Inspiration & Topic Prompt</label>
-                                    <textarea id="lyrics-prompt" placeholder="Brainstorm ideas or specify details to help Gemma generate targeted educational lyrics. E.g. 'Generate a catchy, upbeat pop song explaining the functions of the skull bones.'" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors h-28 resize-none"></textarea>
-                                </div>
+            <!-- LEFT PANEL: Split Chat & Lyrics Workspace -->
+            <div class="lg:col-span-8 grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+                
+                <!-- Chatbot Column (5/12 width or 6/12 width) -->
+                <div class="md:col-span-6 flex flex-col h-full">
+                    <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[550px] max-h-[750px]">
+                        <div class="absolute -right-24 -top-24 w-48 h-48 bg-fuchsia-600/10 rounded-full blur-3xl"></div>
+                        
+                        <!-- Chat Header -->
+                        <div class="flex items-center gap-3 mb-4 border-b border-white/5 pb-3 shrink-0">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center text-white shadow-lg">
+                                <i class="fa-solid fa-comments text-lg"></i>
                             </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Gnosys Lyric Assistant</h3>
+                                <p class="text-[10px] text-fuchsia-400 font-bold uppercase tracking-wider">Conversational Songwriter</p>
+                            </div>
+                        </div>
 
-                            <button id="btn-brainstorm" class="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/20 border border-indigo-500/30 flex items-center justify-center gap-2 mt-auto">
-                                <i class="fa-solid fa-wand-magic-sparkles"></i> Brainstorm Lyrics with Gemma
+                        <!-- Subject Selector inside Chat Options -->
+                        <div class="mb-4 space-y-2 shrink-0">
+                            <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Target Field of Study</label>
+                            <div class="flex gap-2">
+                                <select id="subject-selector" class="flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors cursor-pointer">
+                                    <option value="anatomy">Anatomy & Physiology</option>
+                                    <option value="chemistry">General Chemistry</option>
+                                    <option value="psychology">Intro to Psychology</option>
+                                    <option value="medicine">Medical Terminology</option>
+                                    <option value="custom">Custom Subject...</option>
+                                </select>
+                                <input type="text" id="custom-subject-input" placeholder="Custom Topic Details..." class="hidden flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
+                            </div>
+                        </div>
+
+                        <!-- Chat Messages Area -->
+                        <div id="studio-chat-history" class="flex-grow overflow-y-auto space-y-3 p-1 mb-4 chat-history-container pr-2">
+                            <!-- Welcome Message -->
+                            <div class="chat-bubble-agent p-3.5 text-xs text-slate-200 leading-relaxed max-w-[90%]">
+                                <p class="font-bold text-fuchsia-400 mb-1">Gnosys AI:</p>
+                                Welcome to the Gnosys Lyric Workspace! I can help you write, refine, and structure educational lyrics. 
+                                <br><br>
+                                You can:
+                                <ul class="list-disc list-inside mt-1.5 space-y-1 text-slate-300">
+                                    <li>Type instructions below to generate a new song.</li>
+                                    <li>Highlight any portion of the lyrics on the right to edit or ask questions about just that section.</li>
+                                    <li>Directly edit any line on the right yourself.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Context Highlight Active Badge -->
+                        <div id="selection-context-badge" class="hidden items-center justify-between bg-fuchsia-500/10 border border-fuchsia-500/25 rounded-xl px-3.5 py-2.5 mb-3 shrink-0">
+                            <span class="text-[11px] text-fuchsia-300 font-bold flex items-center gap-1.5">
+                                <i class="fa-solid fa-highlighter"></i>
+                                <span id="selection-badge-text">Lines 1-5 selected</span>
+                            </span>
+                            <button id="btn-clear-selection" class="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer bg-transparent border-0 p-0">
+                                <i class="fa-solid fa-xmark"></i>
                             </button>
                         </div>
 
-                        <!-- Sub-column 2: Lyrics Workspace -->
-                        <div class="flex flex-col h-full min-h-[400px]">
-                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Generated Song Lyrics</label>
-                            <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. You can edit them freely before generating music." class="w-full studio-input rounded-2xl px-4 py-4 text-sm text-slate-200 focus:outline-none flex-grow resize-none font-mono min-h-[350px]"></textarea>
+                        <!-- Chat Input Box -->
+                        <div class="flex gap-2 items-end shrink-0">
+                            <textarea id="studio-chat-input" placeholder="Ask the chatbot to write or modify lyrics..." class="flex-grow bg-slate-950/85 border border-white/10 rounded-2xl px-4 py-3.5 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors max-h-24 min-h-[44px] resize-none" rows="1"></textarea>
+                            <button id="btn-send-chat" class="w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 border border-indigo-500/20 cursor-pointer">
+                                <i class="fa-solid fa-paper-plane text-sm"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
+
+                <!-- Lyrics Editor Column (6/12 width) -->
+                <div class="md:col-span-6 flex flex-col h-full">
+                    <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[550px] max-h-[750px]">
+                        <div class="absolute -left-24 -bottom-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
+
+                        <!-- Editor Header / Toolbar -->
+                        <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-3 shrink-0">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md">
+                                    <i class="fa-solid fa-pen-nib text-sm"></i>
+                                </div>
+                                <h3 class="text-xs font-bold text-white uppercase tracking-wider">Lyrics Workspace</h3>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <button id="btn-undo-lyrics" disabled class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Undo change">
+                                    <i class="fa-solid fa-rotate-left"></i>
+                                </button>
+                                <button id="btn-clear-lyrics" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Clear Workspace">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                                <button id="btn-copy-lyrics" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Copy to clipboard">
+                                    <i class="fa-solid fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Interactive Editor -->
+                        <div class="flex-grow flex flex-col relative min-h-[350px]">
+                            <div class="lyrics-editor-wrapper flex-grow flex items-stretch relative min-h-[300px]">
+                                <!-- Scrollable Gutter for Line Numbers -->
+                                <div id="lyrics-gutter" class="lyrics-gutter-col">
+                                    <div class="lyrics-gutter-line">1</div>
+                                </div>
+                                <!-- Textarea editor -->
+                                <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. Highlight text to edit sections or type directly." class="lyrics-textarea-field"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             
             <!-- RIGHT PANEL: ComfyUI / ACE Step Composer -->
