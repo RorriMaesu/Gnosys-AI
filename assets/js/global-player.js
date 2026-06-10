@@ -1,5 +1,19 @@
 // Gnosys AI Universal Playlist & Global Floating Player
 (function() {
+    const isTopWindow = window.self === window.top;
+
+    if (!isTopWindow) {
+        // Child frame: forward auto-download events to the parent player
+        window.addEventListener('gnosys_auto_download', (e) => {
+            if (window.top && window.top !== window) {
+                window.top.dispatchEvent(new CustomEvent('gnosys_auto_download', {
+                    detail: e.detail
+                }));
+            }
+        });
+        return; // Abort remaining script initialization in the child iframe
+    }
+
     // Determine the API base URL
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
     
@@ -63,23 +77,58 @@
         return 'medical-terminology';
     }
 
-    // Initialize UI on load
+    // Initialize UI on load and wrap page in full-screen iframe
     document.addEventListener('DOMContentLoaded', () => {
+        const body = document.body;
+        const currentUrl = window.location.href;
+
+        // Clear parent body content to build wrapper layout
+        body.innerHTML = '';
+        body.style.margin = '0';
+        body.style.padding = '0';
+        body.style.overflow = 'hidden';
+        body.style.width = '100vw';
+        body.style.height = '100vh';
+        body.style.backgroundColor = '#020617';
+
+        // Create the full-screen iframe
+        const iframe = document.createElement('iframe');
+        iframe.id = 'gnosys-content-frame';
+        iframe.src = currentUrl;
+        iframe.style.cssText = 'border: none; width: 100%; height: 100%; margin: 0; padding: 0; display: block;';
+        body.appendChild(iframe);
+
+        // Initialize persistent parent player UI
         injectStyles();
         createFloatingWidget();
         initMiniVisualizer();
-        
-        // Use inline audio player as the default playback engine (no popup window)
         activateInlineFallback();
-        
         restoreStateFromStorage();
         fetchPlaylists();
-        
-        // Start checking Pomodoro state
+
+        // Start checking Pomodoro state in the parent
         pingInterval = setInterval(() => {
             checkPomodoroState();
         }, 1000);
         checkPomodoroState();
+
+        // Sync URL & Title when iframe navigates
+        iframe.addEventListener('load', () => {
+            try {
+                const iframeUrl = iframe.contentWindow.location.href;
+                if (window.location.href !== iframeUrl) {
+                    window.history.pushState(null, '', iframeUrl);
+                }
+                document.title = iframe.contentWindow.document.title;
+            } catch (e) {
+                console.warn('[Global Player] URL sync blocked or failed:', e);
+            }
+        });
+
+        // Listen for browser navigation buttons to sync back with iframe
+        window.addEventListener('popstate', () => {
+            iframe.src = window.location.href;
+        });
     });
 
     // Restore player state from localStorage for cross-module persistence
