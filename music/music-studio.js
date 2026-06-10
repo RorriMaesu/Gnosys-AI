@@ -207,6 +207,79 @@
             }
         });
 
+        // Auto-sync active subject selector to playlist dropdown
+        const selectSubject = document.getElementById('subject-selector');
+        const selectPlaylist = document.getElementById('playlist-target-select');
+        if (selectSubject && selectPlaylist) {
+            selectSubject.addEventListener('change', () => {
+                const val = selectSubject.value;
+                if (val === 'medicine') selectPlaylist.value = 'medical-terminology';
+                else if (val === 'chemistry') selectPlaylist.value = 'intro-to-chemistry';
+                else if (val === 'psychology') selectPlaylist.value = 'psychology-care';
+                else if (val === 'anatomy') selectPlaylist.value = 'anatomy-physiology-1';
+                else selectPlaylist.value = 'gnosys-music';
+            });
+        }
+
+        // Add to Playlist Button Handler
+        const btnAddPlaylist = document.getElementById('btn-add-to-playlist');
+        if (btnAddPlaylist) {
+            btnAddPlaylist.addEventListener('click', async () => {
+                if (btnAddPlaylist.classList.contains('btn-playlist-success')) return;
+
+                const audioPlayer = document.getElementById('audio-player');
+                if (!audioPlayer || !audioPlayer.src || !audioPlayer.src.startsWith('data:')) {
+                    showBannerNotification('No generated track available to add.', 'error');
+                    return;
+                }
+
+                const classId = selectPlaylist ? selectPlaylist.value : 'gnosys-music';
+                
+                // Prompt user for track name
+                const promptVal = document.getElementById('music-prompt').value;
+                const bpmVal = document.getElementById('music-bpm').value;
+                const defaultName = `${promptVal.substring(0, 35)} (${bpmVal} BPM)`;
+                const trackName = prompt("Enter a name for this track:", defaultName);
+                if (trackName === null) return; // Cancelled
+
+                const nameToSave = trackName.trim() || defaultName;
+
+                // Show loading state
+                const originalHtml = btnAddPlaylist.innerHTML;
+                btnAddPlaylist.disabled = true;
+                btnAddPlaylist.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Saving...</span>`;
+
+                try {
+                    const response = await fetch(`${API_BASE}/api/playlists/save-track`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            class_id: classId,
+                            name: nameToSave,
+                            audio_base64: audioPlayer.src
+                        })
+                    });
+                    const resData = await response.json();
+                    if (resData.status === 'success') {
+                        btnAddPlaylist.classList.remove('btn-playlist-glow');
+                        btnAddPlaylist.classList.add('btn-playlist-success');
+                        btnAddPlaylist.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>Added!</span>`;
+                        showBannerNotification('Track successfully added to playlist!', 'success');
+
+                        // Trigger broadcast channel reload
+                        const globalChannel = new BroadcastChannel('gnosys_audio_channel');
+                        globalChannel.postMessage({ type: 'ping' });
+                    } else {
+                        throw new Error(resData.message);
+                    }
+                } catch (err) {
+                    btnAddPlaylist.innerHTML = originalHtml;
+                    btnAddPlaylist.disabled = false;
+                    showBannerNotification('Failed to save track: ' + err.message, 'error');
+                }
+            });
+        }
+
         // Download All button
         const downloadAllBtn = document.getElementById('btn-download-all');
         if (downloadAllBtn) {
@@ -1101,6 +1174,26 @@ signature: (recommend "4", "3", or "6" for time signature)
         
         container.classList.remove('hidden');
         document.getElementById('generation-progress-container').classList.add('hidden');
+
+        // Reset Add to Playlist button to default pulsing state
+        const btnAddPlaylist = document.getElementById('btn-add-to-playlist');
+        if (btnAddPlaylist) {
+            btnAddPlaylist.disabled = false;
+            btnAddPlaylist.className = 'btn-playlist-glow px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer';
+            btnAddPlaylist.innerHTML = `<i class="fa-solid fa-folder-plus"></i> <span>Add to Playlist</span>`;
+        }
+
+        // Auto-select corresponding playlist for the current field of study
+        const selectSubject = document.getElementById('subject-selector');
+        const selectPlaylist = document.getElementById('playlist-target-select');
+        if (selectSubject && selectPlaylist) {
+            const val = selectSubject.value;
+            if (val === 'medicine') selectPlaylist.value = 'medical-terminology';
+            else if (val === 'chemistry') selectPlaylist.value = 'intro-to-chemistry';
+            else if (val === 'psychology') selectPlaylist.value = 'psychology-care';
+            else if (val === 'anatomy') selectPlaylist.value = 'anatomy-physiology-1';
+            else selectPlaylist.value = 'gnosys-music';
+        }
         
         showBannerNotification('Track successfully loaded!', 'success');
     }

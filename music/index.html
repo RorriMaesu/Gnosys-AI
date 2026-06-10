@@ -86,6 +86,31 @@
             color: rgb(251, 191, 36) !important;
             border-color: rgba(245, 158, 11, 0.3) !important;
         }
+        @keyframes pulseGlowBtn {
+            0% { box-shadow: 0 0 6px rgba(217, 70, 239, 0.4); transform: scale(1); }
+            50% { box-shadow: 0 0 16px rgba(217, 70, 239, 0.75), 0 0 6px rgba(99, 102, 241, 0.4); transform: scale(1.02); }
+            100% { box-shadow: 0 0 6px rgba(217, 70, 239, 0.4); transform: scale(1); }
+        }
+        .btn-playlist-glow {
+            background: linear-gradient(135deg, #d946ef 0%, #6366f1 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            animation: pulseGlowBtn 2s infinite ease-in-out;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .btn-playlist-glow:hover {
+            transform: scale(1.04) translateY(-1px);
+            box-shadow: 0 0 24px rgba(217, 70, 239, 0.9), 0 0 10px rgba(99, 102, 241, 0.6);
+        }
+        .btn-playlist-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            animation: none !important;
+            transform: scale(1) !important;
+            transition: all 0.3s ease;
+        }
     </style>
 </head>
 <body class="min-h-screen selection:bg-fuchsia-500/30 pb-20">
@@ -404,6 +429,29 @@
                             </div>
                         </div>
                         <audio id="audio-player" controls class="w-full h-10 mt-2 bg-slate-800 rounded-lg"></audio>
+                        
+                        <!-- Add to Playlist Section -->
+                        <div class="flex flex-col gap-2 mt-2 pt-2 border-t border-white/5">
+                            <label class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 text-left">Save to Study Playlist</label>
+                            <div class="flex gap-2">
+                                <select id="playlist-target-select" class="flex-grow studio-input rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none transition-colors border border-white/5 cursor-pointer">
+                                    <option value="medical-terminology">Medical Terminology</option>
+                                    <option value="intro-to-chemistry">Intro to Chemistry</option>
+                                    <option value="chemistry-math-refresher">Chemistry Math Refresher</option>
+                                    <option value="clinical-mathematics">Clinical Mathematics</option>
+                                    <option value="psychology-care">Intro to Psychology</option>
+                                    <option value="gnosys-music" selected>Music Studio (General)</option>
+                                    <option value="anatomy-physiology-1">Anatomy & Physiology I</option>
+                                    <option value="anatomy-physiology-2">Anatomy & Physiology II</option>
+                                    <option value="anatomy-physiology-3">Anatomy & Physiology III</option>
+                                </select>
+                                <button id="btn-add-to-playlist" class="btn-playlist-glow px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                    <i class="fa-solid fa-folder-plus"></i>
+                                    <span>Add to Playlist</span>
+                                </button>
+                            </div>
+                        </div>
+
                         <a id="btn-download-audio" href="#" download="GnosysStudyTrack.wav" class="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-center font-bold text-slate-300 hover:text-white border border-white/5 transition-all">
                             <i class="fa-solid fa-download mr-1.5"></i> Export WAV File
                         </a>
