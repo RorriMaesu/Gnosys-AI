@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gnosys Audio Engine</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --card-dark: rgba(15, 23, 42, 0.75);
+            --accent-glow: #d946ef;
+            --accent-glow-secondary: #6366f1;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-content: center;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Ambient Glow Backgrounds */
+        .ambient-glow {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.15;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .glow-1 {
+            background: var(--accent-glow);
+            top: -50px;
+            left: -50px;
+        }
+        .glow-2 {
+            background: var(--accent-glow-secondary);
+            bottom: -50px;
+            right: -50px;
+        }
+
+        /* Glass Container */
+        .player-container {
+            width: 100%;
+            height: 100%;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            background: var(--card-dark);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Header info */
+        .header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo-box {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent-glow), var(--accent-glow-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(217, 70, 239, 0.3);
+        }
+        .logo-box i {
+            color: white;
+            font-size: 18px;
+        }
+        .meta-text h1 {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+        .meta-text p {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 1px;
+        }
+
+        /* Track Card details */
+        .track-info {
+            width: 100%;
+            text-align: center;
+            margin: 12px 0;
+        }
+        .track-title {
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .track-subtitle {
+            font-size: 12px;
+            color: var(--accent-glow);
+            font-weight: 700;
+            margin-top: 2px;
+            letter-spacing: 0.2px;
+        }
+
+        /* Visualizer */
+        .visualizer-box {
+            width: 100%;
+            height: 45px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Small status badge */
+        .engine-status {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #a8a29e;
+        }
+        .status-dot.active {
+            background: #2dd4bf;
+            box-shadow: 0 0 8px #2dd4bf;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <div class="player-container">
+        <!-- Header row -->
+        <div class="header">
+            <div class="logo-box">
+                <i class="fa-solid fa-compact-disc fa-spin" style="animation-duration: 4s;"></i>
+            </div>
+            <div class="meta-text">
+                <h1>Gnosys Playback Engine</h1>
+                <p>Universal Background Service</p>
+            </div>
+        </div>
+
+        <!-- Track info -->
+        <div class="track-info">
+            <div class="track-title" id="track-name-display">No Track Loaded</div>
+            <div class="track-subtitle" id="class-name-display">Idle</div>
+        </div>
+
+        <!-- Canvas visualizer -->
+        <div class="visualizer-box">
+            <canvas id="canvas-visualizer"></canvas>
+        </div>
+
+        <!-- Status indicator footer -->
+        <div class="engine-status">
+            <div class="status-dot active"></div>
+            <span>Connected & Syncing</span>
+        </div>
+    </div>
+
+    <!-- The actual core audio context element -->
+    <audio id="core-audio-element" crossorigin="anonymous"></audio>
+
+    <script>
+        const audio = document.getElementById('core-audio-element');
+        const channel = new BroadcastChannel('gnosys_audio_channel');
+        
+        let currentTrack = null;
+        let currentClassId = null;
+        let currentClassName = 'Idle';
+        
+        // Setup simple HTML5 Canvas visualizer
+        const canvas = document.getElementById('canvas-visualizer');
+        const ctx = canvas.getContext('2d');
+        let animationFrameId = null;
+        
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function drawVisualizer() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const barWidth = 4;
+            const barGap = 3;
+            const numBars = Math.floor(canvas.width / (barWidth + barGap));
+            const center = canvas.height / 2;
+            
+            ctx.fillStyle = ctx.createLinearGradient(0, 0, canvas.width, 0);
+            ctx.fillStyle.addColorStop(0, '#6366f1'); // Indigo
+            ctx.fillStyle.addColorStop(0.5, '#d946ef'); // Fuchsia
+            ctx.fillStyle.addColorStop(1, '#6366f1'); // Indigo
+            
+            const isPlaying = !audio.paused && audio.currentTime > 0;
+            const time = Date.now() * 0.005;
+
+            for (let i = 0; i < numBars; i++) {
+                let height = 2; // Flat line if paused
+                if (isPlaying) {
+                    // Generate a synthetic wave visualizer since we might run without AudioContext CORS blocks
+                    const wave1 = Math.sin(i * 0.15 + time) * 12;
+                    const wave2 = Math.cos(i * 0.3 - time * 0.7) * 8;
+                    const noise = Math.sin(i * 0.9 + time * 1.5) * 4;
+                    height = Math.abs(wave1 + wave2 + noise) + 2;
+                    
+                    // Fade out at edges
+                    const fade = Math.sin((i / numBars) * Math.PI);
+                    height *= fade;
+                }
+                
+                const x = i * (barWidth + barGap);
+                const y = center - height / 2;
+                
+                ctx.beginPath();
+                ctx.roundRect(x, y, barWidth, height, 2);
+                ctx.fill();
+            }
+            
+            animationFrameId = requestAnimationFrame(drawVisualizer);
+        }
+        drawVisualizer();
+
+        // Broadcast current audio engine state to all listeners
+        function broadcastState() {
+            const state = {
+                type: 'engine_state',
+                paused: audio.paused,
+                currentTime: audio.currentTime,
+                duration: audio.duration || 0,
+                volume: audio.volume,
+                track: currentTrack,
+                classId: currentClassId,
+                className: currentClassName,
+                timestamp: Date.now()
+            };
+            channel.postMessage(state);
+            // Save state to localStorage as a fallback backup
+            localStorage.setItem('gnosys_audio_engine_state', JSON.stringify(state));
+        }
+
+        // Setup Media Session API (for OS lockscreen, overlays and keyboard keys)
+        function updateMediaSession() {
+            if ('mediaSession' in navigator && currentTrack) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: currentTrack.name || 'Untitled Track',
+                    artist: currentClassName || 'Gnosys AI Study Room',
+                    album: 'AI Study Music Studio'
+                });
+                
+                navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+            }
+        }
+
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.setActionHandler('play', () => { audio.play(); broadcastState(); });
+            navigator.mediaSession.setActionHandler('pause', () => { audio.pause(); broadcastState(); });
+            navigator.mediaSession.setActionHandler('previoustrack', () => { channel.postMessage({ type: 'prev' }); });
+            navigator.mediaSession.setActionHandler('nexttrack', () => { channel.postMessage({ type: 'next' }); });
+        }
+
+        // Listen for Audio tag events
+        audio.addEventListener('play', () => {
+            broadcastState();
+            updateMediaSession();
+        });
+        audio.addEventListener('pause', () => {
+            broadcastState();
+            updateMediaSession();
+        });
+        audio.addEventListener('timeupdate', () => {
+            // Send updates periodically to avoid spamming the thread
+            if (Math.floor(audio.currentTime) % 1 === 0) {
+                broadcastState();
+            }
+        });
+        audio.addEventListener('durationchange', broadcastState);
+        audio.addEventListener('volumechange', broadcastState);
+        audio.addEventListener('ended', () => {
+            broadcastState();
+            // Automatically tell the modules to play the next track
+            channel.postMessage({ type: 'track_ended', classId: currentClassId });
+        });
+
+        // Listen for requests from controller scripts
+        channel.onmessage = (event) => {
+            const data = event.data;
+            if (!data) return;
+
+            switch (data.type) {
+                case 'ping':
+                    // Immediate response to verify engine is alive
+                    broadcastState();
+                    break;
+                case 'play':
+                    audio.play().catch(err => console.log('Autoplay play blocked:', err));
+                    broadcastState();
+                    break;
+                case 'pause':
+                    audio.pause();
+                    broadcastState();
+                    break;
+                case 'set_volume':
+                    audio.volume = Math.max(0, Math.min(1, data.volume));
+                    broadcastState();
+                    break;
+                case 'set_time':
+                    audio.currentTime = data.time;
+                    broadcastState();
+                    break;
+                case 'load_track':
+                    // Load track url and start playing
+                    const absoluteUrl = data.url.startsWith('http') ? data.url : (window.location.origin + data.url);
+                    audio.src = absoluteUrl;
+                    currentTrack = data.track;
+                    currentClassId = data.classId;
+                    currentClassName = data.className || 'Idle';
+                    
+                    document.getElementById('track-name-display').textContent = currentTrack.name;
+                    document.getElementById('class-name-display').textContent = currentClassName;
+                    
+                    audio.play()
+                        .then(() => {
+                            broadcastState();
+                            updateMediaSession();
+                        })
+                        .catch(err => {
+                            console.log('Playback error:', err);
+                            broadcastState();
+                        });
+                    break;
+            }
+        };
+
+        // Periodically sync time state (every 500ms)
+        setInterval(broadcastState, 500);
+    </script>
+</body>
+</html>
