@@ -211,6 +211,30 @@
             0% { background-color: rgba(217, 70, 239, 0.25); }
             100% { background-color: transparent; }
         }
+        
+        /* Cockpit layout overrides for wide viewports */
+        @media (min-width: 1024px) {
+            .cockpit-grid {
+                display: grid !important;
+                grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+                gap: 1.5rem !important;
+                align-items: stretch !important;
+            }
+            .cockpit-chat {
+                grid-column: span 4 / span 4 !important;
+            }
+            .cockpit-lyrics {
+                grid-column: span 5 / span 5 !important;
+            }
+            .cockpit-settings {
+                grid-column: span 3 / span 3 !important;
+            }
+            .cockpit-panel {
+                height: 750px !important;
+                display: flex !important;
+                flex-direction: column !important;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen selection:bg-fuchsia-500/30 pb-20">
@@ -319,312 +343,312 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div class="cockpit-grid">
             
-            <!-- LEFT PANEL: Split Chat & Lyrics Workspace -->
-            <div class="lg:col-span-8 grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
-                
-                <!-- Chatbot Column (5/12 width or 6/12 width) -->
-                <div class="md:col-span-6 flex flex-col h-full">
-                    <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[550px] max-h-[750px]">
-                        <div class="absolute -right-24 -top-24 w-48 h-48 bg-fuchsia-600/10 rounded-full blur-3xl"></div>
-                        
-                        <!-- Chat Header -->
-                        <div class="flex items-center gap-3 mb-4 border-b border-white/5 pb-3 shrink-0">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center text-white shadow-lg">
-                                <i class="fa-solid fa-comments text-lg"></i>
-                            </div>
-                            <div>
-                                <h3 class="text-sm font-bold text-white">Gnosys Lyric Assistant</h3>
-                                <p class="text-[10px] text-fuchsia-400 font-bold uppercase tracking-wider">Conversational Songwriter</p>
-                            </div>
+            <!-- Column 1: Chatbot (md:col-span-6 cockpit-chat flex flex-col h-full) -->
+            <div class="md:col-span-6 cockpit-chat flex flex-col h-full">
+                <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden cockpit-panel min-h-[550px]">
+                    <div class="absolute -right-24 -top-24 w-48 h-48 bg-fuchsia-600/10 rounded-full blur-3xl"></div>
+                    
+                    <!-- Chat Header -->
+                    <div class="flex items-center gap-3 mb-4 border-b border-white/5 pb-3 shrink-0">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center text-white shadow-lg">
+                            <i class="fa-solid fa-comments text-lg"></i>
                         </div>
-
-                        <!-- Subject Selector inside Chat Options -->
-                        <div class="mb-4 space-y-2 shrink-0">
-                            <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Target Field of Study</label>
-                            <div class="flex gap-2">
-                                <select id="subject-selector" class="flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors cursor-pointer">
-                                    <option value="anatomy">Anatomy & Physiology</option>
-                                    <option value="chemistry">General Chemistry</option>
-                                    <option value="psychology">Intro to Psychology</option>
-                                    <option value="medicine">Medical Terminology</option>
-                                    <option value="custom">Custom Subject...</option>
-                                </select>
-                                <input type="text" id="custom-subject-input" placeholder="Custom Topic Details..." class="hidden flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
-                            </div>
-                        </div>
-
-                        <!-- Chat Messages Area -->
-                        <div id="studio-chat-history" class="flex-grow overflow-y-auto space-y-3 p-1 mb-4 chat-history-container pr-2">
-                            <!-- Welcome Message -->
-                            <div class="chat-bubble-agent p-3.5 text-xs text-slate-200 leading-relaxed max-w-[90%]">
-                                <p class="font-bold text-fuchsia-400 mb-1">Gnosys AI:</p>
-                                Welcome to the Gnosys Lyric Workspace! I can help you write, refine, and structure educational lyrics. 
-                                <br><br>
-                                You can:
-                                <ul class="list-disc list-inside mt-1.5 space-y-1 text-slate-300">
-                                    <li>Type instructions below to generate a new song.</li>
-                                    <li>Highlight any portion of the lyrics on the right to edit or ask questions about just that section.</li>
-                                    <li>Directly edit any line on the right yourself.</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <!-- Context Highlight Active Badge -->
-                        <div id="selection-context-badge" class="hidden items-center justify-between bg-fuchsia-500/10 border border-fuchsia-500/25 rounded-xl px-3.5 py-2.5 mb-3 shrink-0">
-                            <span class="text-[11px] text-fuchsia-300 font-bold flex items-center gap-1.5">
-                                <i class="fa-solid fa-highlighter"></i>
-                                <span id="selection-badge-text">Lines 1-5 selected</span>
-                            </span>
-                            <button id="btn-clear-selection" class="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer bg-transparent border-0 p-0">
-                                <i class="fa-solid fa-xmark"></i>
-                            </button>
-                        </div>
-
-                        <!-- Chat Input Box -->
-                        <div class="flex gap-2 items-end shrink-0">
-                            <textarea id="studio-chat-input" placeholder="Ask the chatbot to write or modify lyrics..." class="flex-grow bg-slate-950/85 border border-white/10 rounded-2xl px-4 py-3.5 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors max-h-24 min-h-[44px] resize-none" rows="1"></textarea>
-                            <button id="btn-send-chat" class="w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 border border-indigo-500/20 cursor-pointer">
-                                <i class="fa-solid fa-paper-plane text-sm"></i>
-                            </button>
+                        <div>
+                            <h3 class="text-sm font-bold text-white">Gnosys Lyric Assistant</h3>
+                            <p class="text-[10px] text-fuchsia-400 font-bold uppercase tracking-wider">Conversational Songwriter</p>
                         </div>
                     </div>
-                </div>
 
-                <!-- Lyrics Editor Column (6/12 width) -->
-                <div class="md:col-span-6 flex flex-col h-full">
-                    <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[550px] max-h-[750px]">
-                        <div class="absolute -left-24 -bottom-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
-
-                        <!-- Editor Header / Toolbar -->
-                        <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-3 shrink-0">
-                            <div class="flex items-center gap-2">
-                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md">
-                                    <i class="fa-solid fa-pen-nib text-sm"></i>
-                                </div>
-                                <h3 class="text-xs font-bold text-white uppercase tracking-wider">Lyrics Workspace</h3>
-                            </div>
-                            <div class="flex items-center gap-1.5">
-                                <button id="btn-undo-lyrics" disabled class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Undo change">
-                                    <i class="fa-solid fa-rotate-left"></i>
-                                </button>
-                                <button id="btn-clear-lyrics" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Clear Workspace">
-                                    <i class="fa-solid fa-trash-can"></i>
-                                </button>
-                                <button id="btn-copy-lyrics" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Copy to clipboard">
-                                    <i class="fa-solid fa-copy"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Interactive Editor -->
-                        <div class="flex-grow flex flex-col relative min-h-[350px]">
-                            <div class="lyrics-editor-wrapper flex-grow flex items-stretch relative min-h-[300px]">
-                                <!-- Scrollable Gutter for Line Numbers -->
-                                <div id="lyrics-gutter" class="lyrics-gutter-col">
-                                    <div class="lyrics-gutter-line">1</div>
-                                </div>
-                                <!-- Textarea editor -->
-                                <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. Highlight text to edit sections or type directly." class="lyrics-textarea-field"></textarea>
-                            </div>
+                    <!-- Subject Selector inside Chat Options -->
+                    <div class="mb-4 space-y-2 shrink-0">
+                        <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Target Field of Study</label>
+                        <div class="flex gap-2">
+                            <select id="subject-selector" class="flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors cursor-pointer">
+                                <option value="anatomy">Anatomy & Physiology</option>
+                                <option value="chemistry">General Chemistry</option>
+                                <option value="psychology">Intro to Psychology</option>
+                                <option value="medicine">Medical Terminology</option>
+                                <option value="custom">Custom Subject...</option>
+                            </select>
+                            <input type="text" id="custom-subject-input" placeholder="Custom Topic Details..." class="hidden flex-grow bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors">
                         </div>
                     </div>
-                </div>
 
+                    <!-- Chat Messages Area -->
+                    <div id="studio-chat-history" class="flex-grow overflow-y-auto space-y-3 p-1 mb-4 chat-history-container pr-2">
+                        <!-- Welcome Message -->
+                        <div class="chat-bubble-agent p-3.5 text-xs text-slate-200 leading-relaxed max-w-[90%]">
+                            <p class="font-bold text-fuchsia-400 mb-1">Gnosys AI:</p>
+                            Welcome to the Gnosys Lyric Workspace! I can help you write, refine, and structure educational lyrics. 
+                            <br><br>
+                            You can:
+                            <ul class="list-disc list-inside mt-1.5 space-y-1 text-slate-300">
+                                <li>Type instructions below to generate a new song.</li>
+                                <li>Highlight any portion of the lyrics on the right to edit or ask questions about just that section.</li>
+                                <li>Directly edit any line on the right yourself.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Context Highlight Active Badge -->
+                    <div id="selection-context-badge" class="hidden items-center justify-between bg-fuchsia-500/10 border border-fuchsia-500/25 rounded-xl px-3.5 py-2.5 mb-3 shrink-0">
+                        <span class="text-[11px] text-fuchsia-300 font-bold flex items-center gap-1.5">
+                            <i class="fa-solid fa-highlighter"></i>
+                            <span id="selection-badge-text">Lines 1-5 selected</span>
+                        </span>
+                        <button id="btn-clear-selection" class="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer bg-transparent border-0 p-0">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <!-- Chat Input Box -->
+                    <div class="flex gap-2 items-end shrink-0">
+                        <textarea id="studio-chat-input" placeholder="Ask the chatbot to write or modify lyrics..." class="flex-grow bg-slate-950/85 border border-white/10 rounded-2xl px-4 py-3.5 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors max-h-24 min-h-[44px] resize-none" rows="1"></textarea>
+                        <button id="btn-send-chat" class="w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-md shrink-0 border border-indigo-500/20 cursor-pointer">
+                            <i class="fa-solid fa-paper-plane text-sm"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
-            
-            <!-- RIGHT PANEL: ComfyUI / ACE Step Composer -->
-            <div class="lg:col-span-4 flex flex-col">
-                <div class="glass-card rounded-3xl p-8 flex-grow flex flex-col border border-white/10 relative overflow-hidden min-h-[500px]">
+
+            <!-- Column 2: Lyrics Workspace (md:col-span-6 cockpit-lyrics flex flex-col h-full) -->
+            <div class="md:col-span-6 cockpit-lyrics flex flex-col h-full">
+                <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden cockpit-panel min-h-[550px]">
                     <div class="absolute -left-24 -bottom-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
 
-                    <div class="flex items-center gap-3 mb-6">
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg">
-                            <i class="fa-solid fa-music text-xl"></i>
+                    <!-- Editor Header / Toolbar -->
+                    <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-3 shrink-0">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md">
+                                <i class="fa-solid fa-pen-nib text-sm"></i>
+                            </div>
+                            <h3 class="text-xs font-bold text-white uppercase tracking-wider">Lyrics Workspace</h3>
                         </div>
-                        <div>
-                            <h3 class="text-lg font-bold text-white">ACE Step 1.5 Settings</h3>
-                            <p class="text-xs text-indigo-400 font-bold uppercase tracking-wider mt-0.5">Local Audio Generator</p>
+                        <div class="flex items-center gap-1.5">
+                            <button id="btn-undo-lyrics" disabled class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Undo change">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </button>
+                            <button id="btn-clear-lyrics" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Clear Workspace">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                            <button id="btn-copy-lyrics" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 transition-all text-xs font-semibold cursor-pointer" title="Copy to clipboard">
+                                <i class="fa-solid fa-copy"></i>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="space-y-4 mb-6">
+                    <!-- Interactive Editor -->
+                    <div class="flex-grow flex flex-col relative min-h-0">
+                        <div class="lyrics-editor-wrapper flex-grow flex items-stretch relative min-h-0">
+                            <!-- Scrollable Gutter for Line Numbers -->
+                            <div id="lyrics-gutter" class="lyrics-gutter-col">
+                                <div class="lyrics-gutter-line">1</div>
+                            </div>
+                            <!-- Textarea editor -->
+                            <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. Highlight text to edit sections or type directly." class="lyrics-textarea-field"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Column 3: Generator Settings (md:col-span-12 cockpit-settings flex flex-col) -->
+            <div class="md:col-span-12 cockpit-settings flex flex-col">
+                <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden cockpit-panel min-h-[500px]">
+                    <div class="absolute -left-24 -bottom-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
+
+                    <!-- Settings Header -->
+                    <div class="flex items-center gap-3 mb-4 border-b border-white/5 pb-3 shrink-0">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg">
+                            <i class="fa-solid fa-music text-lg"></i>
+                        </div>
                         <div>
-                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Track Prompt (Mood/Genre)</label>
-                            <input type="text" id="music-prompt" value="lofi study beats, soft chill ambient synth, relaxing piano, focus tempo" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
+                            <h3 class="text-sm font-bold text-white">ACE Step 1.5 Settings</h3>
+                            <p class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mt-0.5">Local Audio Generator</p>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Settings Options Area -->
+                    <div class="flex-grow overflow-y-auto space-y-4 pr-2 chat-history-container mb-4">
+                        <div>
+                            <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Track Prompt (Mood/Genre)</label>
+                            <input type="text" id="music-prompt" value="lofi study beats, soft chill ambient synth, relaxing piano, focus tempo" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors">
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Model Selection</label>
-                                <select id="music-model" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
+                                <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Model Selection</label>
+                                <select id="music-model" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
                                     <option value="acemusic/acestep-v15-xl-turbo" selected>acemusic/acestep-v15-xl-turbo (4B XL Turbo - Premium Fast)</option>
                                     <option value="acemusic/acestep-v15-xl-sft">acemusic/acestep-v15-xl-sft (4B XL SFT - High Quality Fine-Tuned)</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">VRAM Profile</label>
-                                <select id="music-vram-profile" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
+                                <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">VRAM Profile</label>
+                                <select id="music-vram-profile" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
                                     <option value="high">Standard (High VRAM)</option>
                                     <option value="low">Optimized (Low VRAM / FP8)</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Tempo (BPM)</label>
-                                <select id="music-bpm" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
+                                <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Tempo (BPM)</label>
+                                <select id="music-bpm" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
                                     <option value="80">80 (Chill / Lofi)</option>
                                     <option value="100">100 (Relaxed)</option>
                                     <option value="120">120 (Upbeat)</option>
                                 </select>
                             </div>
                             <div>
-                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Audio Length</label>
+                                 <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Audio Length</label>
                                  <div class="relative flex items-center mb-1.5">
-                                     <input type="number" id="music-length" value="60" min="5" max="300" class="w-full studio-input rounded-2xl pl-4 pr-12 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors font-mono" placeholder="60">
-                                     <span class="absolute right-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Sec</span>
+                                     <input type="number" id="music-length" value="60" min="5" max="300" class="w-full studio-input rounded-xl pl-3 pr-10 py-2 text-xs text-slate-200 focus:outline-none transition-colors font-mono" placeholder="60">
+                                     <span class="absolute right-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sec</span>
                                  </div>
-                                 <div class="flex gap-1.5 flex-wrap">
-                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="30">30s</button>
-                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="60">60s</button>
-                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="90">90s</button>
-                                     <button type="button" class="preset-length-btn text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="120">120s</button>
+                                 <div class="flex gap-1 flex-wrap">
+                                     <button type="button" class="preset-length-btn text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="30">30s</button>
+                                     <button type="button" class="preset-length-btn text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="60">60s</button>
+                                     <button type="button" class="preset-length-btn text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="90">90s</button>
+                                     <button type="button" class="preset-length-btn text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 transition-all" data-value="120">120s</button>
                                  </div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Inference Steps</label>
-                                <select id="music-steps" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
+                                <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Inference Steps</label>
+                                <select id="music-steps" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
                                     <option value="8">8 Steps (ACE Turbo - Fastest)</option>
                                     <option value="20">20 Steps (Standard - Better Quality)</option>
                                     <option value="50" selected>50 Steps (Supervised Fine-Tune - High Quality)</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Vocal Generation</label>
-                                <select id="music-vocals" class="w-full studio-input rounded-2xl px-4 py-3.5 text-sm text-slate-200 focus:outline-none transition-colors">
+                                <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Vocal Generation</label>
+                                <select id="music-vocals" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
                                     <option value="on">Vocals On (Sings Lyrics)</option>
                                     <option value="off">Instrumental Only (BGM)</option>
                                 </select>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Advanced Studio Tuning Accordion -->
-                    <div class="mb-6 rounded-2xl border border-white/5 bg-slate-900/40 overflow-hidden">
-                        <button id="btn-toggle-advanced" type="button" class="w-full px-5 py-4 flex justify-between items-center bg-slate-950/40 hover:bg-slate-950/60 transition-colors text-left">
-                            <span class="text-xs font-extrabold uppercase tracking-wider text-indigo-300">
-                                <i class="fa-solid fa-sliders mr-2"></i> Advanced Studio Tuning
-                            </span>
-                            <i id="advanced-chevron" class="fa-solid fa-chevron-down text-slate-400 text-xs transition-transform duration-300"></i>
-                        </button>
-                        <div id="advanced-settings-panel" class="hidden p-5 space-y-4 border-t border-white/5 bg-slate-950/20">
-                            <div class="grid grid-cols-2 gap-4">
-                                <label class="flex items-center gap-2.5 cursor-pointer py-1">
-                                    <input type="checkbox" id="music-thinking" checked class="rounded bg-slate-900 border-white/10 text-indigo-600 focus:ring-0 focus:ring-offset-0 w-4 h-4">
-                                    <span class="text-xs text-slate-300 font-semibold select-none">Thinking (CoT Planner)</span>
-                                </label>
-                                <label class="flex items-center gap-2.5 cursor-pointer py-1">
-                                    <input type="checkbox" id="music-format" checked class="rounded bg-slate-900 border-white/10 text-indigo-600 focus:ring-0 focus:ring-offset-0 w-4 h-4">
-                                    <span class="text-xs text-slate-300 font-semibold select-none">Metadata Enhancer</span>
-                                </label>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Musical Key</label>
-                                    <select id="music-key" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors">
-                                        <option value="">Auto-Detect Key</option>
-                                        <option value="C Major">C Major (Happy, Clear)</option>
-                                        <option value="G Major">G Major (Bright, Pure)</option>
-                                        <option value="A Minor">A Minor (Pensive, Deep)</option>
-                                        <option value="E Minor">E Minor (Emotional, Focused)</option>
-                                        <option value="D Minor">D Minor (Melancholic, Intense)</option>
-                                        <option value="F Major">F Major (Warm, Calm)</option>
-                                    </select>
+                        <!-- Advanced Studio Tuning Accordion inside scrollable area -->
+                        <div class="rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+                            <button id="btn-toggle-advanced" type="button" class="w-full px-4 py-3 flex justify-between items-center bg-slate-950/40 hover:bg-slate-950/60 transition-colors text-left">
+                                <span class="text-[11px] font-extrabold uppercase tracking-wider text-indigo-300">
+                                    <i class="fa-solid fa-sliders mr-1.5"></i> Advanced Studio Tuning
+                                </span>
+                                <i id="advanced-chevron" class="fa-solid fa-chevron-down text-slate-400 text-xs transition-transform duration-300"></i>
+                            </button>
+                            <div id="advanced-settings-panel" class="hidden p-4 space-y-3.5 border-t border-white/5 bg-slate-950/20">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <label class="flex items-center gap-2 cursor-pointer py-0.5">
+                                        <input type="checkbox" id="music-thinking" checked class="rounded bg-slate-900 border-white/10 text-indigo-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5">
+                                        <span class="text-[11px] text-slate-300 font-semibold select-none">Thinking (CoT)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer py-0.5">
+                                        <input type="checkbox" id="music-format" checked class="rounded bg-slate-900 border-white/10 text-indigo-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5">
+                                        <span class="text-[11px] text-slate-300 font-semibold select-none">Enhancer</span>
+                                    </label>
                                 </div>
-                                <div>
-                                    <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Time Signature</label>
-                                    <select id="music-signature" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors">
-                                        <option value="">Auto-Detect Metric</option>
-                                        <option value="4">4/4 (Standard Meter)</option>
-                                        <option value="3">3/4 (Waltz Metric)</option>
-                                        <option value="6">6/8 (Compound Meter)</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4 items-end">
-                                <div>
-                                    <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Custom Seed</label>
-                                    <input type="number" id="music-seed" placeholder="Random Seed" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors font-mono">
-                                </div>
-                                <div>
-                                    <div class="flex justify-between items-center mb-1">
-                                        <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">LM CFG Scale</label>
-                                        <span id="lm-cfg-val" class="text-[10px] font-bold text-indigo-400 font-mono">2.0</span>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mb-1">Musical Key</label>
+                                        <select id="music-key" class="w-full studio-input rounded-xl px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
+                                            <option value="">Auto-Detect Key</option>
+                                            <option value="C Major">C Major (Happy)</option>
+                                            <option value="G Major">G Major (Bright)</option>
+                                            <option value="A Minor">A Minor (Pensive)</option>
+                                            <option value="E Minor">E Minor (Focused)</option>
+                                            <option value="D Minor">D Minor (Melancholic)</option>
+                                            <option value="F Major">F Major (Warm)</option>
+                                        </select>
                                     </div>
-                                    <input type="range" id="music-lm-cfg" min="1.0" max="5.0" step="0.5" value="2.0" class="w-full accent-indigo-500 h-1.5 bg-slate-950 rounded-lg appearance-none cursor-pointer">
+                                    <div>
+                                        <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mb-1">Time Signature</label>
+                                        <select id="music-signature" class="w-full studio-input rounded-xl px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
+                                            <option value="">Auto-Detect</option>
+                                            <option value="4">4/4 (Standard)</option>
+                                            <option value="3">3/4 (Waltz)</option>
+                                            <option value="6">6/8 (Compound)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3 items-end">
+                                    <div>
+                                        <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mb-1">Custom Seed</label>
+                                        <input type="number" id="music-seed" placeholder="Random Seed" class="w-full studio-input rounded-xl px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition-colors font-mono">
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between items-center mb-1">
+                                            <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400">LM CFG Scale</label>
+                                            <span id="lm-cfg-val" class="text-[9px] font-bold text-indigo-400 font-mono">2.0</span>
+                                        </div>
+                                        <input type="range" id="music-lm-cfg" min="1.0" max="5.0" step="0.5" value="2.0" class="w-full accent-indigo-500 h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer">
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <button id="btn-generate-track" class="w-full py-4 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white font-bold text-sm transition-all shadow-lg glow-button mb-8 flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-play"></i> Generate Study Track
-                    </button>
+                    <!-- Bottom Docked Area for Generation Trigger & Player -->
+                    <div class="shrink-0 mt-auto pt-3 border-t border-white/5 space-y-3">
+                        <button id="btn-generate-track" class="w-full py-3 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white font-bold text-xs transition-all shadow-lg glow-button flex items-center justify-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-play"></i> Generate Study Track
+                        </button>
 
-                    <!-- Generation Progress UI -->
-                    <div id="generation-progress-container" class="hidden space-y-3 p-5 rounded-2xl bg-white/5 border border-white/5 mb-8">
-                        <div class="flex justify-between items-center text-xs font-bold text-slate-300">
-                            <span id="gen-status-text">Queuing prompt on local ComfyUI...</span>
-                            <span id="gen-percent">0%</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div id="gen-progress-bar-fill" class="progress-bar-fill"></div>
-                        </div>
-                    </div>
-
-                    <!-- Audio Player Box -->
-                    <div id="player-container" class="hidden mt-auto p-6 rounded-2xl bg-slate-900/80 border border-white/5 flex flex-col gap-4">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-                                <i class="fa-solid fa-headphones"></i>
+                        <!-- Generation Progress UI -->
+                        <div id="generation-progress-container" class="hidden space-y-2 p-3.5 rounded-xl bg-white/5 border border-white/5">
+                            <div class="flex justify-between items-center text-[10px] font-bold text-slate-300">
+                                <span id="gen-status-text">Queuing...</span>
+                                <span id="gen-percent">0%</span>
                             </div>
-                            <div>
-                                <h4 class="text-sm font-bold text-white">Your Generated Study Session Beat</h4>
-                                <p class="text-xs text-slate-400" id="player-track-info">120 BPM • Instrumental Beat</p>
-                            </div>
-                        </div>
-                        <audio id="audio-player" controls class="w-full h-10 mt-2 bg-slate-800 rounded-lg"></audio>
-                        
-                        <!-- Add to Playlist Section -->
-                        <div class="flex flex-col gap-2 mt-2 pt-2 border-t border-white/5">
-                            <label class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 text-left">Save to Study Playlist</label>
-                            <div class="flex gap-2">
-                                <select id="playlist-target-select" class="flex-grow studio-input rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none transition-colors border border-white/5 cursor-pointer">
-                                    <option value="medical-terminology" selected>Medical Terminology</option>
-                                    <option value="intro-to-chemistry">Intro to Chemistry</option>
-                                    <option value="chemistry-math-refresher">Chemistry Math Refresher</option>
-                                    <option value="clinical-mathematics">Clinical Mathematics</option>
-                                    <option value="psychology-care">Intro to Psychology</option>
-                                    <option value="anatomy-physiology-1">Anatomy & Physiology I</option>
-                                    <option value="anatomy-physiology-2">Anatomy & Physiology II</option>
-                                    <option value="anatomy-physiology-3">Anatomy & Physiology III</option>
-                                </select>
-                                <button id="btn-add-to-playlist" class="btn-playlist-glow px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                                    <i class="fa-solid fa-folder-plus"></i>
-                                    <span>Add to Playlist</span>
-                                </button>
+                            <div class="progress-bar">
+                                <div id="gen-progress-bar-fill" class="progress-bar-fill"></div>
                             </div>
                         </div>
 
-                        <a id="btn-download-audio" href="#" download="GnosysStudyTrack.wav" class="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-center font-bold text-slate-300 hover:text-white border border-white/5 transition-all">
-                            <i class="fa-solid fa-download mr-1.5"></i> Export WAV File
-                        </a>
+                        <!-- Audio Player Box -->
+                        <div id="player-container" class="hidden p-4 rounded-xl bg-slate-900/80 border border-white/5 flex flex-col gap-3">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-headphones text-sm"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <h4 class="text-xs font-bold text-white truncate">Your Generated Study Beat</h4>
+                                    <p class="text-[10px] text-slate-400 truncate" id="player-track-info">120 BPM • Instrumental Beat</p>
+                                </div>
+                            </div>
+                            <audio id="audio-player" controls class="w-full h-8 mt-1 bg-slate-800 rounded-lg"></audio>
+                            
+                            <!-- Add to Playlist Section -->
+                            <div class="flex flex-col gap-1.5 mt-1 pt-1.5 border-t border-white/5">
+                                <label class="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 text-left">Save to Study Playlist</label>
+                                <div class="flex gap-2">
+                                    <select id="playlist-target-select" class="flex-grow studio-input rounded-xl px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition-colors border border-white/5 cursor-pointer">
+                                        <option value="medical-terminology" selected>Medical Terminology</option>
+                                        <option value="intro-to-chemistry">Intro to Chemistry</option>
+                                        <option value="chemistry-math-refresher">Chemistry Math Refresher</option>
+                                        <option value="clinical-mathematics">Clinical Mathematics</option>
+                                        <option value="psychology-care">Intro to Psychology</option>
+                                        <option value="anatomy-physiology-1">Anatomy & Physiology I</option>
+                                        <option value="anatomy-physiology-2">Anatomy & Physiology II</option>
+                                        <option value="anatomy-physiology-3">Anatomy & Physiology III</option>
+                                    </select>
+                                    <button id="btn-add-to-playlist" class="btn-playlist-glow px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer">
+                                        <i class="fa-solid fa-folder-plus"></i>
+                                        <span>Add</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <a id="btn-download-audio" href="#" download="GnosysStudyTrack.wav" class="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] text-center font-bold text-slate-300 hover:text-white border border-white/5 transition-all">
+                                <i class="fa-solid fa-download mr-1"></i> Export WAV File
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
