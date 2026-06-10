@@ -95,6 +95,61 @@
         }
     }
 
+    const PERSISTED_FIELDS = [
+        'music-prompt',
+        'music-model',
+        'music-bpm',
+        'music-length',
+        'music-steps',
+        'music-vocals',
+        'music-thinking',
+        'music-format',
+        'music-key',
+        'music-signature',
+        'music-seed',
+        'music-lm-cfg',
+        'lyrics-prompt',
+        'generated-lyrics'
+    ];
+
+    function saveMusicStudioSettings() {
+        const settings = {};
+        PERSISTED_FIELDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                if (el.type === 'checkbox') {
+                    settings[id] = el.checked;
+                } else {
+                    settings[id] = el.value;
+                }
+            }
+        });
+        localStorage.setItem('gnosys_music_studio_settings', JSON.stringify(settings));
+    }
+
+    function loadMusicStudioSettings() {
+        try {
+            const settingsStr = localStorage.getItem('gnosys_music_studio_settings');
+            if (settingsStr) {
+                const settings = JSON.parse(settingsStr);
+                PERSISTED_FIELDS.forEach(id => {
+                    if (id in settings) {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            if (el.type === 'checkbox') {
+                                el.checked = settings[id];
+                            } else {
+                                el.value = settings[id];
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('[Music Studio] Failed to load persisted settings:', e);
+        }
+    }
+
     function initUI() {
         document.getElementById('current-comfy-path').textContent = comfyPath;
         
@@ -135,8 +190,21 @@
                 const lengthInput = document.getElementById('music-length');
                 if (lengthInput) {
                     lengthInput.value = val;
+                    saveMusicStudioSettings();
                 }
             });
+        });
+
+        // Load persisted studio settings
+        loadMusicStudioSettings();
+
+        // Attach event listeners to auto-persist changes
+        PERSISTED_FIELDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                const eventType = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'input';
+                el.addEventListener(eventType, saveMusicStudioSettings);
+            }
         });
 
         // Download All button
