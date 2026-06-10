@@ -8,6 +8,7 @@
     let pendingGeneration = false;
     let isLaunchingService = false;
     let isLaunchingAssistant = false;
+    let pendingTrack = null;
 
     let explorerCurrentPath = comfyPath;
 
@@ -286,6 +287,25 @@
             localAudio.addEventListener('play', () => {
                 const globalChannel = new BroadcastChannel('gnosys_audio_channel');
                 globalChannel.postMessage({ type: 'pause' });
+            });
+
+            localAudio.addEventListener('ended', () => {
+                if (pendingTrack) {
+                    const url = pendingTrack.url;
+                    pendingTrack = null;
+                    loadAudioToPlayer(url);
+                }
+            });
+
+            localAudio.addEventListener('pause', () => {
+                // Wait 100ms to verify it's a real pause rather than src transition reset
+                setTimeout(() => {
+                    if (localAudio.paused && pendingTrack) {
+                        const url = pendingTrack.url;
+                        pendingTrack = null;
+                        loadAudioToPlayer(url);
+                    }
+                }, 100);
             });
         }
 
@@ -1178,6 +1198,14 @@ signature: (recommend "4", "3", or "6" for time signature)
         const prompt = document.getElementById('music-prompt').value;
         const bpm = document.getElementById('music-bpm').value;
 
+        // Check if the local audio player is currently playing a track
+        const isLocalPlaying = audio && !audio.paused && !audio.ended && audio.currentTime > 0;
+        if (isLocalPlaying) {
+            pendingTrack = { url };
+            showBannerNotification("Your new study beat is ready! Pause the current track or let it finish to load the new one.", "info");
+            return;
+        }
+
         audio.src = url;
         downloadBtn.href = url;
         document.getElementById('player-track-info').textContent = `${bpm} BPM • ${prompt}`;
@@ -1219,7 +1247,7 @@ signature: (recommend "4", "3", or "6" for time signature)
 
         if (isBackgroundPlaying) {
             // Background playlist is active: do not autoplay local preview to avoid cacophony
-            alert("New track generation completed! Your study beat is ready for preview in the player below.");
+            showBannerNotification("New track generation completed! Your study beat is ready for preview in the player below.", "info");
         } else {
             // Background playlist is idle: silently autoplay local player preview
             audio.play().catch(err => {
