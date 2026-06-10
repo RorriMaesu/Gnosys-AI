@@ -399,6 +399,9 @@
             }
         };
 
+        // Announce engine is alive and ready to receive commands
+        channel.postMessage({ type: 'engine_ready', timestamp: Date.now() });
+
         // Periodically sync time state (every 500ms)
         setInterval(broadcastState, 500);
     </script>

@@ -273,9 +273,9 @@
                             downloadTrackFile(resData.track.url, `${nameToSave}.${ext}`);
                         }
 
-                        // Trigger broadcast channel reload
+                        // Trigger broadcast channel refresh of all global player instances
                         const globalChannel = new BroadcastChannel('gnosys_audio_channel');
-                        globalChannel.postMessage({ type: 'ping' });
+                        globalChannel.postMessage({ type: 'playlist_updated' });
                     } else {
                         throw new Error(resData.message);
                     }

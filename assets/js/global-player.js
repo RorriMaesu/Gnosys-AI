@@ -8,7 +8,7 @@
     
     // State variables
     let playlists = {};
-    let activeClassId = getCurrentClassId();
+    let activeClassId = localStorage.getItem('gnosys_player_activeClassId') || getCurrentClassId();
     let playingClassId = null;
     let currentTrack = null;
     let isPaused = true;
@@ -18,6 +18,16 @@
     let isEngineAlive = false;
     let pingInterval = null;
     let dragSrcEl = null;
+
+    // Engine readiness queue — buffers commands until popup is confirmed alive
+    let pendingEngineCommands = [];
+    let engineLaunchRetries = 0;
+    const MAX_ENGINE_RETRIES = 2;
+    let engineRetryTimer = null;
+
+    // Inline fallback audio element for popup blocker scenarios
+    let inlineFallbackAudio = null;
+    let usingInlineFallback = false;
 
     // Mini visualizer variables & Pomodoro tracking
     let miniCanvas = null;
@@ -56,6 +66,7 @@
         injectStyles();
         createFloatingWidget();
         initMiniVisualizer();
+        restoreStateFromStorage();
         fetchPlaylists();
         
         // Start pinging and state checks
@@ -66,6 +77,37 @@
         checkEngineStatus();
         checkPomodoroState();
     });
+
+    // Restore player state from localStorage for cross-module persistence
+    function restoreStateFromStorage() {
+        try {
+            const stateStr = localStorage.getItem('gnosys_audio_engine_state');
+            if (stateStr) {
+                const state = JSON.parse(stateStr);
+                if (state && state.track) {
+                    currentTrack = state.track;
+                    playingClassId = state.classId || null;
+                    isPaused = state.paused !== false;
+                    volume = state.volume || 0.8;
+                    currentTime = state.currentTime || 0;
+                    duration = state.duration || 0;
+                    
+                    // Restore volume slider
+                    const vol = document.getElementById('gnosys-player-volume');
+                    if (vol) vol.value = volume;
+                }
+            }
+        } catch (e) {
+            console.warn('[Global Player] Failed to restore state from localStorage:', e);
+        }
+
+        // Restore drawer open state
+        const drawerOpen = localStorage.getItem('gnosys_player_drawer_open');
+        if (drawerOpen === 'true') {
+            const overlay = document.getElementById('gnosys-player-overlay');
+            if (overlay) overlay.classList.add('active');
+        }
+    }
 
     // Fetch lists from backend
     async function fetchPlaylists() {
@@ -94,12 +136,11 @@
 
     function updateEngineStatusUI() {
         const indicator = document.getElementById('gnosys-player-status');
-        const playBtnIcon = document.querySelector('#gnosys-player-btn-play i');
         
         if (indicator) {
-            if (isEngineAlive) {
+            if (isEngineAlive || usingInlineFallback) {
                 indicator.className = 'status-dot active';
-                indicator.title = 'Audio Engine Active';
+                indicator.title = usingInlineFallback ? 'Audio Engine (Inline Mode)' : 'Audio Engine Active';
             } else {
                 indicator.className = 'status-dot inactive';
                 indicator.title = 'Audio Engine Popout Closed. Click Play to open.';
@@ -107,7 +148,7 @@
         }
     }
 
-    // Launch hidden/popout window
+    // Launch hidden/popout window with retry logic
     function launchEngineWindow() {
         const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
         const engineUrl = window.location.origin + baseHref + 'music/player-engine.html';
@@ -116,9 +157,135 @@
             'GnosysPlayerEngine',
             'width=360,height=240,menubar=no,toolbar=no,location=no,status=no,resizable=no'
         );
-        isEngineAlive = true;
-        updateEngineStatusUI();
+
+        // Detect popup blocker
+        if (!w || w.closed || typeof w.closed === 'undefined') {
+            console.warn('[Global Player] Popup blocked! Falling back to inline audio.');
+            activateInlineFallback();
+            return null;
+        }
+
+        // Set a retry timer: if engine doesn't announce ready within 3s, retry
+        if (engineRetryTimer) clearTimeout(engineRetryTimer);
+        engineRetryTimer = setTimeout(() => {
+            if (!isEngineAlive && !usingInlineFallback) {
+                engineLaunchRetries++;
+                if (engineLaunchRetries <= MAX_ENGINE_RETRIES) {
+                    console.warn(`[Global Player] Engine not responding, retry ${engineLaunchRetries}/${MAX_ENGINE_RETRIES}`);
+                    launchEngineWindow();
+                } else {
+                    console.warn('[Global Player] Engine launch failed after retries. Using inline fallback.');
+                    activateInlineFallback();
+                }
+            }
+        }, 3000);
+
         return w;
+    }
+
+    // Inline fallback: create a hidden <audio> element on the main page
+    function activateInlineFallback() {
+        if (inlineFallbackAudio) return; // Already active
+        usingInlineFallback = true;
+        isEngineAlive = true; // Treat as alive for UI purposes
+
+        inlineFallbackAudio = document.createElement('audio');
+        inlineFallbackAudio.id = 'gnosys-inline-fallback-audio';
+        inlineFallbackAudio.crossOrigin = 'anonymous';
+        inlineFallbackAudio.style.display = 'none';
+        document.body.appendChild(inlineFallbackAudio);
+
+        // Wire up events to mirror the popup engine behaviour
+        inlineFallbackAudio.addEventListener('play', broadcastInlineState);
+        inlineFallbackAudio.addEventListener('pause', broadcastInlineState);
+        inlineFallbackAudio.addEventListener('timeupdate', broadcastInlineState);
+        inlineFallbackAudio.addEventListener('durationchange', broadcastInlineState);
+        inlineFallbackAudio.addEventListener('volumechange', broadcastInlineState);
+        inlineFallbackAudio.addEventListener('ended', () => {
+            broadcastInlineState();
+            playNextTrack();
+        });
+
+        updateEngineStatusUI();
+        flushPendingCommands();
+        showGlobalToast('Audio engine running in inline mode.');
+    }
+
+    function broadcastInlineState() {
+        if (!inlineFallbackAudio) return;
+        isPaused = inlineFallbackAudio.paused;
+        currentTime = inlineFallbackAudio.currentTime;
+        duration = inlineFallbackAudio.duration || 0;
+        volume = inlineFallbackAudio.volume;
+        updateUIState();
+
+        // Mirror localStorage backup like the popup engine does
+        const state = {
+            type: 'engine_state',
+            paused: isPaused,
+            currentTime: currentTime,
+            duration: duration,
+            volume: volume,
+            track: currentTrack,
+            classId: playingClassId,
+            timestamp: Date.now()
+        };
+        localStorage.setItem('gnosys_audio_engine_state', JSON.stringify(state));
+    }
+
+    // Process a command locally on the inline fallback audio element
+    function handleInlineCommand(data) {
+        if (!inlineFallbackAudio || !data) return;
+        switch (data.type) {
+            case 'play':
+                inlineFallbackAudio.play().catch(err => console.log('Inline play blocked:', err));
+                break;
+            case 'pause':
+                inlineFallbackAudio.pause();
+                break;
+            case 'set_volume':
+                inlineFallbackAudio.volume = Math.max(0, Math.min(1, data.volume));
+                break;
+            case 'set_time':
+                inlineFallbackAudio.currentTime = data.time;
+                break;
+            case 'load_track':
+                inlineFallbackAudio.src = data.url;
+                currentTrack = data.track;
+                playingClassId = data.classId;
+                inlineFallbackAudio.play()
+                    .then(() => broadcastInlineState())
+                    .catch(err => { console.log('Inline playback error:', err); broadcastInlineState(); });
+                break;
+        }
+    }
+
+    // Flush any commands buffered while the engine was starting
+    function flushPendingCommands() {
+        if (pendingEngineCommands.length === 0) return;
+        const commands = [...pendingEngineCommands];
+        pendingEngineCommands = [];
+        commands.forEach(cmd => {
+            if (usingInlineFallback) {
+                handleInlineCommand(cmd);
+            } else {
+                channel.postMessage(cmd);
+            }
+        });
+    }
+
+    // Resolve a track URL to an absolute URL using API_BASE
+    function resolveTrackUrl(url) {
+        if (!url) return url;
+        if (url.startsWith('http') || url.startsWith('data:')) return url;
+        if (API_BASE) {
+            return API_BASE + (url.startsWith('/') ? url : '/' + url);
+        }
+        const baseHref = window.location.pathname.startsWith('/Gnosys-AI') ? '/Gnosys-AI/' : '/';
+        if (url.startsWith('/')) {
+            return window.location.origin + baseHref + url.substring(1);
+        }
+        return window.location.origin + baseHref + url;
     }
 
     // Listen to engine updates
@@ -126,7 +293,14 @@
         const data = event.data;
         if (!data) return;
 
-        if (data.type === 'engine_state') {
+        if (data.type === 'engine_ready') {
+            // Engine popup just initialized — mark alive and flush queued commands
+            isEngineAlive = true;
+            engineLaunchRetries = 0;
+            if (engineRetryTimer) { clearTimeout(engineRetryTimer); engineRetryTimer = null; }
+            updateEngineStatusUI();
+            flushPendingCommands();
+        } else if (data.type === 'engine_state') {
             isEngineAlive = true;
             isPaused = data.paused;
             currentTime = data.currentTime;
@@ -142,6 +316,7 @@
                 if (select) {
                     activeClassId = data.classId;
                     select.value = activeClassId;
+                    localStorage.setItem('gnosys_player_activeClassId', activeClassId);
                     renderPlaylistTracks();
                 }
             }
@@ -153,6 +328,9 @@
             playPrevTrack();
         } else if (data.type === 'next') {
             playNextTrack();
+        } else if (data.type === 'playlist_updated') {
+            // Another window (Music Studio) added/changed a track — refresh list
+            fetchPlaylists();
         }
     };
 
@@ -254,6 +432,7 @@
         const select = document.getElementById('gnosys-player-class-select');
         select.addEventListener('change', (e) => {
             activeClassId = e.target.value;
+            localStorage.setItem('gnosys_player_activeClassId', activeClassId);
             renderPlaylistTracks();
         });
 
@@ -265,7 +444,7 @@
         const vol = document.getElementById('gnosys-player-volume');
         vol.addEventListener('input', (e) => {
             volume = parseFloat(e.target.value);
-            channel.postMessage({ type: 'set_volume', volume: volume });
+            sendEngineCommand({ type: 'set_volume', volume: volume });
         });
 
         // Seek bar binding
@@ -275,7 +454,7 @@
             const rect = seekBar.getBoundingClientRect();
             const clickPos = (e.clientX - rect.left) / rect.width;
             const seekTime = clickPos * duration;
-            channel.postMessage({ type: 'set_time', time: seekTime });
+            sendEngineCommand({ type: 'set_time', time: seekTime });
         });
 
         // File drag and drop
@@ -293,7 +472,9 @@
     function toggleDrawer() {
         const overlay = document.getElementById('gnosys-player-overlay');
         overlay.classList.toggle('active');
-        if (overlay.classList.contains('active')) {
+        const isOpen = overlay.classList.contains('active');
+        localStorage.setItem('gnosys_player_drawer_open', isOpen ? 'true' : 'false');
+        if (isOpen) {
             fetchPlaylists();
         }
     }
@@ -389,25 +570,35 @@
         });
     }
 
+    // Send a command — either to the BroadcastChannel, inline fallback, or queue it
+    function sendEngineCommand(cmd) {
+        if (usingInlineFallback) {
+            handleInlineCommand(cmd);
+        } else if (isEngineAlive) {
+            channel.postMessage(cmd);
+        } else {
+            // Engine not ready yet — queue the command for later
+            pendingEngineCommands.push(cmd);
+        }
+    }
+
     // Playback control trigger
     function togglePlay() {
-        if (!isEngineAlive) {
-            // Engine is closed, launch and play the first track
+        if (!isEngineAlive && !usingInlineFallback) {
+            // Engine is closed, launch and queue commands
             launchEngineWindow();
-            setTimeout(() => {
-                if (currentTrack) {
-                    channel.postMessage({ type: 'play' });
-                } else {
-                    playTrack(0);
-                }
-            }, 800);
+            if (currentTrack) {
+                sendEngineCommand({ type: 'play' });
+            } else {
+                playTrack(0);
+            }
             return;
         }
 
         if (isPaused) {
-            channel.postMessage({ type: 'play' });
+            sendEngineCommand({ type: 'play' });
         } else {
-            channel.postMessage({ type: 'pause' });
+            sendEngineCommand({ type: 'pause' });
         }
     }
 
@@ -426,20 +617,17 @@
 
         const track = playlist.tracks[idx];
         
-        if (!isEngineAlive) {
+        if (!isEngineAlive && !usingInlineFallback) {
             launchEngineWindow();
-            setTimeout(() => {
-                sendLoadTrackMessageOfClass(classId, track);
-            }, 800);
-        } else {
-            sendLoadTrackMessageOfClass(classId, track);
         }
+        sendLoadTrackMessageOfClass(classId, track);
     }
 
     function sendLoadTrackMessageOfClass(classId, track) {
-        channel.postMessage({
+        const resolvedUrl = resolveTrackUrl(track.url);
+        sendEngineCommand({
             type: 'load_track',
-            url: track.url,
+            url: resolvedUrl,
             track: track,
             classId: classId,
             className: CLASS_NAMES[classId] || 'Idle'
@@ -682,7 +870,7 @@
             const data = await res.json();
             if (data.status === 'success') {
                 if (currentTrack && currentTrack.id === trackId) {
-                    channel.postMessage({ type: 'pause' });
+                    sendEngineCommand({ type: 'pause' });
                     currentTrack = null;
                 }
                 await fetchPlaylists();
@@ -704,12 +892,12 @@
                     if (preAlarmVolume === null) {
                         preAlarmVolume = volume; // Save current volume
                     }
-                    channel.postMessage({ type: 'set_volume', volume: 0.1 });
+                    sendEngineCommand({ type: 'set_volume', volume: 0.1 });
                     const vol = document.getElementById('gnosys-player-volume');
                     if (vol) vol.value = 0.1;
                 } else if (!state.alarmActive && preAlarmVolume !== null) {
                     // Alarm cleared. Restore original volume!
-                    channel.postMessage({ type: 'set_volume', volume: preAlarmVolume });
+                    sendEngineCommand({ type: 'set_volume', volume: preAlarmVolume });
                     const vol = document.getElementById('gnosys-player-volume');
                     if (vol) vol.value = preAlarmVolume;
                     preAlarmVolume = null; // Clear saved volume
