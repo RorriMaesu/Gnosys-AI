@@ -2215,18 +2215,47 @@ Note: Place constructive critique explanations inside the <chat_response> tag, w
     }
 
     function flashLines(startLine, endLine) {
+        const textarea = document.getElementById('generated-lyrics');
+        const wrapper = document.querySelector('.lyrics-editor-wrapper');
         const gutter = document.getElementById('lyrics-gutter');
-        if (!gutter) return;
-        
-        const lines = gutter.querySelectorAll('.lyrics-gutter-line');
-        for (let i = startLine - 1; i < endLine; i++) {
-            if (lines[i]) {
-                lines[i].classList.add('line-glow-flash');
-                setTimeout((targetLine) => {
-                    if (targetLine) targetLine.classList.remove('line-glow-flash');
-                }, 1500, lines[i]);
+        if (!textarea || !wrapper) return;
+
+        // Apply gutter line flashes
+        if (gutter) {
+            const lines = gutter.querySelectorAll('.lyrics-gutter-line');
+            for (let i = startLine - 1; i < endLine; i++) {
+                if (lines[i]) {
+                    lines[i].classList.add('line-glow-flash');
+                    setTimeout((targetLine) => {
+                        if (targetLine) targetLine.classList.remove('line-glow-flash');
+                    }, 1500, lines[i]);
+                }
             }
         }
+
+        // Clean any existing range highlights to prevent visual stacking
+        wrapper.querySelectorAll('.lyric-highlight-flash').forEach(el => el.remove());
+
+        // Create premium range highlight element
+        const highlightDiv = document.createElement('div');
+        highlightDiv.className = 'lyric-highlight-flash';
+
+        const lineHeight = 22; // matches line-height: 22px in CSS
+        const paddingOffset = 16; // matches padding: 1rem (16px) in CSS
+
+        // Compute top offset based on scroll alignment
+        const top = paddingOffset + ((startLine - 1) * lineHeight) - textarea.scrollTop;
+        const height = (endLine - startLine + 1) * lineHeight;
+
+        highlightDiv.style.top = `${top}px`;
+        highlightDiv.style.height = `${height}px`;
+
+        wrapper.appendChild(highlightDiv);
+
+        // Remove element when css animation completes
+        setTimeout(() => {
+            highlightDiv.remove();
+        }, 2500);
     }
 
     async function handleSendChatMessage() {

@@ -402,6 +402,68 @@
             0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(217, 70, 239, 0.4)); }
             50% { transform: scale(1.12); filter: drop-shadow(0 0 18px rgba(217, 70, 239, 0.8)); }
         }
+        
+        /* Workspace Highlight Overlay */
+        .lyric-highlight-flash {
+            position: absolute;
+            left: 44px; /* Align right after the gutter */
+            right: 0;
+            background: linear-gradient(90deg, rgba(217, 70, 239, 0.22) 0%, rgba(99, 102, 241, 0.08) 70%, transparent 100%);
+            border-left: 3px solid #d946ef;
+            pointer-events: none;
+            z-index: 10;
+            mix-blend-mode: screen;
+            box-shadow: inset 0 0 15px rgba(217, 70, 239, 0.25);
+            animation: premiumHighlightFlash 2.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            overflow: hidden;
+        }
+        
+        /* Diagonal laser sweep across modified area */
+        .lyric-highlight-flash::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.25) 45%,
+                rgba(255, 255, 255, 0.4) 50%,
+                rgba(255, 255, 255, 0.25) 55%,
+                transparent
+            );
+            transform: skewX(-25deg);
+            animation: highlightLaserSweep 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        @keyframes premiumHighlightFlash {
+            0% {
+                opacity: 0;
+                transform: scaleY(0.85);
+                filter: brightness(1.8);
+            }
+            15% {
+                opacity: 1;
+                transform: scaleY(1);
+                filter: brightness(1);
+            }
+            75% {
+                opacity: 0.95;
+                filter: brightness(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scaleY(0.95);
+                filter: brightness(0.6);
+            }
+        }
+
+        @keyframes highlightLaserSweep {
+            0% { left: -100%; }
+            100% { left: 150%; }
+        }
         .lyrics-editor-wrapper {
             position: relative;
             display: flex;
