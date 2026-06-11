@@ -2746,7 +2746,7 @@ Keep the body balanced in the homeostatic light!
             // Allow UI to draw status update
             await new Promise(resolve => setTimeout(resolve, 800));
         } else {
-            statusText.textContent = 'Optimizing VRAM & unloading idle AI models...';
+            statusText.textContent = 'Flushing AI Tutor model from VRAM (may take 5-20s)...';
         }
 
         if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
@@ -2763,7 +2763,7 @@ Keep the body balanced in the homeostatic light!
         statusText.textContent = 'Pre-processing audio configurations...';
 
         const loadingStages = [
-            { pct: 20, text: 'Allocating VRAM workspace (RTX 5060 Ti)...' },
+            { pct: 20, text: 'Allocating VRAM workspace...' },
             { pct: 35, text: 'Loading 4B Diffusion Transformer (DiT) weights...' },
             { pct: 50, text: 'Resolving UMT5 Text Encoder weights...' },
             { pct: 65, text: 'Running neural audio synthesis steps...' },

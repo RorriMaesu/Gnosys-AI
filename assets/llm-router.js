@@ -375,19 +375,23 @@
             console.log('[GnosysLLM] WebGPU model unloaded successfully.');
         }
 
-        // Unload Ollama models from VRAM dynamically
+        // Unload Ollama models from VRAM dynamically.
+        // NOTE: Timeouts must be generous — Ollama can take 5-15s to respond and flush
+        // a large model (e.g. gemma4:e4b ~7GB) from GPU memory.
+        let ollamaUnloadAttempted = false;
         try {
             const psRes = await fetch(`${OLLAMA_BASE_URL}/api/ps`, {
                 method: 'GET',
-                signal: AbortSignal.timeout(1000)
+                signal: AbortSignal.timeout(8000)  // 8s: Ollama may be busy processing
             });
             if (psRes.ok) {
                 const psData = await psRes.json();
-                if (psData && Array.isArray(psData.models)) {
+                if (psData && Array.isArray(psData.models) && psData.models.length > 0) {
                     for (const m of psData.models) {
                         const mName = m.name || m.model;
                         if (mName) {
                             try {
+                                // 20s timeout: evicting a 7B+ model from VRAM can take 5-20 seconds
                                 await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
@@ -396,21 +400,24 @@
                                         prompt: '',
                                         keep_alive: 0
                                     }),
-                                    signal: AbortSignal.timeout(1000)
+                                    signal: AbortSignal.timeout(20000)
                                 });
+                                ollamaUnloadAttempted = true;
                                 console.log(`[GnosysLLM] Dynamically unloaded running Ollama model: ${mName}`);
                             } catch (unloadErr) {
                                 console.warn(`[GnosysLLM] Failed to unload running Ollama model ${mName}:`, unloadErr);
                             }
                         }
                     }
+                } else {
+                    console.log('[GnosysLLM] /api/ps: No Ollama models currently loaded in VRAM.');
                 }
             } else {
                 throw new Error(`Ollama ps response not ok: ${psRes.status}`);
             }
         } catch (psErr) {
             console.warn('[GnosysLLM] Failed to check running Ollama models via /api/ps, using fallback:', psErr);
-            // Fallback to unloading the active selection if /api/ps failed
+            // Fallback: evict the model the user has selected if /api/ps timed out
             const activeModel = getActiveDesktopModel();
             if (activeModel) {
                 try {
@@ -422,13 +429,22 @@
                             prompt: '',
                             keep_alive: 0
                         }),
-                        signal: AbortSignal.timeout(1000)
+                        signal: AbortSignal.timeout(20000)  // 20s for the actual eviction
                     });
+                    ollamaUnloadAttempted = true;
                     console.log(`[GnosysLLM] Instructed local Ollama to unload model (fallback): ${activeModel}`);
                 } catch (err) {
                     console.warn('[GnosysLLM] Failed to instruct Ollama to unload (fallback):', err);
                 }
             }
+        }
+
+        // Allow VRAM to settle after an Ollama eviction before the next model claims it.
+        // GPU memory deallocation is asynchronous at the driver level and can take 1-3 seconds
+        // to fully propagate even after Ollama confirms the unload.
+        if (ollamaUnloadAttempted) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log('[GnosysLLM] Post-unload VRAM settle delay complete.');
         }
 
         if (excludeMusic) {
@@ -439,7 +455,7 @@
         try {
             await fetch(`${API_BASE}/api/music/unload`, {
                 method: 'POST',
-                signal: AbortSignal.timeout(1500)
+                signal: AbortSignal.timeout(8000)  // 8s: ACE-Step offloading can be slow
             });
             console.log('[GnosysLLM] Instructed local ACE-Step server to offload weights to CPU.');
         } catch (err) {
@@ -576,7 +592,7 @@
         try {
             await fetch(`${API_BASE}/api/music/unload`, {
                 method: 'POST',
-                signal: AbortSignal.timeout(1500)
+                signal: AbortSignal.timeout(8000)  // 8s: ACE-Step offloading to CPU can be slow
             });
             console.log('[GnosysLLM] Pre-query VRAM cleanup: ACE-Step models offloaded to CPU.');
         } catch (err) {
