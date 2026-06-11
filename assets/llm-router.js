@@ -1,6 +1,9 @@
 (function () {
-    const OLLAMA_BASE_URL = 'http://localhost:11434';
-    const OLLAMA_TAGS_URL = `${OLLAMA_BASE_URL}/api/tags`;
+    let OLLAMA_BASE_URL = localStorage.getItem('gnosys_ollama_endpoint') || 
+                          localStorage.getItem('chemistry_ollama_endpoint') || 
+                          localStorage.getItem('anatomy1_ollama_endpoint') || 
+                          'http://127.0.0.1:11434';
+    let OLLAMA_TAGS_URL = `${OLLAMA_BASE_URL}/api/tags`;
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
 
     const MODEL_CACHE_NAME = 'gnosys-litert-model-cache-v1';
@@ -544,15 +547,33 @@
     }
 
     async function probeOllamaTags() {
-        try {
-            const res = await fetch(OLLAMA_TAGS_URL, {
-                method: 'GET',
-                signal: AbortSignal.timeout(1000),
-            });
-            return res.ok;
-        } catch (_err) {
-            return false;
+        const endpoints = [
+            OLLAMA_BASE_URL,
+            'http://127.0.0.1:11434',
+            'http://localhost:11434'
+        ];
+        
+        const uniqueEndpoints = [...new Set(endpoints)];
+
+        for (const ep of uniqueEndpoints) {
+            try {
+                const res = await fetch(`${ep}/api/tags`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(1000),
+                });
+                if (res.ok) {
+                    if (OLLAMA_BASE_URL !== ep) {
+                        OLLAMA_BASE_URL = ep;
+                        OLLAMA_TAGS_URL = `${OLLAMA_BASE_URL}/api/tags`;
+                        localStorage.setItem('gnosys_ollama_endpoint', ep);
+                        localStorage.setItem('chemistry_ollama_endpoint', ep);
+                        localStorage.setItem('anatomy1_ollama_endpoint', ep);
+                    }
+                    return true;
+                }
+            } catch (_err) {}
         }
+        return false;
     }
 
     async function invalidateStaleOnDeviceCache() {
