@@ -1357,8 +1357,8 @@
             const res = await fetch(targetUrl);
             const blob = await res.blob();
             
-            // Allow user to choose folder if showSaveFilePicker is supported
-            if ('showSaveFilePicker' in window) {
+            // Allow user to choose folder if showSaveFilePicker is supported (only if manual download)
+            if ('showSaveFilePicker' in window && isManual) {
                 const ext = filename.split('.').pop() || 'mp3';
                 const fileHandle = await window.showSaveFilePicker({
                     suggestedName: filename,
@@ -1619,6 +1619,36 @@
             folderDisplay.textContent = 'Not Configured';
         }
     }
+
+    async function prepareDirectoryPermission() {
+        const autoDownloadEnabled = localStorage.getItem('gnosys_auto_download_enabled') !== 'false';
+        if (!autoDownloadEnabled) return;
+        if (!('showDirectoryPicker' in window)) return;
+
+        let dirHandle = await getStoredDirectoryHandle();
+        let needToPrompt = !dirHandle;
+
+        if (dirHandle) {
+            const hasPermission = await verifyPermission(dirHandle, true);
+            if (!hasPermission) {
+                needToPrompt = true;
+            }
+        }
+
+        if (needToPrompt) {
+            showGlobalToast('Please select a local folder for automatic music downloads.', 'info');
+            dirHandle = await window.showDirectoryPicker({
+                mode: 'readwrite'
+            });
+            await setStoredDirectoryHandle(dirHandle);
+            localStorage.setItem('gnosys_download_dir_name', dirHandle.name);
+            updateSettingsUI();
+        }
+    }
+
+    window.addEventListener('gnosys_prepare_auto_download', (e) => {
+        e.detail.promise = prepareDirectoryPermission();
+    });
 
     window.addEventListener('gnosys_auto_download', async (e) => {
         const { track } = e.detail;

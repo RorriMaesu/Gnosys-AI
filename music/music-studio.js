@@ -329,6 +329,19 @@
 
                 const nameToSave = trackName.trim() || defaultName;
 
+                // Prepare directory permissions while user gesture is active
+                const prepareEvent = new CustomEvent('gnosys_prepare_auto_download', {
+                    detail: { promise: null }
+                });
+                window.dispatchEvent(prepareEvent);
+                if (prepareEvent.detail.promise) {
+                    try {
+                        await prepareEvent.detail.promise;
+                    } catch (err) {
+                        console.warn('[Music Studio] Auto-download directory permission preparation failed/cancelled:', err);
+                    }
+                }
+
                 // Show loading state
                 const originalHtml = btnAddPlaylist.innerHTML;
                 btnAddPlaylist.disabled = true;
