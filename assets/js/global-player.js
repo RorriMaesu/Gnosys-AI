@@ -1657,6 +1657,10 @@
         }
     });
 
+    window.addEventListener('gnosys_playlist_updated', () => {
+        fetchPlaylists();
+    });
+
     // Inject CSS styles
     function injectStyles() {
         if (document.getElementById('gnosys-player-global-styles')) return;

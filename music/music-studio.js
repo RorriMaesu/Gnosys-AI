@@ -371,6 +371,9 @@
                             }));
                         }
 
+                        // Dispatch local event to refresh local playlist drawer
+                        window.dispatchEvent(new CustomEvent('gnosys_playlist_updated'));
+
                         // Trigger broadcast channel refresh of all global player instances
                         const globalChannel = new BroadcastChannel('gnosys_audio_channel');
                         globalChannel.postMessage({ type: 'playlist_updated' });
