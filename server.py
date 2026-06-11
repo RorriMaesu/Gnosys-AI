@@ -682,6 +682,8 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     cmd = [python_exe, '-m', 'openrouter.openrouter_api_server', '--host', '127.0.0.1', '--port', '8002']
                     if vram_profile == 'low':
                         cmd.append('--lowvram')
+                    elif vram_profile == 'optimized':
+                        cmd.append('--medvram')
                     subprocess.Popen(cmd, cwd=ace_path)
                     msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via venv python"
                 else:
@@ -689,6 +691,8 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     cmd = ['python', '-m', 'openrouter.openrouter_api_server', '--host', '127.0.0.1', '--port', '8002']
                     if vram_profile == 'low':
                         cmd.append('--lowvram')
+                    elif vram_profile == 'optimized':
+                        cmd.append('--medvram')
                     subprocess.Popen(cmd, cwd=ace_path)
                     msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via system python"
 
