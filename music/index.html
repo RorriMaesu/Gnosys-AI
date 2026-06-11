@@ -629,13 +629,15 @@
                                 <select id="music-model" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
                                     <option value="acemusic/acestep-v15-xl-turbo" selected>acemusic/acestep-v15-xl-turbo (4B XL Turbo - Premium Fast)</option>
                                     <option value="acemusic/acestep-v15-xl-sft">acemusic/acestep-v15-xl-sft (4B XL SFT - High Quality Fine-Tuned)</option>
+                                    <option value="acemusic/acestep-v15-turbo">acemusic/acestep-v15-turbo (2B Turbo - Lightweight/Ultra Fast)</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">VRAM Profile</label>
                                 <select id="music-vram-profile" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
+                                    <option value="optimized" selected>Optimized (12-20GB VRAM)</option>
                                     <option value="high">Standard (High VRAM)</option>
-                                    <option value="low">Optimized (Low VRAM / FP8)</option>
+                                    <option value="low">Low VRAM (8GB/FP8)</option>
                                 </select>
                             </div>
                         </div>
@@ -718,9 +720,15 @@
                                 </div>
                                 <div class="grid grid-cols-2 gap-3 items-end">
                                     <div>
+                                        <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mb-1">Inference Steps</label>
+                                        <input type="number" id="music-steps" value="8" min="1" max="100" class="w-full studio-input rounded-xl px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition-colors font-mono">
+                                    </div>
+                                    <div>
                                         <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mb-1">Custom Seed</label>
                                         <input type="number" id="music-seed" placeholder="Random Seed" class="w-full studio-input rounded-xl px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition-colors font-mono">
                                     </div>
+                                </div>
+                                <div class="grid grid-cols-1 gap-3">
                                     <div>
                                         <div class="flex justify-between items-center mb-1">
                                             <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400">LM CFG Scale</label>

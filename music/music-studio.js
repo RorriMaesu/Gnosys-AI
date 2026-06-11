@@ -128,6 +128,8 @@
         'music-key',
         'music-signature',
         'music-seed',
+        'music-steps',
+        'music-vram-profile',
         'music-lm-cfg',
         'generated-lyrics'
     ];
@@ -202,6 +204,16 @@
         if (modelSelector) {
             modelSelector.addEventListener('change', () => {
                 checkMusicServiceStatus();
+                // Auto-set default steps based on model type
+                const stepsInput = document.getElementById('music-steps');
+                if (stepsInput) {
+                    if (modelSelector.value.includes('turbo')) {
+                        stepsInput.value = 8;
+                    } else {
+                        stepsInput.value = 50;
+                    }
+                    saveMusicStudioSettings();
+                }
             });
         }
 
@@ -842,6 +854,12 @@
                 repoId: "ACE-Step/acestep-v15-xl-turbo",
                 targetSubdir: "checkpoints/acestep-v15-xl-turbo"
             });
+        } else if (selectedModel === "acemusic/acestep-v15-turbo" && !data.diagnostics.turbo) {
+            missing.push({
+                label: "Turbo Model (2B)",
+                repoId: "ACE-Step/acestep-v15-turbo",
+                targetSubdir: "checkpoints/acestep-v15-turbo"
+            });
         }
 
         return missing;
@@ -981,6 +999,7 @@
 
                     diagBox.appendChild(makeBadge("XL SFT", data.diagnostics.xl_sft, "ACE-Step/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft"));
                     diagBox.appendChild(makeBadge("XL Turbo", data.diagnostics.xl_turbo, "ACE-Step/acestep-v15-xl-turbo", "checkpoints/acestep-v15-xl-turbo"));
+                    diagBox.appendChild(makeBadge("Turbo 2B", data.diagnostics.turbo, "ACE-Step/acestep-v15-turbo", "checkpoints/acestep-v15-turbo"));
                     diagBox.appendChild(makeBadge("Vocoder", data.diagnostics.vocoder, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_vocoder"));
                     diagBox.appendChild(makeBadge("DCAE Encoder", data.diagnostics.dcae, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_dcae_f8c8"));
                     diagBox.appendChild(makeBadge("UMT5 Text", data.diagnostics.umt5, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/umt5-base"));

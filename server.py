@@ -618,6 +618,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 xl_sft_found = check_file("checkpoints/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft.safetensors")
                 xl_base_found = check_file("checkpoints/acestep-v15-xl-base", "checkpoints/acestep-v15-xl-base.safetensors")
                 xl_turbo_found = check_file("checkpoints/acestep-v15-xl-turbo", "checkpoints/acestep-v15-xl-turbo.safetensors")
+                turbo_found = check_file("checkpoints/acestep-v15-turbo", "checkpoints/acestep-v15-turbo.safetensors")
                 vocoder_found = check_file("models/TTS/ACE-Step-v1-3.5B/music_vocoder", "music_vocoder") or check_file("models/checkpoints/music_vocoder", "music_vocoder")
                 dcae_found = check_file("models/TTS/ACE-Step-v1-3.5B/music_dcae_f8c8", "music_dcae_f8c8") or check_file("models/checkpoints/music_dcae_f8c8", "music_dcae_f8c8")
                 umt5_found = check_file("models/TTS/ACE-Step-v1-3.5B/umt5-base", "umt5-base") or check_file("models/checkpoints/umt5-base", "umt5-base")
@@ -637,11 +638,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'active_downloads': active_downloads,
                     'scan_details': {
                         'models': discovered_models
-                    },
+                     },
                     'diagnostics': {
                         'xl_sft': xl_sft_found,
                         'xl_base': xl_base_found,
                         'xl_turbo': xl_turbo_found,
+                        'turbo': turbo_found,
                         'vocoder': vocoder_found,
                         'dcae': dcae_found,
                         'umt5': umt5_found
