@@ -113,6 +113,8 @@
     }
 
     const PERSISTED_FIELDS = [
+        'subject-selector',
+        'custom-subject-input',
         'music-prompt',
         'music-model',
         'music-bpm',
@@ -166,6 +168,15 @@
                                 } else if (id === 'music-guidance-scale') {
                                     const valText = document.getElementById('guidance-scale-val');
                                     if (valText) valText.textContent = parseFloat(el.value).toFixed(1);
+                                } else if (id === 'subject-selector') {
+                                    const container = document.getElementById('custom-subject-input');
+                                    if (container) {
+                                        if (el.value === 'custom') {
+                                            container.classList.remove('hidden');
+                                        } else {
+                                            container.classList.add('hidden');
+                                        }
+                                    }
                                 }
                             }
                         }
