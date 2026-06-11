@@ -976,10 +976,15 @@
                 diagBox.innerHTML = '';
                 if (data.diagnostics) {
                     const makeBadge = (label, status, repoId, targetSubdir) => {
-                        const isDownloading = data.active_downloads && data.active_downloads[repoId] === 'downloading';
-                        const isFailed = data.active_downloads && data.active_downloads[repoId] === 'failed';
-                        const isSuccess = status || (data.active_downloads && data.active_downloads[repoId] === 'success');
+                        const dlStatus = data.active_downloads_status && data.active_downloads_status[repoId];
+                        const isDownloading = dlStatus ? dlStatus.status === 'downloading' : (data.active_downloads && data.active_downloads[repoId] === 'downloading');
+                        const isStopped = dlStatus && dlStatus.status === 'stopped';
+                        const isFailed = (data.active_downloads && data.active_downloads[repoId] === 'failed') || (dlStatus && dlStatus.status === 'failed');
+                        const isSuccess = status || (data.active_downloads && data.active_downloads[repoId] === 'success') || (dlStatus && dlStatus.status === 'success');
                         
+                        const wrapper = document.createElement('div');
+                        wrapper.className = "flex items-center gap-1.5 shrink-0";
+
                         const baseClass = "text-[9px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 shrink-0 transition-all text-decoration-none cursor-pointer";
                         let themeClass = "";
                         let iconHtml = "";
@@ -989,8 +994,17 @@
                         if (isDownloading) {
                             themeClass = "bg-amber-500/10 text-amber-400 border-amber-500/20 badge-pulse-amber";
                             iconHtml = '<i class="fa-solid fa-spinner fa-spin"></i>';
-                            text = `${label} (Downloading...)`;
+                            const pct = dlStatus ? dlStatus.progress : 0;
+                            const speed = dlStatus ? dlStatus.speed : '0 MB/s';
+                            const eta = dlStatus ? dlStatus.eta : '--:--';
+                            text = `${label} (${pct}% - ${speed}, ETA: ${eta})`;
                             tooltip = "Downloading model checkpoints from Hugging Face...";
+                        } else if (isStopped) {
+                            themeClass = "bg-slate-500/10 text-slate-400 border-slate-500/20 hover:bg-slate-500/20";
+                            iconHtml = '<i class="fa-solid fa-circle-pause"></i>';
+                            const pct = dlStatus ? dlStatus.progress : 0;
+                            text = `${label} (Paused: ${pct}%)`;
+                            tooltip = "Download paused. Click to resume.";
                         } else if (isSuccess) {
                             themeClass = "bg-teal-500/10 text-teal-400 border-teal-500/20 hover:bg-teal-500/20";
                             iconHtml = '<i class="fa-solid fa-circle-check"></i>';
@@ -1032,7 +1046,38 @@
                             badgeEl.addEventListener('click', (e) => e.preventDefault());
                         }
 
-                        return badgeEl;
+                        wrapper.appendChild(badgeEl);
+
+                        if (isDownloading) {
+                            const stopBtn = document.createElement('button');
+                            stopBtn.className = "text-[9px] w-5 h-5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/25 flex items-center justify-center transition-all cursor-pointer";
+                            stopBtn.title = "Pause Download";
+                            stopBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                            stopBtn.addEventListener('click', async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                showBannerNotification(`Pausing download for ${label}...`, 'info');
+                                try {
+                                    const stopRes = await fetch(`${API_BASE}/api/music/download/stop`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ repo_id: repoId })
+                                    });
+                                    const stopData = await stopRes.json();
+                                    if (stopData.status === 'success') {
+                                        showBannerNotification(`Download paused for ${label}.`, 'success');
+                                        checkMusicServiceStatus();
+                                    } else {
+                                        showBannerNotification(`Failed to pause: ${stopData.message}`, 'error');
+                                    }
+                                } catch (err) {
+                                    showBannerNotification(`Failed to pause: ${err.message}`, 'error');
+                                }
+                            });
+                            wrapper.appendChild(stopBtn);
+                        }
+
+                        return wrapper;
                     };
 
                     diagBox.appendChild(makeBadge("XL SFT", data.diagnostics.xl_sft, "ACE-Step/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft"));
@@ -1224,7 +1269,15 @@
         const interval = setInterval(async () => {
             attempts++;
             if (badge) {
-                badge.textContent = `Starting (${attempts}/${maxAttempts})`;
+                let etaStr = '';
+                if (attempts <= 15) {
+                    etaStr = ' - ~1-2m left';
+                } else if (attempts <= 45) {
+                    etaStr = ' - ~2-3m left (first boot caching)';
+                } else {
+                    etaStr = ' - slow drive/caching';
+                }
+                badge.textContent = `Starting (${attempts}/${maxAttempts})${etaStr}`;
             }
             try {
                 const res = await fetch('http://127.0.0.1:8002/health', { signal: AbortSignal.timeout(1000) });

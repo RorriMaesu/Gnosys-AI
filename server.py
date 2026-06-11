@@ -8,6 +8,8 @@ import threading
 
 PORT = 8020
 active_downloads = {}
+active_downloads_status = {}  # {repo_id: {'status': ..., 'progress': ..., 'speed': ..., 'eta': ...}}
+active_download_processes = {}  # {repo_id: subprocess.Popen}
 install_status = {'progress': 0, 'step': 'idle', 'error': None}
 active_vram_profile = None
 
@@ -667,6 +669,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'custom_node_installed': True, # Mock true for backward compatibility
                     'models_installed': len(discovered_models) > 0,
                     'active_downloads': active_downloads,
+                    'active_downloads_status': active_downloads_status,
                     'scan_details': {
                         'models': discovered_models
                      },
@@ -1047,16 +1050,93 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Run download in background thread
                 import threading as th
+                import re
                 def download_task():
                     active_downloads[repo_id] = 'downloading'
+                    active_downloads_status[repo_id] = {
+                        'status': 'downloading',
+                        'progress': 0,
+                        'speed': '0 MB/s',
+                        'eta': '--:--'
+                    }
                     print(f"[Downloader] Starting download for {repo_id} to {target_dir}...")
                     try:
-                        subprocess.run([python_exe, '-c', script], check=True)
-                        active_downloads[repo_id] = 'success'
-                        print(f"[Downloader] Successfully downloaded {repo_id}!")
+                        proc = subprocess.Popen(
+                            [python_exe, '-u', '-c', script],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            bufsize=1
+                        )
+                        active_download_processes[repo_id] = proc
+                        
+                        buffer = ""
+                        while True:
+                            if proc.poll() is not None:
+                                break
+                            char = proc.stderr.read(1)
+                            if not char:
+                                break
+                            if char in ('\r', '\n'):
+                                line = buffer.strip()
+                                buffer = ""
+                                if line:
+                                    pct_match = re.search(r'(\d+)%', line)
+                                    speed_match = re.search(r'(\d+\.?\d*\s*[kMGT]B/s)', line)
+                                    eta_match = re.search(r'\[\d*(?::\d+)*<([0-9:]+)', line)
+                                    
+                                    updated = False
+                                    if repo_id not in active_downloads_status:
+                                        active_downloads_status[repo_id] = {'status': 'downloading', 'progress': 0, 'speed': '0 MB/s', 'eta': '--:--'}
+                                    
+                                    if pct_match:
+                                        active_downloads_status[repo_id]['progress'] = int(pct_match.group(1))
+                                        updated = True
+                                    if speed_match:
+                                        active_downloads_status[repo_id]['speed'] = speed_match.group(1)
+                                        updated = True
+                                    if eta_match:
+                                        active_downloads_status[repo_id]['eta'] = eta_match.group(1)
+                                        updated = True
+                                        
+                                    if updated:
+                                        active_downloads[repo_id] = 'downloading'
+                            else:
+                                buffer += char
+                                
+                        stdout, stderr = proc.communicate()
+                        if proc.returncode == 0:
+                            active_downloads[repo_id] = 'success'
+                            active_downloads_status[repo_id] = {
+                                'status': 'success',
+                                'progress': 100,
+                                'speed': '0 MB/s',
+                                'eta': '--:--'
+                             }
+                            print(f"[Downloader] Successfully downloaded {repo_id}!")
+                        else:
+                            if active_downloads_status.get(repo_id, {}).get('status') == 'stopped':
+                                print(f"[Downloader] Download for {repo_id} was stopped by user.")
+                            else:
+                                active_downloads[repo_id] = 'failed'
+                                active_downloads_status[repo_id] = {
+                                    'status': 'failed',
+                                    'progress': 0,
+                                    'speed': '0 MB/s',
+                                    'eta': '--:--'
+                                }
+                                print(f"[Downloader] Failed to download {repo_id} with exit code {proc.returncode}")
                     except Exception as err:
                         active_downloads[repo_id] = 'failed'
+                        active_downloads_status[repo_id] = {
+                            'status': 'failed',
+                            'progress': 0,
+                            'speed': '0 MB/s',
+                            'eta': '--:--'
+                        }
                         print(f"[Downloader] Failed to download {repo_id}: {err}")
+                    finally:
+                        active_download_processes.pop(repo_id, None)
 
                 th.Thread(target=download_task, daemon=True).start()
 
@@ -1065,6 +1145,44 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'success', 'message': 'Download started in background.'}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/download/stop':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                payload = json.loads(self.rfile.read(content_length))
+                repo_id = payload.get('repo_id')
+                
+                if repo_id in active_download_processes:
+                    proc = active_download_processes[repo_id]
+                    active_downloads_status[repo_id] = {
+                        'status': 'stopped',
+                        'progress': active_downloads_status.get(repo_id, {}).get('progress', 0),
+                        'speed': '0 MB/s',
+                        'eta': '--:--'
+                    }
+                    active_downloads[repo_id] = 'failed'
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'success', 'message': 'Download stopped successfully.'}).encode('utf-8'))
+                else:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'error', 'message': 'No active download found for this repository.'}).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
