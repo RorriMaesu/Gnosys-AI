@@ -468,6 +468,13 @@
 
         // Launch service click
         document.getElementById('btn-launch-service').addEventListener('click', () => {
+            if (window.latestStatusData) {
+                const missing = getMissingModelsList(window.latestStatusData);
+                if (missing.length > 0) {
+                    showBannerNotification('Cannot launch: Required model files are missing or still downloading.', 'warning');
+                    return;
+                }
+            }
             launchService();
         });
 
@@ -1087,15 +1094,22 @@
                 if (isStarting) {
                     // Keep the starting layout
                 } else {
-                    badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider';
-                    badge.textContent = 'Offline';
-                    icon.innerHTML = '<i class="fa-solid fa-server text-amber-400"></i>';
+                    const missing = getMissingModelsList(data);
+                    if (missing.length > 0) {
+                        badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider badge-pulse-amber';
+                        badge.textContent = 'Waiting for Models';
+                        icon.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-amber-400"></i>';
+                    } else {
+                        badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider';
+                        badge.textContent = 'Offline';
+                        icon.innerHTML = '<i class="fa-solid fa-server text-amber-400"></i>';
+                    }
                     launchBtn.classList.remove('hidden');
                     installBtn.classList.add('hidden');
 
                     // Auto-start server if enabled
                     const autoStartEnabled = document.getElementById('auto-start-checkbox')?.checked ?? true;
-                    if (autoStartEnabled && !isLaunchingService) {
+                    if (autoStartEnabled && !isLaunchingService && missing.length === 0) {
                         launchService();
                     }
                 }
