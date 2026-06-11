@@ -547,8 +547,18 @@
         widget.id = 'gnosys-global-player-widget';
         widget.className = 'gnosys-player-badge';
         widget.innerHTML = `
+            <div class="badge-ripples">
+                <div class="ripple-wave"></div>
+                <div class="ripple-wave"></div>
+                <div class="ripple-wave"></div>
+            </div>
             <div class="badge-content">
                 <i class="fa-solid fa-music text-pink-400"></i>
+                <div class="equalizer-bar-container">
+                    <div class="eq-bar"></div>
+                    <div class="eq-bar"></div>
+                    <div class="eq-bar"></div>
+                </div>
                 <div class="status-dot inactive" id="gnosys-player-status"></div>
             </div>
         `;
@@ -1978,14 +1988,104 @@
                 50% { box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 18px rgba(217, 70, 239, 0.5); }
                 100% { box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 8px rgba(217, 70, 239, 0.2); }
             }
-            .gnosys-player-badge.playing {
-                animation: badgeGlowPulse 2.4s infinite ease-in-out;
-                border-color: rgba(217, 70, 239, 0.35);
+            
+            /* Ripple Wave Animations */
+            .gnosys-player-badge .badge-ripples {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                pointer-events: none;
+                z-index: -1;
+            }
+            .gnosys-player-badge.playing .ripple-wave {
+                position: absolute;
+                top: -2px;
+                left: -2px;
+                right: -2px;
+                bottom: -2px;
+                border-radius: 50%;
+                border: 1.5px solid rgba(217, 70, 239, 0.45);
+                box-shadow: 0 0 15px rgba(217, 70, 239, 0.25);
+                opacity: 0;
+                animation: soundWavePropagation 2.4s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+            }
+            .gnosys-player-badge.playing .ripple-wave:nth-child(2) {
+                animation-delay: 0.8s;
+            }
+            .gnosys-player-badge.playing .ripple-wave:nth-child(3) {
+                animation-delay: 1.6s;
+            }
+            
+            @keyframes soundWavePropagation {
+                0% {
+                    transform: scale(1);
+                    opacity: 0.8;
+                }
+                100% {
+                    transform: scale(2.0);
+                    opacity: 0;
+                }
+            }
+
+            /* Rotating playback border ring */
+            .gnosys-player-badge.playing::before {
+                content: '';
+                position: absolute;
+                top: -2px;
+                left: -2px;
+                right: -2px;
+                bottom: -2px;
+                border-radius: 50%;
+                padding: 1.5px;
+                background: conic-gradient(from 0deg, #d946ef, #6366f1, #3b82f6, #d946ef);
+                -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+                -webkit-mask-composite: xor;
+                mask-composite: exclude;
+                animation: spinSlow 3s linear infinite;
+                z-index: 1;
+            }
+
+            /* Mini Soundwave Equalizer Columns */
+            .equalizer-bar-container {
+                display: none;
+                align-items: flex-end;
+                justify-content: center;
+                gap: 2.5px;
+                width: 20px;
+                height: 16px;
+                position: absolute;
+                z-index: 2;
+            }
+            .gnosys-player-badge.playing .equalizer-bar-container {
+                display: flex;
             }
             .gnosys-player-badge.playing i {
-                animation: spinSlow 6s linear infinite;
-                color: #d946ef;
-                text-shadow: 0 0 8px rgba(217, 70, 239, 0.6);
+                display: none !important; /* Hide music note when equalizer is playing */
+            }
+            
+            .eq-bar {
+                width: 2.5px;
+                height: 4px;
+                background-color: #d946ef;
+                border-radius: 9999px;
+                animation: eqBounce 1.2s ease-in-out infinite alternate;
+                box-shadow: 0 0 6px rgba(217, 70, 239, 0.8);
+            }
+            .eq-bar:nth-child(1) { animation-duration: 0.8s; background-color: #d946ef; }
+            .eq-bar:nth-child(2) { animation-duration: 0.5s; background-color: #a855f7; animation-delay: 0.15s; }
+            .eq-bar:nth-child(3) { animation-duration: 0.7s; background-color: #6366f1; animation-delay: 0.3s; }
+            
+            @keyframes eqBounce {
+                0% { height: 3px; }
+                100% { height: 15px; }
+            }
+
+            .gnosys-player-badge.playing {
+                animation: badgeGlowPulse 2.4s infinite ease-in-out;
+                border-color: transparent !important; /* hide default border to let rotating ring shine */
             }
 
             .drawer-body {
