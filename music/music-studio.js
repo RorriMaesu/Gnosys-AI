@@ -612,6 +612,11 @@
             if (isHidden) {
                 panel.classList.remove('hidden');
                 chevron.classList.add('rotate-180');
+                
+                // Auto-scroll the newly visible settings panel into viewport smoothly
+                setTimeout(() => {
+                    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 100);
             } else {
                 panel.classList.add('hidden');
                 chevron.classList.remove('rotate-180');
