@@ -126,6 +126,8 @@
         'music-steps',
         'music-vram-profile',
         'music-lm-cfg',
+        'music-guidance-scale',
+        'music-vocal-lang',
         'generated-lyrics'
     ];
 
@@ -157,6 +159,14 @@
                                 el.checked = settings[id];
                             } else {
                                 el.value = settings[id];
+                                // Update labels for sliders if restored
+                                if (id === 'music-lm-cfg') {
+                                    const valText = document.getElementById('lm-cfg-val');
+                                    if (valText) valText.textContent = parseFloat(el.value).toFixed(1);
+                                } else if (id === 'music-guidance-scale') {
+                                    const valText = document.getElementById('guidance-scale-val');
+                                    if (valText) valText.textContent = parseFloat(el.value).toFixed(1);
+                                }
                             }
                         }
                     }
@@ -199,13 +209,24 @@
         if (modelSelector) {
             modelSelector.addEventListener('change', () => {
                 checkMusicServiceStatus();
-                // Auto-set default steps based on model type
+                // Auto-set default steps and guidance scale based on model type
                 const stepsInput = document.getElementById('music-steps');
+                const guidanceInput = document.getElementById('music-guidance-scale');
+                const guidanceValLabel = document.getElementById('guidance-scale-val');
+                
                 if (stepsInput) {
                     if (modelSelector.value.includes('turbo')) {
                         stepsInput.value = 8;
+                        if (guidanceInput) {
+                            guidanceInput.value = 1.0;
+                            if (guidanceValLabel) guidanceValLabel.textContent = "1.0";
+                        }
                     } else {
                         stepsInput.value = 50;
+                        if (guidanceInput) {
+                            guidanceInput.value = 7.0;
+                            if (guidanceValLabel) guidanceValLabel.textContent = "7.0";
+                        }
                     }
                     saveMusicStudioSettings();
                 }
@@ -550,6 +571,15 @@
         document.getElementById('music-lm-cfg').addEventListener('input', (e) => {
             document.getElementById('lm-cfg-val').textContent = parseFloat(e.target.value).toFixed(1);
         });
+
+        // DiT CFG guidance scale slider update value label
+        const guidanceScaleSlider = document.getElementById('music-guidance-scale');
+        if (guidanceScaleSlider) {
+            guidanceScaleSlider.addEventListener('input', (e) => {
+                const valLabel = document.getElementById('guidance-scale-val');
+                if (valLabel) valLabel.textContent = parseFloat(e.target.value).toFixed(1);
+            });
+        }
 
         // Lyrics Textarea listeners
         const lyricsTextarea = document.getElementById('generated-lyrics');
@@ -2498,6 +2528,10 @@ Keep the body balanced in the homeostatic light!
         const sigVal = document.getElementById('music-signature').value;
         const seedInputVal = document.getElementById('music-seed').value.trim();
         const lmCfgVal = parseFloat(document.getElementById('music-lm-cfg').value);
+        const guidanceScaleElement = document.getElementById('music-guidance-scale');
+        const guidanceScaleVal = guidanceScaleElement ? parseFloat(guidanceScaleElement.value) : (modelVal.includes('turbo') ? 1.0 : 7.0);
+        const vocalLangElement = document.getElementById('music-vocal-lang');
+        const vocalLangVal = vocalLangElement ? vocalLangElement.value : 'unknown';
 
         // Construct standard OpenRouter payload format accepted by openrouter_api_server.py
         const payload = {
@@ -2513,12 +2547,14 @@ Keep the body balanced in the homeostatic light!
                 bpm: parseInt(bpmVal),
                 instrumental: vocalsVal !== 'on',
                 key_scale: keyVal || null,
-                time_signature: sigVal || null
+                time_signature: sigVal || null,
+                vocal_language: vocalLangVal || 'unknown'
             },
             inference_steps: parseInt(stepsVal),
             thinking: thinkingVal,
             use_format: formatVal,
             lm_cfg_scale: lmCfgVal,
+            guidance_scale: guidanceScaleVal,
             seed: seedInputVal ? parseInt(seedInputVal) : null
         };
 

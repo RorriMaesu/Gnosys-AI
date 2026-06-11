@@ -746,11 +746,35 @@
                                 </div>
                                 <div class="grid grid-cols-1 gap-3">
                                     <div>
+                                        <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mb-1">Vocal Language</label>
+                                        <select id="music-vocal-lang" class="w-full studio-input rounded-xl px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer font-semibold">
+                                            <option value="unknown">Auto-Detect Language</option>
+                                            <option value="en">English</option>
+                                            <option value="zh">Chinese (中文)</option>
+                                            <option value="ja">Japanese (日本語)</option>
+                                            <option value="es">Spanish (Español)</option>
+                                            <option value="fr">French (Français)</option>
+                                            <option value="ko">Korean (한국어)</option>
+                                            <option value="de">German (Deutsch)</option>
+                                            <option value="it">Italian (Italiano)</option>
+                                            <option value="ru">Russian (Русский)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
                                         <div class="flex justify-between items-center mb-1">
                                             <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400">LM CFG Scale</label>
                                             <span id="lm-cfg-val" class="text-[9px] font-bold text-indigo-400 font-mono">2.0</span>
                                         </div>
                                         <input type="range" id="music-lm-cfg" min="1.0" max="5.0" step="0.5" value="2.0" class="w-full accent-indigo-500 h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer">
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between items-center mb-1">
+                                            <label class="block text-[9px] font-extrabold uppercase tracking-widest text-slate-400">DiT CFG Scale</label>
+                                            <span id="guidance-scale-val" class="text-[9px] font-bold text-fuchsia-400 font-mono">1.0</span>
+                                        </div>
+                                        <input type="range" id="music-guidance-scale" min="1.0" max="15.0" step="0.5" value="1.0" class="w-full accent-fuchsia-500 h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer">
                                     </div>
                                 </div>
                             </div>
