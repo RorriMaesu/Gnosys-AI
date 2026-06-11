@@ -153,6 +153,24 @@ def resolve_fallback_path(path):
         tail = tail[1:]
     return os.path.join(fallback_drive, tail)
 
+def auto_resolve_ace_path(path):
+    path = resolve_fallback_path(path)
+    if not path or not os.path.isdir(path):
+        return path
+    # If the path already has a checkpoints folder, use it
+    if os.path.exists(os.path.join(path, "checkpoints")):
+        return path
+    # If not, check if there's a subdirectory (like ACE-Step-1.5) that does
+    try:
+        for item in os.listdir(path):
+            sub = os.path.join(path, item)
+            if os.path.isdir(sub) and not item.startswith('.'):
+                if os.path.exists(os.path.join(sub, "checkpoints")):
+                    return sub
+    except Exception:
+        pass
+    return path
+
 def check_ace_step_compatibility(path):
     if not path or not os.path.isdir(path):
         return None
@@ -606,7 +624,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 ace_path = self.headers.get('X-ComfyUI-Path', '').strip()
                 if not ace_path:
                     ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
-                ace_path = resolve_fallback_path(ace_path)
+                ace_path = auto_resolve_ace_path(ace_path)
                     
                 ace_installed = os.path.exists(ace_path)
                 ace_running = probe_port(8002)
@@ -679,7 +697,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     body = json.loads(self.rfile.read(content_length).decode('utf-8'))
                     ace_path = body.get('comfy_path', ace_path)
                     vram_profile = body.get('vram_profile', 'high')
-                ace_path = resolve_fallback_path(ace_path)
+                ace_path = auto_resolve_ace_path(ace_path)
 
                 # Early Exit: If the API server is already running with the correct VRAM profile, share it
                 if probe_port(8002) and active_vram_profile == vram_profile:
@@ -1010,7 +1028,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Check ACE-Step virtual environment python first (from path header)
                 ace_path = self.headers.get('X-ComfyUI-Path', '').strip() or 'D:\\ComfyUI\\ACE-Step-1.5'
-                ace_path = resolve_fallback_path(ace_path)
+                ace_path = auto_resolve_ace_path(ace_path)
                 ace_python = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
                 # Check helper server virtual environment python

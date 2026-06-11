@@ -1,6 +1,6 @@
 (function() {
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
-    let comfyPath = localStorage.getItem('gnosys_comfy_path') || 'D:\\ComfyUI';
+    let comfyPath = localStorage.getItem('gnosys_comfy_path') || 'D:\\ComfyUI\\ACE-Step-1.5';
     let vramProfile = localStorage.getItem('gnosys_music_vram_profile') || 'high';
     const clientId = Math.random().toString(36).substring(2, 15);
     let ws = null;
