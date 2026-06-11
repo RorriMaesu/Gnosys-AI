@@ -1901,6 +1901,40 @@
         const cancelBtn = overlay.querySelector('#gnosys-desktop-launch-cancel');
         const statusEl = overlay.querySelector('#gnosys-desktop-launch-status');
         let isLaunchingOllama = false;
+        let pollInterval = null;
+
+        const handleAutoDetect = async () => {
+            if (document.visibilityState === 'visible' || document.hasFocus()) {
+                const isUp = await probeOllamaTags();
+                if (isUp) {
+                    cleanup();
+                    if (statusEl) {
+                        statusEl.style.display = 'block';
+                        statusEl.style.color = '#22c55e';
+                        statusEl.textContent = '✓ Connected to Ollama successfully!';
+                    }
+                    setTimeout(() => {
+                        overlay.remove();
+                        localStorage.setItem(STORAGE_KEYS.routeMode, 'desktop-ollama');
+                        state.provider = createOllamaProvider();
+                        setProvider('desktop-ollama');
+                        state.mobileChoicePending = false;
+                    }, 800);
+                }
+            }
+        };
+
+        const cleanup = () => {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+            document.removeEventListener('visibilitychange', handleAutoDetect);
+            window.removeEventListener('focus', handleAutoDetect);
+        };
+
+        document.addEventListener('visibilitychange', handleAutoDetect);
+        window.addEventListener('focus', handleAutoDetect);
 
         function closeHardwareModalAndOpenSmartSetup() {
             if (isLaunchingOllama) {
@@ -1911,6 +1945,7 @@
                 }
                 return;
             }
+            cleanup();
             overlay.remove();
             queueSmartSetupModal();
         }
@@ -1927,6 +1962,7 @@
 
         if (browserBtn) {
             browserBtn.addEventListener('click', () => {
+                cleanup();
                 localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
                 closeHardwareModalAndOpenSmartSetup();
                 init(true);
@@ -1969,11 +2005,11 @@
 
             let attempts = 0;
             const maxAttempts = 30;
-            const pollInterval = window.setInterval(async () => {
+            pollInterval = window.setInterval(async () => {
                 attempts++;
                 const isUp = await probeOllamaTags();
                 if (isUp) {
-                    clearInterval(pollInterval);
+                    cleanup();
                     if (statusEl) statusEl.style.color = '#22c55e';
                     if (statusEl) statusEl.textContent = '✓ Connected to Ollama successfully!';
                     setTimeout(() => {
@@ -1984,7 +2020,7 @@
                         state.mobileChoicePending = false;
                     }, 1000);
                 } else if (attempts >= maxAttempts) {
-                    clearInterval(pollInterval);
+                    cleanup();
                     isLaunchingOllama = false;
                     yesBtn.removeAttribute('disabled');
                     yesBtn.style.opacity = '1';
@@ -2000,6 +2036,7 @@
         });
 
         cancelBtn.addEventListener('click', () => {
+            cleanup();
             overlay.remove();
             state.provider = createNoAiProvider();
             setProvider('no-ai');
