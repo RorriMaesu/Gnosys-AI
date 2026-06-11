@@ -629,7 +629,22 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 ace_path = auto_resolve_ace_path(ace_path)
                     
                 ace_installed = os.path.exists(ace_path)
-                ace_running = probe_port(8002)
+                
+                # Probe HTTP status on port 8002 if tcp socket is open
+                ace_running = False
+                comfy_state = "offline"
+                if probe_port(8002):
+                    import urllib.request
+                    try:
+                        req = urllib.request.Request("http://127.0.0.1:8002/health")
+                        with urllib.request.urlopen(req, timeout=1.0) as res:
+                            health_data = json.loads(res.read().decode('utf-8'))
+                            comfy_state = health_data.get("status", "ok")
+                            ace_running = True
+                    except Exception:
+                        # Port is open but server is booting / non-responsive yet
+                        ace_running = True
+                        comfy_state = "loading"
                 
                 # Scan models subfolders safely (checkpoints)
                 checkpoints_dir = os.path.join(ace_path, "checkpoints")
@@ -666,6 +681,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'comfy_path': ace_path,
                     'comfy_installed': ace_installed,
                     'comfy_running': ace_running,
+                    'comfy_state': comfy_state,
                     'custom_node_installed': True, # Mock true for backward compatibility
                     'models_installed': len(discovered_models) > 0,
                     'active_downloads': active_downloads,
@@ -722,6 +738,10 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                 active_vram_profile = vram_profile
 
+                # Launch environment copy with lazy loading enabled
+                env_copy = os.environ.copy()
+                env_copy["ACESTEP_NO_INIT"] = "true"
+
                 python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
                 if not os.path.exists(ace_path):
@@ -734,7 +754,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         cmd.append('--lowvram')
                     elif vram_profile == 'optimized':
                         cmd.append('--medvram')
-                    subprocess.Popen(cmd, cwd=ace_path)
+                    subprocess.Popen(cmd, cwd=ace_path, env=env_copy)
                     msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via venv python"
                 else:
                     # Fallback to system python
@@ -743,7 +763,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         cmd.append('--lowvram')
                     elif vram_profile == 'optimized':
                         cmd.append('--medvram')
-                    subprocess.Popen(cmd, cwd=ace_path)
+                    subprocess.Popen(cmd, cwd=ace_path, env=env_copy)
                     msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via system python"
 
                 self.send_response(200)

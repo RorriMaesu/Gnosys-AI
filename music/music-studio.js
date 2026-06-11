@@ -1123,11 +1123,22 @@
             window.latestStatusData = data;
 
             if (data.comfy_running) {
-                badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 uppercase font-extrabold tracking-wider';
-                badge.textContent = 'Running';
-                icon.innerHTML = '<i class="fa-solid fa-circle-check text-teal-400"></i>';
                 launchBtn.classList.add('hidden');
                 installBtn.classList.add('hidden');
+
+                if (data.comfy_state === 'loading') {
+                    badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider badge-pulse-amber';
+                    badge.textContent = 'Loading Weights';
+                    icon.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-amber-400"></i>';
+                } else if (data.comfy_state === 'lazy') {
+                    badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 uppercase font-extrabold tracking-wider';
+                    badge.textContent = 'Lazy Ready';
+                    icon.innerHTML = '<i class="fa-solid fa-bolt text-sky-400"></i>';
+                } else {
+                    badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 uppercase font-extrabold tracking-wider';
+                    badge.textContent = 'Running';
+                    icon.innerHTML = '<i class="fa-solid fa-circle-check text-teal-400"></i>';
+                }
                 
                 // Fetch models dynamically from local API server
                 fetchModelsList();
@@ -1294,31 +1305,39 @@
             icon.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-amber-400"></i>';
         }
 
-        showBannerNotification('Service launch triggered. Loading neural weights into memory (may take 2-5 mins)...', 'info');
+        showBannerNotification('Service launch triggered. Loading neural weights into memory...', 'info');
 
         const interval = setInterval(async () => {
             attempts++;
             if (badge) {
-                let etaStr = '';
-                if (attempts <= 15) {
-                    etaStr = ' - ~1-2m left';
-                } else if (attempts <= 45) {
-                    etaStr = ' - ~2-3m left (first boot caching)';
-                } else {
-                    etaStr = ' - slow drive/caching';
-                }
-                badge.textContent = `Starting (${attempts}/${maxAttempts})${etaStr}`;
+                badge.textContent = `Starting (${attempts}/${maxAttempts})`;
             }
             try {
                 const res = await fetch('http://127.0.0.1:8002/health', { signal: AbortSignal.timeout(1000) });
                 if (res.ok) {
+                    const healthData = await res.json();
+                    
+                    if (healthData.status === 'loading') {
+                        // Keep polling but show loading weights message
+                        if (badge) {
+                            badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider badge-pulse-amber';
+                            badge.textContent = `Loading Weights... (${attempts})`;
+                        }
+                        return;
+                    }
+                    
                     clearInterval(interval);
                     isLaunchingService = false;
                     if (launchBtn) {
                         launchBtn.disabled = false;
                         launchBtn.innerHTML = '<i class="fa-solid fa-rocket mr-1.5"></i> Launch Service';
                     }
-                    showBannerNotification('ACE-Step API Server connected successfully!', 'success');
+                    
+                    if (healthData.status === 'lazy') {
+                        showBannerNotification('ACE-Step API Server connected successfully (Lazy Ready)!', 'success');
+                    } else {
+                        showBannerNotification('ACE-Step API Server connected and fully loaded!', 'success');
+                    }
                     checkMusicServiceStatus();
                     
                     if (pendingGeneration) {
@@ -2423,15 +2442,15 @@ Keep the body balanced in the homeostatic light!
 
         // Check if server is online
         const statusTextVal = document.getElementById('comfy-status-badge').textContent.trim();
-        if (statusTextVal !== 'Running') {
-            if (statusTextVal.startsWith('Starting')) {
+        if (statusTextVal !== 'Running' && statusTextVal !== 'Lazy Ready') {
+            if (statusTextVal.startsWith('Starting') || statusTextVal === 'Loading Weights') {
                 pendingGeneration = true;
                 btn.disabled = true;
                 progressContainer.classList.remove('hidden');
                 fill.style.width = '10%';
                 percent.textContent = '10%';
-                statusText.textContent = 'Queued: Waiting for ACE-Step API Server to finish starting...';
-                showBannerNotification('Generation queued. It will run automatically once the server starts.', 'info');
+                statusText.textContent = 'Queued: Waiting for ACE-Step API Server weights to finish loading...';
+                showBannerNotification('Generation queued. It will run automatically once the server is ready.', 'info');
             } else if (statusTextVal === 'Not Found') {
                 showBannerNotification('ACE-Step service not found. Please run the install wizard to set it up.', 'error');
             } else {
@@ -2477,7 +2496,20 @@ Keep the body balanced in the homeostatic light!
         
         fill.style.width = '5%';
         percent.textContent = '5%';
-        statusText.textContent = 'Optimizing VRAM & unloading idle AI models...';
+        
+        if (statusTextVal === 'Lazy Ready') {
+            statusText.textContent = 'Mounting Neural Weights (takes 1-2 mins on first run)...';
+            // Force status badge update to show loading status
+            const badge = document.getElementById('comfy-status-badge');
+            if (badge) {
+                badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider badge-pulse-amber';
+                badge.textContent = 'Loading Weights';
+            }
+            // Allow UI to draw status update
+            await new Promise(resolve => setTimeout(resolve, 800));
+        } else {
+            statusText.textContent = 'Optimizing VRAM & unloading idle AI models...';
+        }
 
         if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
             try {
