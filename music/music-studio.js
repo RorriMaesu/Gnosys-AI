@@ -292,18 +292,30 @@
             }
         });
 
-        // Auto-sync active subject selector to playlist dropdown
+        // Auto-sync active subject selector to playlist dropdown and global player view
         const selectSubject = document.getElementById('subject-selector');
         const selectPlaylist = document.getElementById('playlist-target-select');
         if (selectSubject && selectPlaylist) {
-            selectSubject.addEventListener('change', () => {
+            const syncSubjectToPlaylist = () => {
                 const val = selectSubject.value;
-                if (val === 'medicine') selectPlaylist.value = 'medical-terminology';
-                else if (val === 'chemistry') selectPlaylist.value = 'intro-to-chemistry';
-                else if (val === 'psychology') selectPlaylist.value = 'psychology-care';
-                else if (val === 'anatomy') selectPlaylist.value = 'anatomy-physiology-1';
-                else selectPlaylist.value = 'medical-terminology';
-            });
+                let classId = 'medical-terminology';
+                if (val === 'medicine') classId = 'medical-terminology';
+                else if (val === 'chemistry') classId = 'intro-to-chemistry';
+                else if (val === 'psychology') classId = 'psychology-care';
+                else if (val === 'anatomy') classId = 'anatomy-physiology-1';
+
+                selectPlaylist.value = classId;
+
+                // Notify global floating player to update its active playlist view
+                window.dispatchEvent(new CustomEvent('gnosys_set_active_class', {
+                    detail: { classId: classId }
+                }));
+            };
+
+            selectSubject.addEventListener('change', syncSubjectToPlaylist);
+            
+            // Sync on page load (with a small timeout to let the global player load first)
+            setTimeout(syncSubjectToPlaylist, 100);
         }
 
         // Add to Playlist Button Handler

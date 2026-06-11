@@ -1661,6 +1661,19 @@
         fetchPlaylists();
     });
 
+    window.addEventListener('gnosys_set_active_class', (e) => {
+        const { classId } = e.detail;
+        if (classId && classId !== activeClassId) {
+            activeClassId = classId;
+            localStorage.setItem('gnosys_player_activeClassId', activeClassId);
+            const select = document.getElementById('gnosys-player-class-select');
+            if (select) {
+                select.value = activeClassId;
+            }
+            renderPlaylistTracks();
+        }
+    });
+
     // Inject CSS styles
     function injectStyles() {
         if (document.getElementById('gnosys-player-global-styles')) return;
