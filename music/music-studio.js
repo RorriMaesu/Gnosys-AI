@@ -33,6 +33,8 @@
         }
         initUI();
         checkMusicServiceStatus();
+        // Periodically refresh service status to keep indicators in sync
+        setInterval(checkMusicServiceStatus, 15000);
     });
 
     async function updatePathStatus(path) {
@@ -2863,6 +2865,8 @@ Keep the body balanced in the homeostatic light!
         } finally {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             btn.disabled = false;
+            // Reset status badge from backend to clear the manual "Loading Weights" override
+            checkMusicServiceStatus();
         }
     }
 
