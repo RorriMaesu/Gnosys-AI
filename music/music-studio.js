@@ -192,6 +192,25 @@
         const pathEl = document.getElementById('current-comfy-path');
         if (!pathEl) return;
         pathEl.textContent = comfyPath;
+
+        // Auto-detect VRAM profile if not explicitly set by the user
+        if (localStorage.getItem('gnosys_music_vram_profile') === null) {
+            if (window.GnosysLLM && typeof window.GnosysLLM.getClientHardwareInfo === 'function') {
+                window.GnosysLLM.getClientHardwareInfo().then(hw => {
+                    if (hw && hw.vramGb && hw.vramGb < 20) {
+                        vramProfile = 'optimized';
+                        localStorage.setItem('gnosys_music_vram_profile', 'optimized');
+                        const vramSelector = document.getElementById('music-vram-profile');
+                        if (vramSelector) {
+                            vramSelector.value = 'optimized';
+                        }
+                        console.log(`[Music Studio] Auto-detected ${hw.vramGb}GB VRAM. Defaulting VRAM profile to 'optimized'.`);
+                    }
+                }).catch(err => {
+                    console.warn('[Music Studio] Failed to auto-detect VRAM size:', err);
+                });
+            }
+        }
         
         // Auto-start and Auto-download checkboxes
         const autoStartChk = document.getElementById('auto-start-checkbox');
@@ -472,7 +491,13 @@
                 if (isRunning) {
                     showBannerNotification("VRAM profile saved! Please close your local helper terminal (or batch runner) and restart the service to apply.", "warning");
                 } else {
-                    showBannerNotification(`VRAM profile updated to ${vramProfile === 'low' ? 'Optimized (Low VRAM)' : 'Standard (High VRAM)'}.`, "success");
+                    let label = 'Standard (High VRAM)';
+                    if (vramProfile === 'optimized') {
+                        label = 'Optimized (Medium VRAM)';
+                    } else if (vramProfile === 'low') {
+                        label = 'Low VRAM';
+                    }
+                    showBannerNotification(`VRAM profile updated to ${label}.`, "success");
                 }
             });
         }

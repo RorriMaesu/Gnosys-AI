@@ -375,23 +375,59 @@
             console.log('[GnosysLLM] WebGPU model unloaded successfully.');
         }
 
-        // Unload Ollama model from VRAM
-        const activeModel = getActiveDesktopModel();
-        if (activeModel) {
-            try {
-                await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: activeModel,
-                        prompt: '',
-                        keep_alive: 0
-                    }),
-                    signal: AbortSignal.timeout(1000)
-                });
-                console.log(`[GnosysLLM] Instructed local Ollama to unload model: ${activeModel}`);
-            } catch (err) {
-                console.warn('[GnosysLLM] Failed to instruct Ollama to unload:', err);
+        // Unload Ollama models from VRAM dynamically
+        try {
+            const psRes = await fetch(`${OLLAMA_BASE_URL}/api/ps`, {
+                method: 'GET',
+                signal: AbortSignal.timeout(1000)
+            });
+            if (psRes.ok) {
+                const psData = await psRes.json();
+                if (psData && Array.isArray(psData.models)) {
+                    for (const m of psData.models) {
+                        const mName = m.name || m.model;
+                        if (mName) {
+                            try {
+                                await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        model: mName,
+                                        prompt: '',
+                                        keep_alive: 0
+                                    }),
+                                    signal: AbortSignal.timeout(1000)
+                                });
+                                console.log(`[GnosysLLM] Dynamically unloaded running Ollama model: ${mName}`);
+                            } catch (unloadErr) {
+                                console.warn(`[GnosysLLM] Failed to unload running Ollama model ${mName}:`, unloadErr);
+                            }
+                        }
+                    }
+                }
+            } else {
+                throw new Error(`Ollama ps response not ok: ${psRes.status}`);
+            }
+        } catch (psErr) {
+            console.warn('[GnosysLLM] Failed to check running Ollama models via /api/ps, using fallback:', psErr);
+            // Fallback to unloading the active selection if /api/ps failed
+            const activeModel = getActiveDesktopModel();
+            if (activeModel) {
+                try {
+                    await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: activeModel,
+                            prompt: '',
+                            keep_alive: 0
+                        }),
+                        signal: AbortSignal.timeout(1000)
+                    });
+                    console.log(`[GnosysLLM] Instructed local Ollama to unload model (fallback): ${activeModel}`);
+                } catch (err) {
+                    console.warn('[GnosysLLM] Failed to instruct Ollama to unload (fallback):', err);
+                }
             }
         }
 
