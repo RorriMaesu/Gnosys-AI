@@ -82,7 +82,7 @@ def kill_port_process(port):
                         pids.add(int(pid))
             for pid in pids:
                 print(f"[Launcher] Killing process {pid} on port {port}")
-                subprocess.run(f'taskkill /F /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(f'taskkill /F /T /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
             # Unix/Mac
             output = subprocess.check_output(f'lsof -t -i:{port}', shell=True).decode('utf-8', errors='ignore')
