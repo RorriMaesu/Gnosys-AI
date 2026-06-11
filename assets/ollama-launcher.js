@@ -1088,7 +1088,7 @@
                     }
 
                     setActionStatus('working', `Opening Smart LLM Setup for ${modelLabel}...`);
-                    await window.GnosysLLM?.init?.();
+                    await window.GnosysLLM?.init?.(true);
                     if (typeof window.GnosysLLM?.showMobileChoiceModal === 'function') {
                         window.GnosysLLM.showMobileChoiceModal();
                         setActionStatus('info', 'Smart LLM Setup opened. Choose where to save your LiteRT model file.');
@@ -1112,7 +1112,7 @@
                 if (options.moduleKey) {
                     localStorage.setItem(options.moduleKey, val);
                 }
-                await window.GnosysLLM?.init?.();
+                await window.GnosysLLM?.init?.(true);
                 if (isInstalled) {
                     setActionStatus('success', `${modelLabel} is now active.`);
                 }

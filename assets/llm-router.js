@@ -404,9 +404,14 @@
         }
     }
 
-    async function init() {
+    async function init(force = false) {
         if (isDownloadInitializing) {
             throw new Error('On-device download is already initializing.');
+        }
+
+        if (force) {
+            state.initialized = false;
+            state.initPromise = null;
         }
 
         if (state.initialized) return getStatus();
@@ -1903,7 +1908,7 @@
             browserBtn.addEventListener('click', () => {
                 localStorage.setItem(STORAGE_KEYS.routeMode, 'mobile-ondevice');
                 closeHardwareModalAndOpenSmartSetup();
-                init();
+                init(true);
             });
         }
 
@@ -1953,7 +1958,6 @@
                     setTimeout(() => {
                         overlay.remove();
                         localStorage.setItem(STORAGE_KEYS.routeMode, 'desktop-ollama');
-                        queueSmartSetupModal({ force: true });
                         state.provider = createOllamaProvider();
                         setProvider('desktop-ollama');
                         state.mobileChoicePending = false;
@@ -2765,7 +2769,7 @@
                         localStorage.setItem('chemistry_llm', activeOllamaSelection);
                         overlay.remove();
                         state.modalEl = null;
-                        init();
+                        init(true);
                     });
                 }
             }
