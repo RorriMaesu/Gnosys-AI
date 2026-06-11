@@ -1044,7 +1044,7 @@
                 // Auto-download missing models if enabled
                 const autoDownloadEnabled = document.getElementById('auto-download-checkbox')?.checked ?? true;
                 if (autoDownloadEnabled && missing.length > 0) {
-                    const activeRepos = data.active_downloads ? Object.keys(data.active_downloads).filter(k => data.active_downloads[k] === 'downloading') : [];
+                    const activeRepos = data.active_downloads ? Object.keys(data.active_downloads).filter(k => data.active_downloads[k] === 'downloading' || data.active_downloads[k] === 'failed') : [];
                     for (const item of missing) {
                         if (!activeRepos.includes(item.repoId)) {
                             triggerBackgroundDownload(item.label, item.repoId, item.targetSubdir);
