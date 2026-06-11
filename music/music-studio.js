@@ -298,17 +298,13 @@
         if (selectSubject && selectPlaylist) {
             const syncSubjectToPlaylist = () => {
                 const val = selectSubject.value;
-                let classId = 'medical-terminology';
-                if (val === 'medicine') classId = 'medical-terminology';
-                else if (val === 'chemistry') classId = 'intro-to-chemistry';
-                else if (val === 'psychology') classId = 'psychology-care';
-                else if (val === 'anatomy') classId = 'anatomy-physiology-1';
+                if (val === 'custom') return;
 
-                selectPlaylist.value = classId;
+                selectPlaylist.value = val;
 
                 // Notify global floating player to update its active playlist view
                 window.dispatchEvent(new CustomEvent('gnosys_set_active_class', {
-                    detail: { classId: classId }
+                    detail: { classId: val }
                 }));
             };
 
@@ -2457,11 +2453,9 @@ Keep the body balanced in the homeostatic light!
         const selectPlaylist = document.getElementById('playlist-target-select');
         if (selectSubject && selectPlaylist) {
             const val = selectSubject.value;
-            if (val === 'medicine') selectPlaylist.value = 'medical-terminology';
-            else if (val === 'chemistry') selectPlaylist.value = 'intro-to-chemistry';
-            else if (val === 'psychology') selectPlaylist.value = 'psychology-care';
-            else if (val === 'anatomy') selectPlaylist.value = 'anatomy-physiology-1';
-            else selectPlaylist.value = 'medical-terminology';
+            if (val !== 'custom') {
+                selectPlaylist.value = val;
+            }
         }
 
         // Smart Autoplay Check: check if background audio engine is currently playing a track
