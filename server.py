@@ -889,8 +889,8 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     headers={'Content-Type': 'application/json'}
                 )
                 
-                # Send with high timeout (180s) to survive slow inference
-                with urllib.request.urlopen(req, timeout=180) as response_conn:
+                # Send with high timeout (600s) to survive slow inference
+                with urllib.request.urlopen(req, timeout=600) as response_conn:
                     response_data = response_conn.read()
                     
                 self.send_response(200)

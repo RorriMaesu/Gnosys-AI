@@ -227,6 +227,20 @@
         // Load persisted studio settings
         loadMusicStudioSettings();
 
+        // Ensure model steps are aligned on load to prevent slow default runs on Turbo model
+        if (modelSelector) {
+            const stepsSelect = document.getElementById('music-steps');
+            if (stepsSelect) {
+                if (modelSelector.value.includes('turbo') && (stepsSelect.value === '50' || stepsSelect.value === '20')) {
+                    stepsSelect.value = '8';
+                    saveMusicStudioSettings();
+                } else if (modelSelector.value.includes('sft') && stepsSelect.value === '8') {
+                    stepsSelect.value = '50';
+                    saveMusicStudioSettings();
+                }
+            }
+        }
+
         // Initialize lyric state from loaded textarea value
         const initialLyricsTextarea = document.getElementById('generated-lyrics');
         if (initialLyricsTextarea) {
