@@ -794,6 +794,36 @@
         const isOpen = overlay.classList.contains('active');
         localStorage.setItem('gnosys_player_drawer_open', isOpen ? 'true' : 'false');
         if (isOpen) {
+            // Context-Aware Auto-Detect:
+            // 1. Try reading the active subject from the iframe's chatbot subject-selector (if inside Music Studio)
+            let detectedClassId = null;
+            try {
+                const iframe = document.getElementById('gnosys-content-frame');
+                if (iframe && iframe.contentWindow) {
+                    const doc = iframe.contentDocument || iframe.contentWindow.document;
+                    const subjectSelector = doc.getElementById('subject-selector');
+                    if (subjectSelector && subjectSelector.value && subjectSelector.value !== 'custom') {
+                        detectedClassId = subjectSelector.value;
+                    }
+                }
+            } catch (e) {
+                // Ignore cross-origin error, though Gnosys AI should be on same origin
+            }
+            
+            // 2. Fall back to path-based detection if no chatbot selector found
+            if (!detectedClassId) {
+                detectedClassId = getCurrentClassId();
+            }
+            
+            if (detectedClassId && detectedClassId !== activeClassId) {
+                activeClassId = detectedClassId;
+                localStorage.setItem('gnosys_player_activeClassId', activeClassId);
+                const select = document.getElementById('gnosys-player-class-select');
+                if (select) {
+                    select.value = activeClassId;
+                }
+            }
+
             fetchPlaylists();
         }
     }
@@ -826,6 +856,7 @@
                         <div class="name-display">${track.name}</div>
                     </div>
                     <div class="actions">
+                        <button class="row-btn move-btn" data-id="${track.id}" title="Move to Playlist"><i class="fa-solid fa-right-left"></i></button>
                         <button class="row-btn download-track-btn" data-url="${track.url}" data-name="${track.name}" title="Download"><i class="fa-solid fa-download"></i></button>
                         <button class="row-btn rename-btn" data-id="${track.id}" title="Rename"><i class="fa-solid fa-pencil"></i></button>
                         <button class="row-btn delete-btn" data-id="${track.id}" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
@@ -848,6 +879,78 @@
             el.addEventListener('click', (e) => {
                 const idx = parseInt(el.getAttribute('data-idx'));
                 playTrack(idx);
+            });
+        });
+
+        // Move track inline action
+        list.querySelectorAll('.move-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const trackId = btn.getAttribute('data-id');
+                const row = btn.closest('.track-row');
+                
+                // Save original action HTML
+                const originalActions = row.querySelector('.actions').innerHTML;
+                const actionsContainer = row.querySelector('.actions');
+                const nameDisplay = row.querySelector('.track-name-click');
+                const dragHandle = row.querySelector('.drag-handle');
+                
+                // Hide drag handle and name display, replace with select dropdown
+                dragHandle.style.display = 'none';
+                nameDisplay.style.display = 'none';
+                
+                // Generate inline playlist options
+                let selectHtml = `<select class="inline-playlist-select" style="flex: 1; min-width: 120px; font-size: 11px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); color: #f8fafc; border-radius: 6px; padding: 2px 4px; outline: none; margin-right: 6px;">`;
+                for (const [classId, className] of Object.entries(CLASS_NAMES)) {
+                    if (classId !== activeClassId) {
+                        selectHtml += `<option value="${classId}">${className}</option>`;
+                    }
+                }
+                selectHtml += `</select>`;
+                
+                // Insert select element before actions
+                const selectWrapper = document.createElement('div');
+                selectWrapper.className = 'inline-select-wrapper';
+                selectWrapper.style.cssText = 'display: flex; flex: 1; align-items: center; overflow: hidden;';
+                selectWrapper.innerHTML = selectHtml;
+                row.insertBefore(selectWrapper, actionsContainer);
+                
+                // Update actions to confirm / cancel buttons
+                actionsContainer.innerHTML = `
+                    <button class="row-btn confirm-move-btn" style="color: #10b981;" title="Confirm Move"><i class="fa-solid fa-check"></i></button>
+                    <button class="row-btn cancel-move-btn" style="color: #ef4444;" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+                `;
+                
+                // Bind Confirm / Cancel listeners
+                const cancelBtn = actionsContainer.querySelector('.cancel-move-btn');
+                const confirmBtn = actionsContainer.querySelector('.confirm-move-btn');
+                const selectElement = selectWrapper.querySelector('.inline-playlist-select');
+                
+                cancelBtn.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    selectWrapper.remove();
+                    dragHandle.style.display = '';
+                    nameDisplay.style.display = '';
+                    actionsContainer.innerHTML = originalActions;
+                    // Re-bind actions since we innerHTML'd them
+                    renderPlaylistTracks();
+                });
+                
+                confirmBtn.addEventListener('click', async (ev) => {
+                    ev.stopPropagation();
+                    const destClassId = selectElement.value;
+                    confirmBtn.disabled = true;
+                    cancelBtn.disabled = true;
+                    confirmBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i>`;
+                    
+                    const success = await moveTrackOnServer(activeClassId, destClassId, trackId);
+                    if (success) {
+                        await fetchPlaylists();
+                    } else {
+                        alert("Failed to move track.");
+                        renderPlaylistTracks();
+                    }
+                });
             });
         });
 
@@ -1225,6 +1328,43 @@
         } catch (e) {
             console.error('[Global Player] Failed to delete track:', e);
         }
+    }
+
+    async function moveTrackOnServer(srcClassId, destClassId, trackId) {
+        try {
+            const res = await fetch(`${API_BASE}/api/playlists/move-track`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    src_class_id: srcClassId,
+                    dest_class_id: destClassId,
+                    track_id: trackId
+                })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                // If the moved track is currently playing, update its playing class ID and relative URL path
+                if (currentTrack && currentTrack.id === trackId) {
+                    playingClassId = destClassId;
+                    const ext = currentTrack.url.split('.').pop();
+                    currentTrack.url = `/music/saved_tracks/${destClassId}/${currentTrack.id}.${ext}`;
+                    updateUIState();
+                }
+                
+                // Post to BroadcastChannel to notify other components/instances of the update
+                try {
+                    const notifyChannel = new BroadcastChannel('gnosys_audio_channel');
+                    notifyChannel.postMessage({ type: 'playlist_updated', classId: srcClassId });
+                    notifyChannel.postMessage({ type: 'playlist_updated', classId: destClassId });
+                } catch (err) {
+                    console.warn('[Global Player] Failed to post playlist_updated notification:', err);
+                }
+                return true;
+            }
+        } catch (e) {
+            console.error('[Global Player] Failed to move track on server:', e);
+        }
+        return false;
     }
 
     // Integrate with Pomodoro

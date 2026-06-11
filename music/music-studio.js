@@ -309,6 +309,7 @@
             };
 
             selectSubject.addEventListener('change', syncSubjectToPlaylist);
+            selectSubject.addEventListener('input', syncSubjectToPlaylist);
             
             // Sync on page load (with a small timeout to let the global player load first)
             setTimeout(syncSubjectToPlaylist, 100);

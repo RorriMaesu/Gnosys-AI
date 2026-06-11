@@ -165,3 +165,50 @@ def delete_track(class_id, track_id):
                 write_playlists(data)
                 return True
     return False
+
+def move_track(src_class_id, dest_class_id, track_id):
+    if src_class_id == dest_class_id:
+        return True
+    
+    data = read_playlists()
+    if src_class_id not in data["playlists"] or dest_class_id not in data["playlists"]:
+        return False
+    
+    src_tracks = data["playlists"][src_class_id]["tracks"]
+    track_to_move = None
+    track_idx = -1
+    
+    for idx, track in enumerate(src_tracks):
+        if track["id"] == track_id:
+            track_to_move = track
+            track_idx = idx
+            break
+            
+    if not track_to_move:
+        return False
+        
+    # Create destination folder if not exists
+    dest_folder = os.path.join(SAVED_TRACKS_DIR, dest_class_id)
+    os.makedirs(dest_folder, exist_ok=True)
+    
+    # Path of physical files
+    src_file_path = os.path.join(SAVED_TRACKS_DIR, src_class_id, track_to_move["filename"])
+    dest_file_path = os.path.join(dest_folder, track_to_move["filename"])
+    
+    if os.path.exists(src_file_path):
+        try:
+            os.rename(src_file_path, dest_file_path)
+        except Exception as e:
+            print("[Playlists Manager] Error moving physical file:", e)
+            return False
+            
+    # Update track URLs and details
+    track_to_move["url"] = f"/music/saved_tracks/{dest_class_id}/{track_to_move['filename']}"
+    
+    # Remove from source, append to dest
+    src_tracks.pop(track_idx)
+    data["playlists"][dest_class_id]["tracks"].append(track_to_move)
+    
+    write_playlists(data)
+    return True
+
