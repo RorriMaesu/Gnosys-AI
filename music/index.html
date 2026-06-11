@@ -318,6 +318,9 @@
             line-height: 22px;
             color: #f1f5f9;
             overflow-y: auto;
+            overflow-x: auto;
+            white-space: pre;
+            word-wrap: normal;
             box-sizing: border-box;
             min-height: 100%;
         }
@@ -736,7 +739,7 @@
                                 <div class="lyrics-gutter-line">1</div>
                             </div>
                             <!-- Textarea editor -->
-                            <textarea id="generated-lyrics" placeholder="Your study lyrics will appear here. Highlight text to edit sections or type directly." class="lyrics-textarea-field"></textarea>
+                            <textarea id="generated-lyrics" wrap="off" placeholder="Your study lyrics will appear here. Highlight text to edit sections or type directly." class="lyrics-textarea-field"></textarea>
                         </div>
                     </div>
                 </div>
