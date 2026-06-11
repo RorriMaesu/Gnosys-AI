@@ -63,6 +63,38 @@ def probe_port(port):
     except Exception:
         return False
 
+def kill_port_process(port):
+    import subprocess
+    import platform
+    import re
+    try:
+        if platform.system() == 'Windows':
+            output = subprocess.check_output(f'netstat -ano | findstr :{port}', shell=True).decode('utf-8', errors='ignore')
+            pids = set()
+            for line in output.strip().split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = re.split(r'\s+', line)
+                if len(parts) >= 5 and parts[1].endswith(f':{port}'):
+                    pid = parts[-1]
+                    if pid.isdigit() and int(pid) > 0:
+                        pids.add(int(pid))
+            for pid in pids:
+                print(f"[Launcher] Killing process {pid} on port {port}")
+                subprocess.run(f'taskkill /F /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # Unix/Mac
+            output = subprocess.check_output(f'lsof -t -i:{port}', shell=True).decode('utf-8', errors='ignore')
+            pids = [int(p) for p in output.strip().split('\n') if p.isdigit()]
+            for pid in pids:
+                print(f"[Launcher] Killing process {pid} on port {port}")
+                subprocess.run(f'kill -9 {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception as e:
+        print(f"[Launcher] Error killing process on port {port}: {e}")
+        return False
+
 def get_available_drives():
     import platform
     if platform.system() == 'Windows':
@@ -632,6 +664,13 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     ace_path = body.get('comfy_path', ace_path)
                     vram_profile = body.get('vram_profile', 'high')
                 ace_path = resolve_fallback_path(ace_path)
+
+                # Terminate any existing server on port 8002 to allow VRAM profile swapping
+                if probe_port(8002):
+                    import time
+                    print(f"[Launcher] Port 8002 is active. Terminating process to apply '{vram_profile}' VRAM profile.")
+                    kill_port_process(8002)
+                    time.sleep(1.0)
 
                 python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 

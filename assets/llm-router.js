@@ -335,6 +335,7 @@
     const routerApi = {
         init,
         getStatus,
+        unload,
         generateResponse,
         showMobileChoiceModal,
         showDesktopConnectionInfoModal,
@@ -363,6 +364,33 @@
         });
     } else {
         init().catch(() => {});
+    }
+
+    async function unload() {
+        if (state.provider && typeof state.provider.close === 'function') {
+            await state.provider.close();
+            console.log('[GnosysLLM] WebGPU model unloaded successfully.');
+        }
+
+        // Unload Ollama model from VRAM
+        const activeModel = getActiveDesktopModel();
+        if (activeModel) {
+            try {
+                await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: activeModel,
+                        prompt: '',
+                        keep_alive: 0
+                    }),
+                    signal: AbortSignal.timeout(1000)
+                });
+                console.log(`[GnosysLLM] Instructed local Ollama to unload model: ${activeModel}`);
+            } catch (err) {
+                console.warn('[GnosysLLM] Failed to instruct Ollama to unload:', err);
+            }
+        }
     }
 
     async function init() {
@@ -758,25 +786,24 @@
                     providerState.idleTimerId = null;
                 }
 
-                const isLowRam = localStorage.getItem(STORAGE_KEYS.lowRamOptimizations) === 'true' || (navigator.deviceMemory && navigator.deviceMemory <= 4);
-                if (!isLowRam || !providerState.engine) return;
+                if (!providerState.engine) return;
 
-                // 3 minutes of inactivity triggers eager de-allocation
+                const isLowRam = localStorage.getItem(STORAGE_KEYS.lowRamOptimizations) === 'true' || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+                const timeoutMs = isLowRam ? 180000 : 300000; // 3 min for Low-RAM, 5 min for Standard
                 providerState.idleTimerId = setTimeout(async () => {
-                    console.log('[GnosysLLM] Active session idle for 3 minutes. Eagerly de-allocating WebGPU resources to save RAM.');
+                    console.log('[GnosysLLM] Active session idle. Eagerly de-allocating WebGPU resources to save RAM.');
                     await this.close();
-                }, 180000);
+                }, timeoutMs);
             },
 
             setupMemoryWatchdog() {
                 if (providerState.visibilityListenerAttached) return;
 
                 document.addEventListener('visibilitychange', async () => {
-                    const isLowRam = localStorage.getItem(STORAGE_KEYS.lowRamOptimizations) === 'true' || (navigator.deviceMemory && navigator.deviceMemory <= 4);
-                    if (!isLowRam || !providerState.engine) return;
+                    if (!providerState.engine) return;
 
                     if (document.visibilityState === 'hidden') {
-                        console.log('[GnosysLLM] Tab hidden. Eagerly closing WebGPU engine to prevent background browser tab OOM crashes.');
+                        console.log('[GnosysLLM] Tab hidden. Eagerly closing WebGPU engine to free VRAM for other GPU tasks.');
                         await this.close();
                     }
                 });

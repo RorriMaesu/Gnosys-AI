@@ -33,6 +33,11 @@
         }
         initUI();
         checkMusicServiceStatus();
+        
+        // Clean up any lingering WebGPU/Ollama models on startup to maximize VRAM headroom
+        if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
+            window.GnosysLLM.unload().catch(err => console.warn('[Music Studio] Startup VRAM optimization skipped:', err));
+        }
     });
 
     async function updatePathStatus(path) {
@@ -117,7 +122,6 @@
         'music-model',
         'music-bpm',
         'music-length',
-        'music-steps',
         'music-vocals',
         'music-thinking',
         'music-format',
@@ -198,17 +202,6 @@
         if (modelSelector) {
             modelSelector.addEventListener('change', () => {
                 checkMusicServiceStatus();
-                
-                // Auto-adjust steps value based on model selection to prevent slow 50-step runs on Turbo
-                const stepsSelect = document.getElementById('music-steps');
-                if (stepsSelect) {
-                    if (modelSelector.value.includes('turbo')) {
-                        stepsSelect.value = '8';
-                    } else if (modelSelector.value.includes('sft')) {
-                        stepsSelect.value = '50';
-                    }
-                    saveMusicStudioSettings();
-                }
             });
         }
 
@@ -227,19 +220,7 @@
         // Load persisted studio settings
         loadMusicStudioSettings();
 
-        // Ensure model steps are aligned on load to prevent slow default runs on Turbo model
-        if (modelSelector) {
-            const stepsSelect = document.getElementById('music-steps');
-            if (stepsSelect) {
-                if (modelSelector.value.includes('turbo') && (stepsSelect.value === '50' || stepsSelect.value === '20')) {
-                    stepsSelect.value = '8';
-                    saveMusicStudioSettings();
-                } else if (modelSelector.value.includes('sft') && stepsSelect.value === '8') {
-                    stepsSelect.value = '50';
-                    saveMusicStudioSettings();
-                }
-            }
-        }
+
 
         // Initialize lyric state from loaded textarea value
         const initialLyricsTextarea = document.getElementById('generated-lyrics');
@@ -389,13 +370,20 @@
             downloadAllBtn.addEventListener('click', triggerDownloadAllMissing);
         }
         
-        // VRAM profile initialization and change handler
         const vramSelector = document.getElementById('music-vram-profile');
         if (vramSelector) {
             vramSelector.value = vramProfile;
             vramSelector.addEventListener('change', (e) => {
                 vramProfile = e.target.value;
                 localStorage.setItem('gnosys_music_vram_profile', vramProfile);
+                
+                const badge = document.getElementById('comfy-status-badge');
+                const isRunning = badge && badge.textContent.trim() === 'Running';
+                if (isRunning) {
+                    showBannerNotification("VRAM profile saved! Please close your local helper terminal (or batch runner) and restart the service to apply.", "warning");
+                } else {
+                    showBannerNotification(`VRAM profile updated to ${vramProfile === 'low' ? 'Optimized (Low VRAM)' : 'Standard (High VRAM)'}.`, "success");
+                }
             });
         }
         document.getElementById('explorer-current-path').textContent = comfyPath;
@@ -2340,6 +2328,18 @@ Keep the body balanced in the homeostatic light!
         btn.disabled = true;
         progressContainer.classList.remove('hidden');
         
+        fill.style.width = '5%';
+        percent.textContent = '5%';
+        statusText.textContent = 'Optimizing VRAM & unloading idle AI models...';
+
+        if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
+            try {
+                await window.GnosysLLM.unload();
+            } catch (unloadErr) {
+                console.warn('[Music Studio] VRAM optimization warning:', unloadErr);
+            }
+        }
+
         let progressPercent = 10;
         fill.style.width = '10%';
         percent.textContent = '10%';
@@ -2369,7 +2369,8 @@ Keep the body balanced in the homeostatic light!
         const promptVal = document.getElementById('music-prompt').value;
         const bpmVal = document.getElementById('music-bpm').value;
         const lengthVal = document.getElementById('music-length').value;
-        const stepsVal = document.getElementById('music-steps').value;
+        const stepsElement = document.getElementById('music-steps');
+        const stepsVal = stepsElement ? stepsElement.value : (modelVal.includes('turbo') ? '8' : '50');
         const vocalsVal = document.getElementById('music-vocals').value;
         const lyricsVal = document.getElementById('generated-lyrics').value || "";
 

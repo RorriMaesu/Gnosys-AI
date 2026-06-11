@@ -3,3 +3,5 @@ node_modules/
 music/saved_tracks/
 __pycache__/
 *.pyc
+_backup_local/
+
