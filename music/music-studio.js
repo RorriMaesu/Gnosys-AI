@@ -2260,8 +2260,37 @@ Note: Place constructive critique explanations inside the <chat_response> tag, w
         }
 
         const bubble = appendChatMessage("Gnosys AI", "", "agent");
+        bubble.classList.add('loading-state');
         const bubbleBody = bubble.querySelector('.agent-message-body');
-        bubbleBody.innerHTML = `<div class="flex items-center space-x-1.5"><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce"></div><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce" style="animation-delay: 0.15s"></div><div class="w-1.5 h-1.5 bg-fuchsia-500 rounded-full animate-bounce" style="animation-delay: 0.3s"></div></div>`;
+
+        // Draw multi-stage load panel
+        let stagesHtml = `
+            <div class="stage-loader-container">
+                <div class="stage-row active" id="stage-vram">
+                    <span class="stage-indicator"><i class="fa-solid fa-circle-notch fa-spin"></i></span>
+                    <span class="stage-text">Optimizing device GPU VRAM allocation...</span>
+                </div>
+                <div class="stage-row" id="stage-model">
+                    <span class="stage-indicator"><i class="fa-regular fa-circle"></i></span>
+                    <span class="stage-text">Connecting Gemma 4 cognitive songwriting weights...</span>
+                </div>
+        `;
+        if (hasSelection) {
+            stagesHtml += `
+                <div class="stage-row" id="stage-context">
+                    <span class="stage-indicator"><i class="fa-regular fa-circle"></i></span>
+                    <span class="stage-text">Aligning focused selection lines...</span>
+                </div>
+            `;
+        }
+        stagesHtml += `
+                <div class="stage-row" id="stage-generation">
+                    <span class="stage-indicator"><i class="fa-regular fa-circle"></i></span>
+                    <span class="stage-text">Awaiting Gnosys streaming reply...</span>
+                </div>
+            </div>
+        `;
+        bubbleBody.innerHTML = stagesHtml;
 
         const wantsCritique = isCritiqueMode || /critique|review|score|evaluate|analyse|analyze/i.test(userText);
 
@@ -2376,12 +2405,62 @@ Keep the body balanced in the homeostatic light!
             if (window.GnosysLLM) {
                 let responseText = '';
                 
+                // Complete VRAM optimization step
+                const vramRow = document.getElementById('stage-vram');
+                if (vramRow) {
+                    vramRow.classList.remove('active');
+                    vramRow.classList.add('completed');
+                    vramRow.querySelector('.stage-indicator').innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+                }
+
+                // Activate model weighting step
+                const modelRow = document.getElementById('stage-model');
+                if (modelRow) {
+                    modelRow.classList.add('active');
+                    modelRow.querySelector('.stage-indicator').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+                }
+
+                // Small delay to simulate weight assembly sequence
+                await new Promise(r => setTimeout(r, 450));
+
+                if (modelRow) {
+                    modelRow.classList.remove('active');
+                    modelRow.classList.add('completed');
+                    modelRow.querySelector('.stage-indicator').innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+                }
+
+                // Context processing step
+                const contextRow = document.getElementById('stage-context');
+                if (contextRow) {
+                    contextRow.classList.add('active');
+                    contextRow.querySelector('.stage-indicator').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+                    await new Promise(r => setTimeout(r, 300));
+                    contextRow.classList.remove('active');
+                    contextRow.classList.add('completed');
+                    contextRow.querySelector('.stage-indicator').innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+                }
+
+                // Generation streaming step
+                const generationRow = document.getElementById('stage-generation');
+                if (generationRow) {
+                    generationRow.classList.add('active');
+                    generationRow.querySelector('.stage-indicator').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+                }
+
+                let streamStarted = false;
+
                 await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
                     stream: true,
                     history: studioConversationHistory.slice(0, -1),
                     onToken: (token, fullText) => {
                         responseText = fullText;
                         
+                        if (!streamStarted) {
+                            streamStarted = true;
+                            // Clean up loading stages as streaming begins
+                            bubble.classList.remove('loading-state');
+                        }
+
                         const chatText = parseChatResponse(fullText);
                         if (chatText) {
                             bubbleBody.innerHTML = parseMarkdown(chatText);
@@ -2417,9 +2496,11 @@ Keep the body balanced in the homeostatic light!
                     applySettingsUpdate(settings);
                 }
             } else {
+                bubble.classList.remove('loading-state');
                 bubbleBody.innerHTML = "Gnosys LLM Engine is currently loading or unavailable on this device tab.";
             }
         } catch (err) {
+            bubble.classList.remove('loading-state');
             bubbleBody.innerHTML = `Error generating response: ${err.message}`;
         } finally {
             isChatResponding = false;
