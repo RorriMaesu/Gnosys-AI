@@ -206,6 +206,18 @@
 
         // Models selector change checker
         const modelSelector = document.getElementById('music-model');
+        const updateStepsRecommendation = () => {
+            const badge = document.getElementById('steps-recommendation-badge');
+            if (!badge || !modelSelector) return;
+            if (modelSelector.value.includes('turbo')) {
+                badge.textContent = "Rec: 8 (Turbo)";
+                badge.className = "text-[8px] text-sky-400 font-bold transition-all";
+            } else {
+                badge.textContent = "Rec: 24-50 (SFT)";
+                badge.className = "text-[8px] text-indigo-300 font-bold transition-all";
+            }
+        };
+
         if (modelSelector) {
             modelSelector.addEventListener('change', () => {
                 checkMusicServiceStatus();
@@ -228,10 +240,23 @@
                             if (guidanceValLabel) guidanceValLabel.textContent = "7.0";
                         }
                     }
+                    updateStepsRecommendation();
                     saveMusicStudioSettings();
                 }
             });
         }
+
+        // Preset steps buttons handler
+        document.querySelectorAll('.preset-steps-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const val = e.currentTarget.getAttribute('data-value');
+                const stepsInput = document.getElementById('music-steps');
+                if (stepsInput) {
+                    stepsInput.value = val;
+                    saveMusicStudioSettings();
+                }
+            });
+        });
 
         // Preset length buttons handler
         document.querySelectorAll('.preset-length-btn').forEach(btn => {
@@ -247,6 +272,7 @@
 
         // Load persisted studio settings
         loadMusicStudioSettings();
+        updateStepsRecommendation();
 
 
 
