@@ -369,7 +369,7 @@
         init().catch(() => {});
     }
 
-    async function unload() {
+    async function unload(excludeMusic = false) {
         if (state.provider && typeof state.provider.close === 'function') {
             await state.provider.close();
             console.log('[GnosysLLM] WebGPU model unloaded successfully.');
@@ -393,6 +393,10 @@
             } catch (err) {
                 console.warn('[GnosysLLM] Failed to instruct Ollama to unload:', err);
             }
+        }
+
+        if (excludeMusic) {
+            return;
         }
 
         // Unload ACE-Step model from VRAM

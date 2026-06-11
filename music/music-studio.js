@@ -2726,7 +2726,7 @@ Keep the body balanced in the homeostatic light!
 
         if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
             try {
-                await window.GnosysLLM.unload();
+                await window.GnosysLLM.unload(true);
             } catch (unloadErr) {
                 console.warn('[Music Studio] VRAM optimization warning:', unloadErr);
             }
