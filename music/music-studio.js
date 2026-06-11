@@ -33,11 +33,6 @@
         }
         initUI();
         checkMusicServiceStatus();
-        
-        // Clean up any lingering WebGPU/Ollama models on startup to maximize VRAM headroom
-        if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
-            window.GnosysLLM.unload().catch(err => console.warn('[Music Studio] Startup VRAM optimization skipped:', err));
-        }
     });
 
     async function updatePathStatus(path) {
@@ -710,6 +705,42 @@
                 }
             }
         };
+
+        // AI Tutor router status & enable banner handling
+        const updateAiStatusUI = (status) => {
+            const warningCard = document.getElementById('ai-disabled-warning');
+            if (!warningCard) return;
+            if (status && status.provider === 'no-ai') {
+                warningCard.classList.remove('hidden');
+            } else {
+                warningCard.classList.add('hidden');
+            }
+        };
+
+        // Initialize display using current status
+        if (window.GnosysLLM) {
+            updateAiStatusUI(window.GnosysLLM.getStatus());
+        }
+
+        window.addEventListener('gnosys-llm-provider-changed', (event) => {
+            if (event.detail) {
+                updateAiStatusUI(event.detail);
+            }
+        });
+
+        const btnEnableAi = document.getElementById('btn-enable-ai-tutor');
+        if (btnEnableAi) {
+            btnEnableAi.addEventListener('click', (e) => {
+                e.preventDefault();
+                const badge = document.querySelector('[data-llm-provider-badge]');
+                if (badge) {
+                    badge.click();
+                } else if (window.GnosysLLM) {
+                    // Fallback to show choice modal directly if badge element is missing
+                    window.GnosysLLM.showMobileChoiceModal();
+                }
+            });
+        }
     }
 
     function launchAssistantServer(isManual = false) {

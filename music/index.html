@@ -320,6 +320,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-4">
+                <span data-llm-provider-badge>● Checking AI Route...</span>
                 <a href="../index.html" class="flex items-center gap-2 px-4 py-2 rounded-full glass-card text-slate-300 hover:text-white hover:bg-white/10 transition-all text-sm border border-white/5">
                     <i class="fa-solid fa-arrow-left"></i> Exit to Dashboard
                 </a>
@@ -461,6 +462,21 @@
 
                     <!-- Chat Messages Area -->
                     <div id="studio-chat-history" class="flex-grow overflow-y-auto space-y-3 p-1 mb-4 chat-history-container pr-2">
+                        <!-- AI Disabled Warning Card -->
+                        <div id="ai-disabled-warning" class="hidden glass-card rounded-2xl p-4 border border-amber-500/20 bg-amber-950/10 mb-4 flex flex-col gap-2.5">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 text-xs border border-amber-500/20 shrink-0">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                </div>
+                                <h3 class="text-xs font-bold text-white">AI Tutor is Offline</h3>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-normal">
+                                Enable Gnosys AI Tutor to dynamically generate study lyrics, review scientific accuracy, and critique rhythm.
+                            </p>
+                            <button id="btn-enable-ai-tutor" class="w-full py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-[10px] hover:bg-amber-500/20 transition-all cursor-pointer">
+                                Configure & Enable AI Tutor
+                            </button>
+                        </div>
                         <!-- Welcome Message -->
                         <div class="chat-bubble-agent p-3.5 text-xs text-slate-200 leading-relaxed max-w-[90%]">
                             <p class="font-bold text-fuchsia-400 mb-1">Gnosys AI:</p>
