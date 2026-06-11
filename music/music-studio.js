@@ -977,10 +977,10 @@
                 if (data.diagnostics) {
                     const makeBadge = (label, status, repoId, targetSubdir) => {
                         const dlStatus = data.active_downloads_status && data.active_downloads_status[repoId];
-                        const isDownloading = dlStatus ? dlStatus.status === 'downloading' : (data.active_downloads && data.active_downloads[repoId] === 'downloading');
-                        const isStopped = dlStatus && dlStatus.status === 'stopped';
-                        const isFailed = (data.active_downloads && data.active_downloads[repoId] === 'failed') || (dlStatus && dlStatus.status === 'failed');
                         const isSuccess = status || (data.active_downloads && data.active_downloads[repoId] === 'success') || (dlStatus && dlStatus.status === 'success');
+                        const isDownloading = !isSuccess && (dlStatus ? dlStatus.status === 'downloading' : (data.active_downloads && data.active_downloads[repoId] === 'downloading'));
+                        const isStopped = !isSuccess && dlStatus && dlStatus.status === 'stopped';
+                        const isFailed = !isSuccess && ((data.active_downloads && data.active_downloads[repoId] === 'failed') || (dlStatus && dlStatus.status === 'failed'));
                         
                         const wrapper = document.createElement('div');
                         wrapper.className = "flex items-center gap-1.5 shrink-0";
