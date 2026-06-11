@@ -9,6 +9,7 @@ import threading
 PORT = 8020
 active_downloads = {}
 install_status = {'progress': 0, 'step': 'idle', 'error': None}
+active_vram_profile = None
 
 def get_quantime_install_path():
     if platform.system() != 'Windows':
@@ -62,6 +63,18 @@ def probe_port(port):
         return True
     except Exception:
         return False
+
+def kill_openrouter_processes():
+    import subprocess
+    import platform
+    try:
+        if platform.system() == 'Windows':
+            cmd = 'powershell -Command "Get-CimInstance Win32_Process -Filter \\"name = \'python.exe\'\\" | Where-Object {$_.CommandLine -like \'*openrouter_api_server*\'} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
+            subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.run("pkill -f openrouter_api_server", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"[Launcher] Error killing openrouter processes: {e}")
 
 def kill_port_process(port):
     import subprocess
@@ -658,6 +671,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/launch':
             try:
+                global active_vram_profile
                 ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
                 vram_profile = 'high'
                 content_length = int(self.headers.get('Content-Length', 0))
@@ -667,12 +681,25 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     vram_profile = body.get('vram_profile', 'high')
                 ace_path = resolve_fallback_path(ace_path)
 
-                # Terminate any existing server on port 8002 to allow VRAM profile swapping
+                # Early Exit: If the API server is already running with the correct VRAM profile, share it
+                if probe_port(8002) and active_vram_profile == vram_profile:
+                    print(f"[Launcher] API Server is already active on port 8002 with '{vram_profile}' profile. Sharing instance.")
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'success', 'message': 'API Server is already running.'}).encode('utf-8'))
+                    return
+
+                # Terminate any starting/running API processes to prevent concurrent duplicates
+                print(f"[Launcher] Port 8002 mismatch or server offline. Cleaning up any openrouter processes...")
+                kill_openrouter_processes()
                 if probe_port(8002):
                     import time
-                    print(f"[Launcher] Port 8002 is active. Terminating process to apply '{vram_profile}' VRAM profile.")
                     kill_port_process(8002)
                     time.sleep(1.0)
+
+                active_vram_profile = vram_profile
 
                 python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
