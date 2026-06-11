@@ -834,6 +834,8 @@
         select.innerHTML = Object.entries(CLASS_NAMES).map(([id, name]) => `
             <option value="${id}" ${id === activeClassId ? 'selected' : ''}>${name}</option>
         `).join('');
+        // Force the dropdown value to match activeClassId explicitly after updating options
+        select.value = activeClassId;
     }
 
     // Render list of tracks
