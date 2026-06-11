@@ -1017,6 +1017,26 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(he.read())
+        elif self.path == '/api/music/unload':
+            try:
+                import urllib.request
+                import urllib.error
+                req = urllib.request.Request(
+                    'http://127.0.0.1:8002/v1/unload',
+                    method='POST'
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=5) as response_conn:
+                        response_data = response_conn.read()
+                except Exception:
+                    # Ignore offline errors - if the backend isn't running, it doesn't hold VRAM anyway
+                    response_data = json.dumps({'status': 'success', 'message': 'API server offline, no VRAM to unload.'}).encode('utf-8')
+                
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(response_data)
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')

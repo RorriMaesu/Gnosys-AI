@@ -391,6 +391,17 @@
                 console.warn('[GnosysLLM] Failed to instruct Ollama to unload:', err);
             }
         }
+
+        // Unload ACE-Step model from VRAM
+        try {
+            await fetch(`${API_BASE}/api/music/unload`, {
+                method: 'POST',
+                signal: AbortSignal.timeout(1500)
+            });
+            console.log('[GnosysLLM] Instructed local ACE-Step server to offload weights to CPU.');
+        } catch (err) {
+            console.warn('[GnosysLLM] Failed to instruct ACE-Step server to unload:', err);
+        }
     }
 
     async function init() {
@@ -511,6 +522,17 @@
                 throw new Error('Model provider not selected yet. Choose a mobile mode to continue.');
             }
             throw new Error('No local LLM provider available. This browser does not support WebGPU.');
+        }
+
+        // Proactively unload ACE-Step (music) to clear VRAM before loading chatbot model weights
+        try {
+            await fetch(`${API_BASE}/api/music/unload`, {
+                method: 'POST',
+                signal: AbortSignal.timeout(1500)
+            });
+            console.log('[GnosysLLM] Pre-query VRAM cleanup: ACE-Step models offloaded to CPU.');
+        } catch (err) {
+            console.warn('[GnosysLLM] Pre-query VRAM cleanup warning:', err);
         }
 
         return state.provider.generateResponse(systemPrompt, userPrompt, options);
