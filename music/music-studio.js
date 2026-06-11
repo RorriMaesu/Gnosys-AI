@@ -1514,8 +1514,14 @@
             const beforeStart = text.substring(0, startChar);
             const startLine = beforeStart.split('\n').length;
             
-            const selectedText = text.substring(startChar, endChar);
-            const selectedLinesCount = selectedText.split('\n').length;
+            let selectedText = text.substring(startChar, endChar);
+            let selectedLinesCount = selectedText.split('\n').length;
+            
+            // If the selection ends with a newline, we don't count the subsequent empty line start as selected.
+            if (selectedText.endsWith('\n') && selectedLinesCount > 1) {
+                selectedLinesCount--;
+            }
+
             const endLine = startLine + selectedLinesCount - 1;
 
             window.lyricStudioState.highlight = {
