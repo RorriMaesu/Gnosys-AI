@@ -1694,6 +1694,14 @@
             critiqueBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-fuchsia-400 animate-spin"></i> Analyzing...';
         }
 
+        // Lock workspace
+        const hudOverlay = document.getElementById('workspace-hud-overlay');
+        const hudStatus = document.getElementById('hud-status-text');
+        const textarea = document.getElementById('generated-lyrics');
+        if (hudOverlay) hudOverlay.classList.add('active');
+        if (hudStatus) hudStatus.textContent = "Analyzing lyrics structure and rhythm metrics...";
+        if (textarea) textarea.readOnly = true;
+
         const subjectSelector = document.getElementById('subject-selector');
         let subjectName = '';
         if (subjectSelector) {
@@ -1799,6 +1807,11 @@ Note: Place constructive critique explanations inside the <chat_response> tag, w
                 critiqueBtn.disabled = false;
                 critiqueBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles animate-pulse"></i> <span>Critique</span>';
             }
+            // Unlock workspace
+            const hudOverlay = document.getElementById('workspace-hud-overlay');
+            const textarea = document.getElementById('generated-lyrics');
+            if (hudOverlay) hudOverlay.classList.remove('active');
+            if (textarea) textarea.readOnly = false;
         }
     }
 
@@ -2236,6 +2249,14 @@ Note: Place constructive critique explanations inside the <chat_response> tag, w
             sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-sm"></i>';
         }
 
+        // Lock workspace
+        const hudOverlay = document.getElementById('workspace-hud-overlay');
+        const hudStatus = document.getElementById('hud-status-text');
+        const textarea = document.getElementById('generated-lyrics');
+        if (hudOverlay) hudOverlay.classList.add('active');
+        if (hudStatus) hudStatus.textContent = "Connecting to Gemma 4 and optimizing weights...";
+        if (textarea) textarea.readOnly = true;
+
         const subjectSelector = document.getElementById('subject-selector');
         let subjectName = '';
         if (subjectSelector) {
@@ -2447,6 +2468,8 @@ Keep the body balanced in the homeostatic light!
                     generationRow.querySelector('.stage-indicator').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
                 }
 
+                if (hudStatus) hudStatus.textContent = "Drafting new lyrics and rhyme schemas...";
+
                 let streamStarted = false;
 
                 await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
@@ -2459,6 +2482,10 @@ Keep the body balanced in the homeostatic light!
                             streamStarted = true;
                             // Clean up loading stages as streaming begins
                             bubble.classList.remove('loading-state');
+                        }
+
+                        if (fullText.includes('<edit_lyrics')) {
+                            if (hudStatus) hudStatus.textContent = "Applying generated modifications to workspace...";
                         }
 
                         const chatText = parseChatResponse(fullText);
@@ -2508,6 +2535,11 @@ Keep the body balanced in the homeostatic light!
                 sendBtn.disabled = false;
                 sendBtn.innerHTML = '<i class="fa-solid fa-paper-plane text-sm"></i>';
             }
+            // Unlock workspace
+            const hudOverlay = document.getElementById('workspace-hud-overlay');
+            const textarea = document.getElementById('generated-lyrics');
+            if (hudOverlay) hudOverlay.classList.remove('active');
+            if (textarea) textarea.readOnly = false;
         }
     }
 

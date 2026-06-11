@@ -328,6 +328,80 @@
             0%, 100% { box-shadow: 0 0 15px rgba(217, 70, 239, 0.05); border-color: rgba(217, 70, 239, 0.15); }
             50% { box-shadow: 0 0 25px rgba(217, 70, 239, 0.15); border-color: rgba(217, 70, 239, 0.35); }
         }
+        
+        /* Workspace HUD Lockout Overlay */
+        .workspace-lockout-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 50;
+            background: radial-gradient(circle at center, rgba(15, 8, 32, 0.92) 0%, rgba(3, 2, 8, 0.96) 100%);
+            backdrop-filter: blur(14px);
+            border-radius: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.97);
+            transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .workspace-lockout-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+        
+        /* Central Tech HUD Ring */
+        .hud-circle-wrap {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hud-ring-outer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 2px dashed rgba(217, 70, 239, 0.35);
+            border-radius: 50%;
+            animation: rotateGlowRing 12s linear infinite;
+        }
+        .hud-ring-inner {
+            position: absolute;
+            width: 80%;
+            height: 80%;
+            border: 2px solid transparent;
+            border-top-color: #6366f1;
+            border-bottom-color: #3b82f6;
+            border-radius: 50%;
+            animation: rotateGlowRingReverse 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        .hud-center-icon {
+            font-size: 1.75rem;
+            color: #d946ef;
+            filter: drop-shadow(0 0 10px rgba(217, 70, 239, 0.6));
+            animation: pulseBrainIcon 2s infinite ease-in-out;
+        }
+        
+        @keyframes rotateGlowRing {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes rotateGlowRingReverse {
+            0% { transform: rotate(360deg); }
+            100% { transform: rotate(0deg); }
+        }
+        @keyframes pulseBrainIcon {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(217, 70, 239, 0.4)); }
+            50% { transform: scale(1.12); filter: drop-shadow(0 0 18px rgba(217, 70, 239, 0.8)); }
+        }
         .lyrics-editor-wrapper {
             position: relative;
             display: flex;
@@ -798,6 +872,19 @@
                     <!-- Interactive Editor -->
                     <div class="flex-grow flex flex-col relative min-h-0">
                         <div class="lyrics-editor-wrapper flex-grow flex items-stretch relative min-h-0">
+                            <!-- HUD Lockout Overlay -->
+                            <div id="workspace-hud-overlay" class="workspace-lockout-overlay">
+                                <div class="hud-circle-wrap">
+                                    <div class="hud-ring-outer"></div>
+                                    <div class="hud-ring-inner"></div>
+                                    <i class="fa-solid fa-brain hud-center-icon"></i>
+                                </div>
+                                <div class="text-center space-y-1">
+                                    <h4 class="text-xs font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-fuchsia-500 to-indigo-400 animate-pulse">Gnosys AI is Working</h4>
+                                    <p class="text-[10px] text-slate-400 font-bold tracking-wide" id="hud-status-text">Drafting rhyme schemes and alignment tags...</p>
+                                </div>
+                            </div>
+
                             <!-- Scrollable Gutter for Line Numbers -->
                             <div id="lyrics-gutter" class="lyrics-gutter-col">
                                 <div class="lyrics-gutter-line">1</div>
