@@ -593,7 +593,14 @@
                 <!-- Dropdown Class Selector -->
                 <div class="form-group">
                     <label>Active Subject Playlist</label>
-                    <select id="gnosys-player-class-select" class="glass-select"></select>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <select id="gnosys-player-class-select" class="glass-select"></select>
+                        <div id="gnosys-player-new-playlist-input-container" class="hidden" style="display: flex; gap: 6px; align-items: center;">
+                            <input type="text" id="gnosys-player-new-playlist-input" placeholder="New playlist name..." class="glass-input" style="flex: 1; min-width: 0;">
+                            <button id="gnosys-player-new-playlist-submit" class="studio-action-btn" style="padding: 10px 14px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #d946ef 0%, #6366f1 100%); border: none; border-radius: 12px; color: #fff; cursor: pointer; transition: opacity 0.2s;">Create</button>
+                            <button id="gnosys-player-new-playlist-cancel" style="padding: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #94a3b8; cursor: pointer; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Current Playing Box -->
@@ -697,11 +704,84 @@
         }
         
         const select = document.getElementById('gnosys-player-class-select');
-        select.addEventListener('change', (e) => {
-            activeClassId = e.target.value;
-            localStorage.setItem('gnosys_player_activeClassId', activeClassId);
-            renderPlaylistTracks();
-        });
+        const newPlaylistContainer = document.getElementById('gnosys-player-new-playlist-input-container');
+        const newPlaylistInput = document.getElementById('gnosys-player-new-playlist-input');
+        const newPlaylistSubmit = document.getElementById('gnosys-player-new-playlist-submit');
+        const newPlaylistCancel = document.getElementById('gnosys-player-new-playlist-cancel');
+
+        if (select) {
+            select.addEventListener('change', (e) => {
+                const val = e.target.value;
+                if (val === 'create-new-playlist') {
+                    if (newPlaylistContainer) {
+                        newPlaylistContainer.classList.remove('hidden');
+                        if (newPlaylistInput) {
+                            newPlaylistInput.value = '';
+                            newPlaylistInput.focus();
+                        }
+                    }
+                    select.value = activeClassId;
+                    return;
+                }
+                activeClassId = val;
+                localStorage.setItem('gnosys_player_activeClassId', activeClassId);
+                renderPlaylistTracks();
+            });
+        }
+
+        if (newPlaylistCancel && newPlaylistContainer) {
+            newPlaylistCancel.addEventListener('click', () => {
+                newPlaylistContainer.classList.add('hidden');
+            });
+        }
+
+        if (newPlaylistSubmit && newPlaylistContainer && newPlaylistInput) {
+            newPlaylistSubmit.addEventListener('click', async () => {
+                const name = newPlaylistInput.value.trim();
+                if (!name) {
+                    showGlobalToast('Please enter a playlist name.', 'error');
+                    return;
+                }
+                newPlaylistSubmit.disabled = true;
+                newPlaylistSubmit.textContent = '...';
+                try {
+                    const response = await fetch(`${API_BASE}/api/playlists/create`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: name })
+                    });
+                    const resData = await response.json();
+                    if (resData.status === 'success') {
+                        showGlobalToast(`Playlist "${name}" created!`, 'success');
+                        newPlaylistContainer.classList.add('hidden');
+                        
+                        activeClassId = resData.class_id;
+                        localStorage.setItem('gnosys_player_activeClassId', activeClassId);
+                        
+                        await fetchPlaylists();
+                        
+                        window.dispatchEvent(new CustomEvent('gnosys_playlist_updated'));
+                        channel.postMessage({ type: 'playlist_updated' });
+                    } else {
+                        showGlobalToast(resData.message || 'Failed to create playlist.', 'error');
+                    }
+                } catch (err) {
+                    console.error('[Global Player] Error creating playlist:', err);
+                    showGlobalToast('Error creating playlist.', 'error');
+                } finally {
+                    newPlaylistSubmit.disabled = false;
+                    newPlaylistSubmit.textContent = 'Create';
+                }
+            });
+
+            newPlaylistInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    newPlaylistSubmit.click();
+                }
+            });
+        }
 
         // Controls binding
         document.getElementById('gnosys-player-btn-play').addEventListener('click', togglePlay);
@@ -841,9 +921,18 @@
     function renderClassOptions() {
         const select = document.getElementById('gnosys-player-class-select');
         if (!select) return;
-        select.innerHTML = Object.entries(CLASS_NAMES).map(([id, name]) => `
+        
+        const sourceList = (playlists && Object.keys(playlists).length > 0) ? 
+            Object.entries(playlists).map(([id, info]) => [id, info.class_name]) :
+            Object.entries(CLASS_NAMES);
+            
+        let optionsHtml = sourceList.map(([id, name]) => `
             <option value="${id}" ${id === activeClassId ? 'selected' : ''}>${name}</option>
         `).join('');
+        
+        optionsHtml += `<option value="create-new-playlist">+ Create Custom Playlist...</option>`;
+        
+        select.innerHTML = optionsHtml;
         // Force the dropdown value to match activeClassId explicitly after updating options
         select.value = activeClassId;
     }
@@ -1079,7 +1168,7 @@
             url: resolvedUrl,
             track: track,
             classId: classId,
-            className: CLASS_NAMES[classId] || 'Idle'
+            className: (playlists[classId] && playlists[classId].class_name) || CLASS_NAMES[classId] || 'Idle'
         });
     }
 
@@ -1125,7 +1214,9 @@
 
         if (currentTrack) {
             if (trackDisplay) trackDisplay.textContent = currentTrack.name;
-            if (subjectDisplay) subjectDisplay.textContent = `Subject: ${CLASS_NAMES[playingClassId || activeClassId] || 'Unknown'}`;
+            const currentClassId = playingClassId || activeClassId;
+            const currentClassName = (playlists[currentClassId] && playlists[currentClassId].class_name) || CLASS_NAMES[currentClassId] || 'Unknown';
+            if (subjectDisplay) subjectDisplay.textContent = `Subject: ${currentClassName}`;
         } else {
             if (trackDisplay) trackDisplay.textContent = 'No track playing';
             if (subjectDisplay) subjectDisplay.textContent = 'Subject: None';
@@ -2130,6 +2221,20 @@
             .glass-select option {
                 background: #0f172a;
                 color: #f8fafc;
+            }
+            .glass-input {
+                background: rgba(0,0,0,0.25);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 12px;
+                color: #f8fafc;
+                padding: 10px 14px;
+                font-size: 13px;
+                font-weight: 500;
+                outline: none;
+                transition: border-color 0.2s;
+            }
+            .glass-input:focus {
+                border-color: rgba(217, 70, 239, 0.4);
             }
 
             /* Studio launch button styling */

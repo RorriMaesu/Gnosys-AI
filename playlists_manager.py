@@ -212,3 +212,32 @@ def move_track(src_class_id, dest_class_id, track_id):
     write_playlists(data)
     return True
 
+
+def create_playlist(class_name):
+    import re
+    ensure_storage_exists()
+    data = read_playlists()
+    
+    # Generate clean class_id from class_name
+    # Replace non-word characters with hyphen, trim, lowercase
+    clean_id = re.sub(r'[^\w\s-]', '', class_name).strip().lower()
+    clean_id = re.sub(r'[-\s]+', '-', clean_id)
+    
+    if not clean_id:
+        clean_id = f"custom-playlist-{int(time.time())}"
+        
+    # Ensure uniqueness
+    original_id = clean_id
+    counter = 1
+    while clean_id in data["playlists"]:
+        clean_id = f"{original_id}-{counter}"
+        counter += 1
+        
+    data["playlists"][clean_id] = {
+        "class_name": class_name,
+        "tracks": []
+    }
+    write_playlists(data)
+    return clean_id, data["playlists"][clean_id]
+
+

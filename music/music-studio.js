@@ -188,6 +188,37 @@
         } catch (e) {
             console.error('[Music Studio] Failed to load persisted settings:', e);
         }
+    }    async function syncPlaylistOptions() {
+        try {
+            const res = await fetch(`${API_BASE}/api/playlists`);
+            const data = await res.json();
+            if (data && data.playlists) {
+                const selectPlaylist = document.getElementById('playlist-target-select');
+                if (selectPlaylist) {
+                    const currentVal = selectPlaylist.value;
+                    let optionsHtml = Object.entries(data.playlists).map(([id, info]) => `
+                        <option value="${id}">${info.class_name}</option>
+                    `).join('');
+                    
+                    optionsHtml += `<option value="create-new-playlist">+ Create Custom Playlist...</option>`;
+                    
+                    selectPlaylist.innerHTML = optionsHtml;
+                    
+                    if (Object.keys(data.playlists).includes(currentVal)) {
+                        selectPlaylist.value = currentVal;
+                    } else {
+                        const selectSubject = document.getElementById('subject-selector');
+                        if (selectSubject && data.playlists[selectSubject.value]) {
+                            selectPlaylist.value = selectSubject.value;
+                        } else {
+                            selectPlaylist.value = Object.keys(data.playlists)[0] || 'medical-terminology';
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[Music Studio] Failed to load playlists:', e);
+        }
     }
 
     function initUI() {
@@ -327,6 +358,96 @@
         // Auto-sync active subject selector to playlist dropdown and global player view
         const selectSubject = document.getElementById('subject-selector');
         const selectPlaylist = document.getElementById('playlist-target-select');
+        const playlistNewContainer = document.getElementById('playlist-new-container');
+        const playlistNewInput = document.getElementById('playlist-new-input');
+        const btnPlaylistNewSubmit = document.getElementById('btn-playlist-new-submit');
+        const btnPlaylistNewCancel = document.getElementById('btn-playlist-new-cancel');
+
+        if (selectPlaylist) {
+            selectPlaylist.addEventListener('change', (e) => {
+                if (e.target.value === 'create-new-playlist') {
+                    if (playlistNewContainer) {
+                        playlistNewContainer.classList.remove('hidden');
+                        playlistNewContainer.classList.add('flex');
+                    }
+                    if (playlistNewInput) {
+                        playlistNewInput.value = '';
+                        playlistNewInput.focus();
+                    }
+                } else {
+                    if (playlistNewContainer) {
+                        playlistNewContainer.classList.add('hidden');
+                        playlistNewContainer.classList.remove('flex');
+                    }
+                }
+            });
+        }
+
+        if (btnPlaylistNewCancel) {
+            btnPlaylistNewCancel.addEventListener('click', () => {
+                if (playlistNewContainer) {
+                    playlistNewContainer.classList.add('hidden');
+                    playlistNewContainer.classList.remove('flex');
+                }
+                if (selectSubject && selectPlaylist) {
+                    selectPlaylist.value = selectSubject.value !== 'custom' ? selectSubject.value : selectPlaylist.options[0].value;
+                }
+            });
+        }
+
+        if (btnPlaylistNewSubmit && playlistNewInput) {
+            btnPlaylistNewSubmit.addEventListener('click', async () => {
+                const name = playlistNewInput.value.trim();
+                if (!name) {
+                    showBannerNotification('Please enter a playlist name.', 'error');
+                    return;
+                }
+                btnPlaylistNewSubmit.disabled = true;
+                btnPlaylistNewSubmit.textContent = '...';
+                try {
+                    const response = await fetch(`${API_BASE}/api/playlists/create`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: name })
+                    });
+                    const resData = await response.json();
+                    if (resData.status === 'success') {
+                        showBannerNotification(`Playlist "${name}" created successfully!`, 'success');
+                        if (playlistNewContainer) {
+                            playlistNewContainer.classList.add('hidden');
+                            playlistNewContainer.classList.remove('flex');
+                        }
+                        
+                        await syncPlaylistOptions();
+                        if (selectPlaylist) {
+                            selectPlaylist.value = resData.class_id;
+                        }
+                        
+                        // Notify other pages
+                        window.dispatchEvent(new CustomEvent('gnosys_playlist_updated'));
+                        const globalChannel = new BroadcastChannel('gnosys_audio_channel');
+                        globalChannel.postMessage({ type: 'playlist_updated' });
+                    } else {
+                        showBannerNotification(resData.message || 'Failed to create playlist.', 'error');
+                    }
+                } catch (err) {
+                    console.error('[Music Studio] Error creating playlist:', err);
+                    showBannerNotification('Error creating playlist.', 'error');
+                } finally {
+                    btnPlaylistNewSubmit.disabled = false;
+                    btnPlaylistNewSubmit.textContent = 'Create';
+                }
+            });
+
+            playlistNewInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    btnPlaylistNewSubmit.click();
+                }
+            });
+        }
+
         if (selectSubject && selectPlaylist) {
             const syncSubjectToPlaylist = () => {
                 const val = selectSubject.value;
@@ -346,6 +467,11 @@
             // Sync on page load (with a small timeout to let the global player load first)
             setTimeout(syncSubjectToPlaylist, 100);
         }
+
+        // Load dynamically generated playlists
+        syncPlaylistOptions();
+        
+        window.addEventListener('gnosys_playlist_updated', syncPlaylistOptions);
 
         // Add to Playlist Button Handler
         const btnAddPlaylist = document.getElementById('btn-add-to-playlist');
@@ -834,6 +960,8 @@
                 if (localAudio && !localAudio.paused) {
                     localAudio.pause();
                 }
+            } else if (data.type === 'playlist_updated') {
+                syncPlaylistOptions();
             }
         };
 
