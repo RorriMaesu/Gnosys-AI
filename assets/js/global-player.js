@@ -1801,13 +1801,13 @@
             }
 
             if (needToPrompt) {
-                showGlobalToast('Please select a local folder for automatic music downloads.', 'info');
-                dirHandle = await window.showDirectoryPicker({
-                    mode: 'readwrite'
-                });
-                await setStoredDirectoryHandle(dirHandle);
-                localStorage.setItem('gnosys_download_dir_name', dirHandle.name);
-                updateSettingsUI();
+                // Since we are running asynchronously after a network fetch, we cannot prompt for a directory picker here 
+                // due to browser security restrictions requiring a user gesture. Fallback to standard browser download.
+                console.warn('[Global Player] Auto-download directory permission missing or expired. Falling back to standard browser download.');
+                const ext = track.filename ? track.filename.split('.').pop() : 'wav';
+                const filename = track.filename || `${track.name.replace(/[\/\\:\*\?"<>\|]/g, '_')}.${ext}`;
+                downloadTrackFile(track.url, filename, false);
+                return;
             }
 
             if (!dirHandle) return;
