@@ -885,6 +885,13 @@
                         </div>
                     </div>
 
+                    <div class="mb-3 space-y-2 shrink-0">
+                        <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Assistant LLM Model</label>
+                        <select id="llm-model-selector" class="w-full bg-slate-950/60 border border-white/5 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500 transition-colors cursor-pointer">
+                            <option value="gemma4:e4b" selected>Loading models...</option>
+                        </select>
+                    </div>
+
                     <!-- Assistant Mode Toggle -->
                     <div class="mb-4 grid grid-cols-2 gap-2 shrink-0 border-b border-white/5 pb-3">
                         <button id="btn-mode-write" class="mode-toggle-btn active flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl border border-white/5 bg-white/5 text-[10px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer">

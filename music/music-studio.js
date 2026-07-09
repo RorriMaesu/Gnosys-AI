@@ -1000,6 +1000,34 @@
                 }
             });
         }
+
+        // Initialize LLM Model Selector
+        const llmSelector = document.getElementById('llm-model-selector');
+        if (llmSelector && typeof window.populateModelSelector === 'function') {
+            const currentModel = window.getGnosysModel ? window.getGnosysModel('gnosys_active_llm') : (localStorage.getItem('gnosys_active_llm') || 'gemma4:e4b');
+            const endpoint = localStorage.getItem("gnosys_ollama_endpoint") || localStorage.getItem("chemistry_ollama_endpoint") || "http://localhost:11434";
+            const cleanEndpoint = endpoint.replace(/\/v1\/?$/, '').trim();
+            window.populateModelSelector(llmSelector, currentModel, cleanEndpoint, {
+                moduleKey: 'gnosys_active_llm',
+                onStatusChange: (status) => {
+                    if (status && status.state === 'working') {
+                        showBannerNotification(status.message, "info");
+                    } else if (status && status.state === 'success') {
+                        showBannerNotification(status.message, "success");
+                    } else if (status && status.state === 'error') {
+                        showBannerNotification(status.message, "error");
+                    }
+                }
+            });
+
+            // Keep in sync on focus (in case the model is changed in other modals)
+            llmSelector.addEventListener('focus', () => {
+                const updatedModel = window.getGnosysModel ? window.getGnosysModel('gnosys_active_llm') : (localStorage.getItem('gnosys_active_llm') || 'gemma4:e4b');
+                if (llmSelector.value !== updatedModel) {
+                    llmSelector.value = updatedModel;
+                }
+            });
+        }
     }
 
     function launchAssistantServer(isManual = false) {
