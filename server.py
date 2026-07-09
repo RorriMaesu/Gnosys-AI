@@ -1383,15 +1383,24 @@ def run_server():
     # Register URL protocol handler for Windows users
     register_windows_protocol()
     
-    # Allow port reuse to avoid 'address already in use' errors on quick restarts
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), GnosysHTTPRequestHandler) as httpd:
-        print(f"[Gnosys-AI Server] Listening on http://localhost:{PORT}")
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\n[Gnosys-AI Server] Shutting down.")
-            httpd.server_close()
+    # Allow port reuse to avoid 'address already in use' errors on quick restarts (not on Windows)
+    if platform.system() != 'Windows':
+        socketserver.ThreadingTCPServer.allow_reuse_address = True
+        
+    try:
+        with socketserver.ThreadingTCPServer(("", PORT), GnosysHTTPRequestHandler) as httpd:
+            print(f"[Gnosys-AI Server] Listening on http://localhost:{PORT}")
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                print("\n[Gnosys-AI Server] Shutting down.")
+                httpd.server_close()
+    except OSError as e:
+        import errno
+        if e.errno == errno.EADDRINUSE or e.errno == 10048 or "already in use" in str(e).lower():
+            print(f"\n[Gnosys-AI Server] PORT {PORT} is already in use. Another instance of the server is likely running.")
+        else:
+            raise e
 
 if __name__ == '__main__':
     run_server()

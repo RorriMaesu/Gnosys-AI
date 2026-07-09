@@ -262,7 +262,9 @@
         modalEl: null,
         smartSetupOpenQueued: false,
         badgeIntervalId: null,
+        installedOllamaModels: [],
     };
+
 
     const LITERT_SETUP_STATUS_EVENT = 'gnosys-litert-setup-status';
 
@@ -618,6 +620,12 @@
                     signal: AbortSignal.timeout(1000),
                 });
                 if (res.ok) {
+                    const data = await res.json();
+                    if (data && Array.isArray(data.models)) {
+                        state.installedOllamaModels = data.models.map(m => m.name);
+                    } else {
+                        state.installedOllamaModels = [];
+                    }
                     if (OLLAMA_BASE_URL !== ep) {
                         OLLAMA_BASE_URL = ep;
                         OLLAMA_TAGS_URL = `${OLLAMA_BASE_URL}/api/tags`;
@@ -629,6 +637,7 @@
                 }
             } catch (_err) {}
         }
+        state.installedOllamaModels = [];
         return false;
     }
 
@@ -685,19 +694,46 @@
 
     function createOllamaProvider() {
         function resolveModel(moduleKey) {
+            let preferredModel = '';
             if (typeof window.getActiveModel === 'function') {
-                const active = window.getActiveModel(moduleKey || 'gnosys_active_llm');
-                if (active) return active;
+                preferredModel = window.getActiveModel(moduleKey || 'gnosys_active_llm');
             }
-            if (typeof window.getGnosysModel === 'function') {
-                const model = window.getGnosysModel(moduleKey || 'gnosys_active_llm');
-                if (model) return model;
+            if (!preferredModel && typeof window.getGnosysModel === 'function') {
+                preferredModel = window.getGnosysModel(moduleKey || 'gnosys_active_llm');
             }
-            return (
-                localStorage.getItem('gnosys_active_llm') ||
-                localStorage.getItem(moduleKey || '') ||
-                'gemma4:e4b'
-            );
+            if (!preferredModel) {
+                preferredModel = (
+                    localStorage.getItem('gnosys_active_llm') ||
+                    localStorage.getItem(moduleKey || '') ||
+                    'gemma4:e4b'
+                );
+            }
+
+            // Fallback logic if the preferred model is not installed on this Ollama instance
+            if (state.installedOllamaModels && state.installedOllamaModels.length > 0) {
+                const installed = state.installedOllamaModels;
+                
+                // 1. Exact match (case insensitive)
+                const exactMatch = installed.find(m => m.toLowerCase() === preferredModel.toLowerCase());
+                if (exactMatch) return exactMatch;
+                
+                // 2. Base name match (e.g. gemma4:e4b -> gemma4:12b or gemma4:latest)
+                const preferredBase = preferredModel.split(':')[0].toLowerCase();
+                const baseMatch = installed.find(m => m.split(':')[0].toLowerCase() === preferredBase);
+                if (baseMatch) {
+                    console.log(`[GnosysLLM] Preferred model '${preferredModel}' not found. Falling back to base-matching installed model '${baseMatch}'.`);
+                    return baseMatch;
+                }
+                
+                // 3. Fallback to any installed model that is not an embedding model
+                const chatMatch = installed.find(m => !m.toLowerCase().includes('embed'));
+                if (chatMatch) {
+                    console.log(`[GnosysLLM] Preferred model '${preferredModel}' not found. Falling back to installed chat model '${chatMatch}'.`);
+                    return chatMatch;
+                }
+            }
+
+            return preferredModel;
         }
 
         return {

@@ -114,7 +114,7 @@
         const path = window.location.pathname.toLowerCase();
         if (path.includes('/chemistry/math-refresher/')) {
             return '../../';
-        } else if (path.includes('/syngnosia/') || path.includes('/chemistry/') || path.includes('/math/') || path.includes('/psychology/') || path.includes('/anatomy1/') || path.includes('/anatomy2/') || path.includes('/anatomy3/')) {
+        } else if (path.includes('/syngnosia/') || path.includes('/chemistry/') || path.includes('/math/') || path.includes('/psychology/') || path.includes('/anatomy1/') || path.includes('/anatomy2/') || path.includes('/anatomy3/') || path.includes('/music/')) {
             return '../';
         } else if (path.includes('/openword/') || window.location.port === '5173') {
             const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
