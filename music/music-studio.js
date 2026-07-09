@@ -1915,7 +1915,8 @@ Place this data in a <critique_data>...</critique_data> tag containing a JSON ob
     }
   ]
 }
-Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. Let the user decide when to apply changes. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
+Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. Let the user decide when to apply changes.
+NEVER place critiques, notes, comments, feedback, or explanations inside the <edit_lyrics> tag or inline within the lyrics. The <edit_lyrics> tag must contain ONLY clean, performable song lyrics. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
 `;
 
         try {
@@ -2532,9 +2533,10 @@ INSTRUCTIONS FOR CONVERSATION AND EDITING:
      <edit_lyrics target="range" start="START_LINE" end="END_LINE">NEW LYRICS HERE</edit_lyrics>
    - To overwrite or initialize the entire song lyrics, use:
      <edit_lyrics target="all">ENTIRE LYRICS CONTENT HERE</edit_lyrics>
-4. Keep the lyrics easy to read, rhyming, and packed with actual educational keywords, facts, and definitions.
-5. In your chat responses, you can also suggest changes and invite the user to highlight sections for refinement.
-6. You can autonomously update generation settings to match the musical style, rhythm, or user requests (e.g. changing the style from lofi to synthwave, adjusting BPM, or enabling/disabling vocals), by outputting an <update_settings> tag containing a JSON object mapping setting field keys to their new values. The keys you can update are:
+4. NEVER place critiques, notes, comments, feedback, or explanations inside the <edit_lyrics> tag or inline within the lyrics. The <edit_lyrics> tag must contain ONLY clean, performable song lyrics. All feedback, critique notes, and explanations must reside strictly in the <chat_response> tag or the <critique_data> tag.
+5. Keep the lyrics easy to read, rhyming, and packed with actual educational keywords, facts, and definitions.
+6. In your chat responses, you can also suggest changes and invite the user to highlight sections for refinement.
+7. You can autonomously update generation settings to match the musical style, rhythm, or user requests (e.g. changing the style from lofi to synthwave, adjusting BPM, or enabling/disabling vocals), by outputting an <update_settings> tag containing a JSON object mapping setting field keys to their new values. The keys you can update are:
    - "music-prompt" (e.g. "chill lofi hiphop beat, study, piano")
    - "music-bpm" (e.g. "80", "100", "120")
    - "music-vocals" (e.g. "on", "off")
@@ -2567,7 +2569,7 @@ Place this data in a <critique_data>...</critique_data> tag containing a JSON ob
     }
   ]
 }
-Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
+Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. NEVER place critiques, comments, or review notes inline inside the lyrics or within the <edit_lyrics> tag. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
 `;
         }
 
