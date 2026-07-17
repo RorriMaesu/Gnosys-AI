@@ -18,6 +18,9 @@
     // Edge may still reject loopback fetches made by that frame even when the
     // permission is granted and delegated. Provide a tightly scoped top-level
     // bridge so child pages can reach only the Gnosys helper API.
+    const GNOSYS_HELPER_ORIGIN = 'http://127.0.0.1:8020';
+    let localAccessPanel = null;
+
     window.GnosysLocalHelperFetch = async function(input, init = {}) {
         const target = new URL(input, window.location.href);
         const allowedOrigins = new Set([
@@ -39,6 +42,89 @@
         }
         return fetch(target.href, requestInit);
     };
+
+    async function getLocalAccessPermissionState() {
+        if (!navigator.permissions?.query) return 'prompt';
+        try {
+            const permission = await navigator.permissions.query({ name: 'local-network-access' });
+            return permission.state;
+        } catch (_err) {
+            return 'prompt';
+        }
+    }
+
+    function hideLocalAccessPanel() {
+        if (localAccessPanel) {
+            localAccessPanel.remove();
+            localAccessPanel = null;
+        }
+    }
+
+    function showLocalAccessPanel(message) {
+        if (window.location.protocol !== 'https:' || !window.location.hostname.endsWith('github.io')) return;
+        if (!document.body) return;
+
+        if (!localAccessPanel) {
+            localAccessPanel = document.createElement('div');
+            localAccessPanel.id = 'gnosys-local-access-panel';
+            localAccessPanel.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,6,23,.78);backdrop-filter:blur(8px);font-family:Inter,system-ui,sans-serif;';
+            localAccessPanel.innerHTML = `
+                <div style="width:min(520px,100%);padding:24px;border:1px solid rgba(45,212,191,.35);border-radius:20px;background:#0f172a;color:#e2e8f0;box-shadow:0 24px 80px rgba(0,0,0,.45)">
+                    <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#5eead4">One-time setup</div>
+                    <h2 style="margin:8px 0 8px;font-size:22px;color:white">Enable Local AI</h2>
+                    <p id="gnosys-local-access-message" style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#cbd5e1"></p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                        <button id="gnosys-enable-local-access" type="button" style="padding:11px 16px;border:0;border-radius:11px;background:#0d9488;color:white;font-weight:800;cursor:pointer">Enable Local AI</button>
+                        <a href="${GNOSYS_HELPER_ORIGIN}/music/" target="_blank" rel="noopener" style="padding:10px 15px;border:1px solid #475569;border-radius:11px;color:#cbd5e1;text-decoration:none;font-weight:700">Open Local Studio</a>
+                        <button id="gnosys-dismiss-local-access" type="button" style="padding:11px 14px;border:0;background:transparent;color:#94a3b8;font-weight:700;cursor:pointer">Not now</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(localAccessPanel);
+
+            localAccessPanel.querySelector('#gnosys-enable-local-access')?.addEventListener('click', async event => {
+                const button = event.currentTarget;
+                button.disabled = true;
+                button.textContent = 'Connecting...';
+                const allowed = await window.GnosysEnsureLocalNetworkAccess();
+                if (!allowed && localAccessPanel) {
+                    button.disabled = false;
+                    button.textContent = 'Try Again';
+                }
+            });
+            localAccessPanel.querySelector('#gnosys-dismiss-local-access')?.addEventListener('click', hideLocalAccessPanel);
+        }
+
+        const messageElement = localAccessPanel.querySelector('#gnosys-local-access-message');
+        if (messageElement) messageElement.textContent = message;
+    }
+
+    window.GnosysEnsureLocalNetworkAccess = async function() {
+        if (window.location.protocol !== 'https:' || !window.location.hostname.endsWith('github.io')) return true;
+        try {
+            const response = await window.GnosysLocalHelperFetch(`${GNOSYS_HELPER_ORIGIN}/api/accelerator/status`, {
+                timeoutMs: 10000,
+            });
+            if (!response.ok) throw new Error(`Local helper returned ${response.status}.`);
+            hideLocalAccessPanel();
+            return true;
+        } catch (err) {
+            const permissionState = await getLocalAccessPermissionState();
+            const message = permissionState === 'denied'
+                ? 'Microsoft Edge has blocked loopback access for this site. Open Edge Site permissions, allow Local network access, then click Try Again.'
+                : 'Click Enable Local AI, then choose Allow in Microsoft Edge. The Gnosys local helper on port 8020 must also be running.';
+            showLocalAccessPanel(message);
+            console.warn('[Global Player] Local AI permission check failed:', err);
+            return false;
+        }
+    };
+
+    async function initializeLocalAccessPrompt() {
+        if (window.location.protocol !== 'https:' || !window.location.hostname.endsWith('github.io')) return;
+        const permissionState = await getLocalAccessPermissionState();
+        if (permissionState !== 'granted') {
+            showLocalAccessPanel('Click Enable Local AI, then choose Allow in Microsoft Edge. This one-time permission lets the hosted app connect to your local Gnosys helper.');
+        }
+    }
 
     // Determine the API base URL
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
@@ -172,6 +258,7 @@
         iframe.setAttribute('allow', 'local-network-access; loopback-network; local-network');
         iframe.style.cssText = 'border: none; width: 100%; height: 100%; margin: 0; padding: 0; display: block;';
         body.appendChild(iframe);
+        initializeLocalAccessPrompt();
 
         // Initialize persistent parent player UI
         injectStyles();

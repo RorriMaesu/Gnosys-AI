@@ -1199,6 +1199,11 @@
             return;
         }
 
+        if (window.parent !== window && typeof window.parent.GnosysEnsureLocalNetworkAccess === 'function') {
+            const localAccessReady = await window.parent.GnosysEnsureLocalNetworkAccess();
+            if (!localAccessReady) return;
+        }
+
         if (resetBtn) {
             resetBtn.disabled = true;
             resetBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Resetting...';
@@ -2959,6 +2964,17 @@ Keep the body balanced in the homeostatic light!
         const statusText = document.getElementById('gen-status-text');
         const fill = document.getElementById('gen-progress-bar-fill');
         const percent = document.getElementById('gen-percent');
+
+        // Start the Edge permission request immediately from the Generate click,
+        // before model preparation awaits cause the user gesture to expire.
+        if (window.parent !== window && typeof window.parent.GnosysEnsureLocalNetworkAccess === 'function') {
+            const localAccessReady = await window.parent.GnosysEnsureLocalNetworkAccess();
+            if (!localAccessReady) {
+                statusText.textContent = 'Local AI permission is required before generating a track.';
+                showBannerNotification('Enable Local AI in the permission panel, then try Generate Track again.', 'warning');
+                return;
+            }
+        }
 
         // Check if server is online
         const statusTextVal = document.getElementById('comfy-status-badge').textContent.trim();
