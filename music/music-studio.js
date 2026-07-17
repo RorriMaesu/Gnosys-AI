@@ -1217,7 +1217,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ owner: 'idle' }),
                     signal: AbortSignal.timeout(60000),
-                    targetAddressSpace: 'local'
+                    targetAddressSpace: 'loopback'
                 });
                 const payload = await response.json().catch(() => ({}));
                 if (!response.ok || payload.status !== 'success') {
@@ -3144,7 +3144,7 @@ Keep the body balanced in the homeostatic light!
                 body: JSON.stringify(payload),
                 // Required by current Chromium builds when a secure public page
                 // intentionally talks to the user's loopback helper.
-                targetAddressSpace: 'local'
+                targetAddressSpace: 'loopback'
             });
             
             clearInterval(stageInterval);
