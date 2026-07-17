@@ -3141,7 +3141,10 @@ Keep the body balanced in the homeostatic light!
             const res = await fetch(`${API_BASE}/api/music/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                // Required by current Chromium builds when a secure public page
+                // intentionally talks to the user's loopback helper.
+                targetAddressSpace: 'local'
             });
             
             clearInterval(stageInterval);
@@ -3175,8 +3178,14 @@ Keep the body balanced in the homeostatic light!
             const msg = err.message || '';
             statusText.textContent = 'Generation failed: ' + msg;
 
+            const isLocalNetworkBlock = window.location.protocol === 'https:'
+                && API_BASE.startsWith('http://127.0.0.1')
+                && (err instanceof TypeError || /failed to fetch|network|cors/i.test(msg));
             const isOOM = /out of memory|cuda|oom|allocation|allocat/i.test(msg);
-            if (isOOM) {
+            if (isLocalNetworkBlock) {
+                statusText.innerHTML = 'Chrome blocked access to the local music helper. Allow <strong>Local network access</strong> for this site, reload, and try again. You can also <a class="text-teal-300 underline" href="http://127.0.0.1:8020/music/" target="_blank" rel="noopener">open the local Music Studio</a>.';
+                showBannerNotification('Local Network Access is blocked. Open this site\'s browser permissions, set Local network access to Allow, then reload.', 'warning');
+            } else if (isOOM) {
                 showBannerNotification('Generation failed due to GPU VRAM limits. Try switching to a lower VRAM profile or stopping other GPU processes.', 'warning');
                 console.warn('[Music Studio] VRAM OOM detected during generation:', msg);
             } else {
