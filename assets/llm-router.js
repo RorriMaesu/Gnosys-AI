@@ -352,7 +352,7 @@
                 vram_profile: options.vramProfile || null,
             }),
             signal: AbortSignal.timeout(60000),
-            targetAddressSpace: 'local',
+            targetAddressSpace: 'loopback',
         });
         let payload = {};
         try {
