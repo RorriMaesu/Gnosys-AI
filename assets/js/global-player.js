@@ -31,6 +31,7 @@
     let volume = 0.8;
     let isEngineAlive = false;
     let isTrackLoadedInEngine = false;
+    let playlistBackendWarningShown = false;
     let pingInterval = null;
     let dragSrcEl = null;
 
@@ -250,14 +251,19 @@
     async function fetchPlaylists() {
         try {
             const res = await fetch(`${API_BASE}/api/playlists`);
+            if (!res.ok) throw new Error(`Playlist service returned ${res.status}.`);
             const data = await res.json();
             if (data && data.playlists) {
+                playlistBackendWarningShown = false;
                 playlists = data.playlists;
                 renderPlaylistTracks();
                 renderClassOptions();
             }
         } catch (e) {
-            console.error('[Global Player] Failed to load playlists:', e);
+            if (!playlistBackendWarningShown) {
+                console.warn('[Global Player] Local playlist service is unavailable. Start the Gnosys helper to enable playlists.', e);
+                playlistBackendWarningShown = true;
+            }
         }
     }
 

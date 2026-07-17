@@ -1,7 +1,7 @@
 (function() {
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
     let comfyPath = localStorage.getItem('gnosys_comfy_path') || 'D:\\ComfyUI\\ACE-Step-1.5';
-    let vramProfile = localStorage.getItem('gnosys_music_vram_profile') || 'high';
+    let vramProfile = localStorage.getItem('gnosys_music_vram_profile') || 'optimized';
     const clientId = Math.random().toString(36).substring(2, 15);
     let ws = null;
     let installPollInterval = null;
@@ -9,6 +9,8 @@
     let isLaunchingService = false;
     let isLaunchingAssistant = false;
     let pendingTrack = null;
+    let playlistBackendWarningShown = false;
+    let isTrackGenerating = false;
 
     let explorerCurrentPath = comfyPath;
 
@@ -191,8 +193,10 @@
     }    async function syncPlaylistOptions() {
         try {
             const res = await fetch(`${API_BASE}/api/playlists`);
+            if (!res.ok) throw new Error(`Playlist service returned ${res.status}.`);
             const data = await res.json();
             if (data && data.playlists) {
+                playlistBackendWarningShown = false;
                 const selectPlaylist = document.getElementById('playlist-target-select');
                 if (selectPlaylist) {
                     const currentVal = selectPlaylist.value;
@@ -217,7 +221,10 @@
                 }
             }
         } catch (e) {
-            console.error('[Music Studio] Failed to load playlists:', e);
+            if (!playlistBackendWarningShown) {
+                console.warn('[Music Studio] Local playlist service is unavailable. Start the Gnosys helper to enable playlists.', e);
+                playlistBackendWarningShown = true;
+            }
         }
     }
 
@@ -244,14 +251,14 @@
                 });
             }
         }
-        
+
         // Auto-start and Auto-download checkboxes
         const autoStartChk = document.getElementById('auto-start-checkbox');
         const autoDownloadChk = document.getElementById('auto-download-checkbox');
         
         if (autoStartChk) {
             const savedAutoStart = localStorage.getItem('gnosys_music_auto_start');
-            autoStartChk.checked = savedAutoStart === null ? true : savedAutoStart === 'true';
+            autoStartChk.checked = savedAutoStart === null ? false : savedAutoStart === 'true';
             autoStartChk.addEventListener('change', (e) => {
                 localStorage.setItem('gnosys_music_auto_start', e.target.checked);
                 if (e.target.checked) checkMusicServiceStatus();
@@ -617,7 +624,7 @@
                 const badge = document.getElementById('comfy-status-badge');
                 const isRunning = badge && badge.textContent.trim() === 'Running';
                 if (isRunning) {
-                    showBannerNotification("VRAM profile saved! Please close your local helper terminal (or batch runner) and restart the service to apply.", "warning");
+                    showBannerNotification("VRAM profile saved. Stop and relaunch the ACE-Step service to apply it.", "warning");
                 } else {
                     let label = 'Standard (High VRAM)';
                     if (vramProfile === 'optimized') {
@@ -713,6 +720,19 @@
             }
             launchService();
         });
+
+        // Stop service click
+        const stopBtn = document.getElementById('btn-stop-service');
+        if (stopBtn) {
+            stopBtn.addEventListener('click', () => {
+                stopService();
+            });
+        }
+
+        const resetVramBtn = document.getElementById('btn-reset-vram');
+        if (resetVramBtn) {
+            resetVramBtn.addEventListener('click', resetVram);
+        }
 
         // Installer wizard modal
         document.getElementById('btn-install-wizard').addEventListener('click', () => {
@@ -1121,7 +1141,16 @@
             });
             const data = await res.json();
             if (data.status === 'success') {
+                if (data.vram_profile && data.vram_profile !== vramProfile) {
+                    vramProfile = data.vram_profile;
+                    localStorage.setItem('gnosys_music_vram_profile', vramProfile);
+                    const profileSelect = document.getElementById('music-vram-profile');
+                    if (profileSelect) profileSelect.value = vramProfile;
+                }
                 showBannerNotification('Starting ComfyUI background service...', 'success');
+                if (data.profile_adjusted) {
+                    showBannerNotification('This GPU was switched to the optimized VRAM profile for safety.', 'warning');
+                }
                 pollComfyStartup();
             } else {
                 showBannerNotification('Failed to launch: ' + data.message, 'error');
@@ -1130,6 +1159,88 @@
         } catch (err) {
             showBannerNotification('Error launching ComfyUI service: ' + err.message, 'error');
             isLaunchingService = false;
+        }
+    }
+
+    async function stopService() {
+        const stopBtn = document.getElementById('btn-stop-service');
+        if (stopBtn) {
+            stopBtn.disabled = true;
+            stopBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Stopping...';
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/api/music/stop`, {
+                method: 'POST'
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                showBannerNotification('ACE-Step service stopped and VRAM released.', 'success');
+            } else {
+                showBannerNotification(`Failed to stop service: ${data.message}`, 'error');
+            }
+        } catch (err) {
+            showBannerNotification(`Failed to stop service: ${err.message}`, 'error');
+        } finally {
+            if (stopBtn) {
+                stopBtn.disabled = false;
+                stopBtn.innerHTML = '<i class="fa-solid fa-power-off mr-1.5"></i> Stop Service';
+            }
+            checkMusicServiceStatus();
+        }
+    }
+
+    async function resetVram() {
+        const resetBtn = document.getElementById('btn-reset-vram');
+        const originalHtml = resetBtn?.innerHTML || '';
+
+        if (isTrackGenerating) {
+            showBannerNotification('A track is currently generating. Wait for it to finish before resetting VRAM.', 'warning');
+            return;
+        }
+
+        if (resetBtn) {
+            resetBtn.disabled = true;
+            resetBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Resetting...';
+        }
+
+        try {
+            // Close browser-hosted WebGPU weights before asking the local helper
+            // to release Ollama and ACE-Step. The click is intentionally the user
+            // gesture that triggers Chrome Local Network Access permission.
+            let snapshot;
+            if (window.GnosysLLM?.vramManager) {
+                snapshot = await window.GnosysLLM.vramManager.releaseAll(false);
+            } else {
+                const response = await fetch(`${API_BASE}/api/accelerator/acquire`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ owner: 'idle' }),
+                    signal: AbortSignal.timeout(60000),
+                    targetAddressSpace: 'local'
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || payload.status !== 'success') {
+                    throw new Error(payload.message || `VRAM reset failed (${response.status}).`);
+                }
+                snapshot = payload.accelerator;
+            }
+
+            const freeMb = snapshot?.gpu?.free_mb;
+            const freeText = Number.isFinite(freeMb) ? ` ${Math.round(freeMb / 1024)} GB is now free.` : '';
+            showBannerNotification(`VRAM reset complete.${freeText}`, 'success');
+        } catch (err) {
+            const permissionHint = window.location.hostname.endsWith('github.io')
+                ? ' Allow Local Network Access for this GitHub Pages site, make sure the local helper is running, and try again.'
+                : ' Make sure the local helper is running and try again.';
+            showBannerNotification(`VRAM reset failed: ${err.message}.${permissionHint}`, 'error');
+            console.error('[Music Studio] VRAM reset failed:', err);
+        } finally {
+            if (resetBtn) {
+                resetBtn.disabled = false;
+                resetBtn.innerHTML = originalHtml;
+            }
+            checkMusicServiceStatus();
         }
     }
 
@@ -1236,6 +1347,13 @@
                 headers: { 'X-ComfyUI-Path': comfyPath }
             });
             const data = await res.json();
+
+            if (data.active_vram_profile && data.active_vram_profile !== vramProfile) {
+                vramProfile = data.active_vram_profile;
+                localStorage.setItem('gnosys_music_vram_profile', vramProfile);
+                const profileSelect = document.getElementById('music-vram-profile');
+                if (profileSelect) profileSelect.value = vramProfile;
+            }
 
             // Sync with backend corrected path if drive fallback occurred
             if (data.comfy_path && data.comfy_path !== comfyPath) {
@@ -1372,9 +1490,12 @@
             // Cache latest status data
             window.latestStatusData = data;
 
+            const stopBtn = document.getElementById('btn-stop-service');
+
             if (data.comfy_running) {
                 launchBtn.classList.add('hidden');
                 installBtn.classList.add('hidden');
+                if (stopBtn) stopBtn.classList.remove('hidden');
 
                 if (data.comfy_state === 'loading') {
                     badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-extrabold tracking-wider badge-pulse-amber';
@@ -1442,6 +1563,7 @@
                     }
                     launchBtn.classList.remove('hidden');
                     installBtn.classList.add('hidden');
+                    if (stopBtn) stopBtn.classList.add('hidden');
 
                     // Auto-start server if enabled
                     const autoStartEnabled = document.getElementById('auto-start-checkbox')?.checked ?? true;
@@ -1455,6 +1577,7 @@
                 icon.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-red-400"></i>';
                 launchBtn.classList.add('hidden');
                 installBtn.classList.remove('hidden');
+                if (stopBtn) stopBtn.classList.add('hidden');
             }
             
             // Hide download-all button if server is not running
@@ -1501,11 +1624,9 @@
                 downloadPollInterval = null;
             }
 
-            // Attempt to auto-launch the local assistant server via custom protocol
-            if (!window._assistantLaunchAttempted) {
-                window._assistantLaunchAttempted = true;
-                launchAssistantServer(false);
-            }
+            // Local Network Access and protocol launches must be initiated by the
+            // user. Keep the onboarding card visible instead of repeatedly
+            // launching local processes from a background status poll.
         }
     }
 
@@ -2890,6 +3011,7 @@ Keep the body balanced in the homeostatic light!
         }
 
         btn.disabled = true;
+        isTrackGenerating = true;
         progressContainer.classList.remove('hidden');
         
         fill.style.width = '5%';
@@ -2906,15 +3028,42 @@ Keep the body balanced in the homeostatic light!
             // Allow UI to draw status update
             await new Promise(resolve => setTimeout(resolve, 800));
         } else {
-            statusText.textContent = 'Flushing AI Tutor model from VRAM (may take 5-20s)...';
+            statusText.textContent = 'Preparing GPU for music generation (unloading LLM)...';
         }
 
-        if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
+        // Proactively manage VRAM using the centralized VRAMManager
+        if (window.VRAMManager) {
+            try {
+                const selectedMusicModel = document.getElementById('music-model')?.value || '';
+                await window.VRAMManager.acquireForMusic({
+                    musicModel: selectedMusicModel,
+                    vramProfile,
+                });
+            } catch (unloadErr) {
+                console.error('[Music Studio] Accelerator transition failed:', unloadErr);
+                statusText.textContent = `GPU preparation failed: ${unloadErr.message}`;
+                showBannerNotification(`GPU preparation failed: ${unloadErr.message}`, 'error');
+                isTrackGenerating = false;
+                btn.disabled = false;
+                return;
+            }
+        } else if (window.GnosysLLM && typeof window.GnosysLLM.unload === 'function') {
             try {
                 await window.GnosysLLM.unload(true);
             } catch (unloadErr) {
-                console.warn('[Music Studio] VRAM optimization warning:', unloadErr);
+                console.error('[Music Studio] VRAM optimization failed:', unloadErr);
+                statusText.textContent = `GPU preparation failed: ${unloadErr.message}`;
+                showBannerNotification(`GPU preparation failed: ${unloadErr.message}`, 'error');
+                isTrackGenerating = false;
+                btn.disabled = false;
+                return;
             }
+        } else {
+            statusText.textContent = 'GPU coordinator is unavailable. Start the local helper and try again.';
+            showBannerNotification('GPU coordinator is unavailable. Start the local helper and try again.', 'error');
+            isTrackGenerating = false;
+            btn.disabled = false;
+            return;
         }
 
         let progressPercent = 10;
@@ -2992,7 +3141,10 @@ Keep the body balanced in the homeostatic light!
             const res = await fetch(`${API_BASE}/api/music/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                // Required by current Chromium builds when a secure public page
+                // intentionally talks to the user's loopback helper.
+                targetAddressSpace: 'local'
             });
             
             clearInterval(stageInterval);
@@ -3013,15 +3165,35 @@ Keep the body balanced in the homeostatic light!
                 fill.style.width = '100%';
                 percent.textContent = '100%';
                 loadAudioToPlayer(audioUrl);
+
+                // Mark music active in VRAMManager
+                if (window.VRAMManager) {
+                    window.VRAMManager.markMusicActive();
+                }
             } else {
                 throw new Error("No audio block returned in API response.");
             }
         } catch (err) {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
-            statusText.textContent = 'Generation failed: ' + err.message;
-            showBannerNotification('Generation failed.', 'error');
+            const msg = err.message || '';
+            statusText.textContent = 'Generation failed: ' + msg;
+
+            const isLocalNetworkBlock = window.location.protocol === 'https:'
+                && API_BASE.startsWith('http://127.0.0.1')
+                && (err instanceof TypeError || /failed to fetch|network|cors/i.test(msg));
+            const isOOM = /out of memory|cuda|oom|allocation|allocat/i.test(msg);
+            if (isLocalNetworkBlock) {
+                statusText.innerHTML = 'Chrome blocked access to the local music helper. Allow <strong>Local network access</strong> for this site, reload, and try again. You can also <a class="text-teal-300 underline" href="http://127.0.0.1:8020/music/" target="_blank" rel="noopener">open the local Music Studio</a>.';
+                showBannerNotification('Local Network Access is blocked. Open this site\'s browser permissions, set Local network access to Allow, then reload.', 'warning');
+            } else if (isOOM) {
+                showBannerNotification('Generation failed due to GPU VRAM limits. Try switching to a lower VRAM profile or stopping other GPU processes.', 'warning');
+                console.warn('[Music Studio] VRAM OOM detected during generation:', msg);
+            } else {
+                showBannerNotification('Generation failed: ' + msg, 'error');
+            }
         } finally {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
+            isTrackGenerating = false;
             btn.disabled = false;
             // Reset status badge from backend to clear the manual "Loading Weights" override
             checkMusicServiceStatus();

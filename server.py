@@ -4,7 +4,11 @@ import subprocess
 import platform
 import json
 import os
+import shutil
 import threading
+import time
+import urllib.error
+import urllib.request
 
 PORT = 8020
 active_downloads = {}
@@ -12,6 +16,20 @@ active_downloads_status = {}  # {repo_id: {'status': ..., 'progress': ..., 'spee
 active_download_processes = {}  # {repo_id: subprocess.Popen}
 install_status = {'progress': 0, 'step': 'idle', 'error': None}
 active_vram_profile = None
+managed_ace_process = None
+accelerator_lock = threading.RLock()
+accelerator_state = {
+    'owner': 'idle',
+    'transitioning': False,
+    'last_error': None,
+    'updated_at': None,
+}
+
+ALLOWED_WEB_ORIGINS = {
+    'https://rorrimaesu.github.io',
+    'http://127.0.0.1:8020',
+    'http://localhost:8020',
+}
 
 def get_quantime_install_path():
     if platform.system() != 'Windows':
@@ -65,6 +83,214 @@ def probe_port(port):
         return True
     except Exception:
         return False
+
+def request_json(url, payload=None, timeout=10, method=None):
+    data = None
+    headers = {'Accept': 'application/json'}
+    if payload is not None:
+        data = json.dumps(payload).encode('utf-8')
+        headers['Content-Type'] = 'application/json'
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        raw = response.read()
+        if not raw:
+            return {}
+        return json.loads(raw.decode('utf-8'))
+
+def get_gpu_memory_status():
+    if platform.system() != 'Windows' and not shutil.which('nvidia-smi'):
+        return None
+    try:
+        output = subprocess.check_output([
+            'nvidia-smi',
+            '--query-gpu=name,memory.total,memory.used,memory.free',
+            '--format=csv,noheader,nounits',
+        ], text=True, timeout=5, stderr=subprocess.DEVNULL)
+        first = output.strip().splitlines()[0]
+        name, total, used, free = [part.strip() for part in first.split(',', 3)]
+        return {
+            'name': name,
+            'total_mb': int(total),
+            'used_mb': int(used),
+            'free_mb': int(free),
+        }
+    except Exception:
+        return None
+
+def get_ollama_runtime_status():
+    try:
+        data = request_json('http://127.0.0.1:11434/api/ps', timeout=3)
+        models = []
+        for model in data.get('models', []):
+            name = model.get('name') or model.get('model')
+            if name:
+                models.append(name)
+        return {'online': True, 'models': models}
+    except Exception as exc:
+        return {'online': False, 'models': [], 'error': str(exc)}
+
+def unload_ollama_models():
+    status = get_ollama_runtime_status()
+    if not status['online']:
+        return {'status': 'offline', 'models_unloaded': []}
+
+    unloaded = []
+    for model_name in status['models']:
+        request_json(
+            'http://127.0.0.1:11434/api/generate',
+            {'model': model_name, 'prompt': '', 'keep_alive': 0, 'stream': False},
+            timeout=30,
+            method='POST',
+        )
+        unloaded.append(model_name)
+
+    deadline = time.time() + 15
+    remaining = status['models']
+    while time.time() < deadline:
+        current = get_ollama_runtime_status()
+        if not current['online'] or not current['models']:
+            return {'status': 'unloaded', 'models_unloaded': unloaded}
+        remaining = current['models']
+        time.sleep(0.25)
+
+    raise RuntimeError(f"Ollama still reports loaded models after unload: {', '.join(remaining)}")
+
+def get_ace_health():
+    if not probe_port(8002):
+        return {'online': False, 'status': 'offline'}
+    try:
+        data = request_json('http://127.0.0.1:8002/health', timeout=3)
+        return {
+            'online': True,
+            'status': data.get('status', 'unknown'),
+            'error': data.get('error'),
+        }
+    except Exception as exc:
+        return {'online': True, 'status': 'unresponsive', 'error': str(exc)}
+
+def unload_ace_models():
+    health = get_ace_health()
+    if not health['online']:
+        return {'status': 'offline'}
+
+    result = request_json(
+        'http://127.0.0.1:8002/v1/unload',
+        payload={},
+        timeout=45,
+        method='POST',
+    )
+    if result.get('status') != 'unloaded':
+        raise RuntimeError(result.get('message') or 'ACE-Step did not confirm model unload.')
+    if result.get('music_lm_unloaded') is not True:
+        raise RuntimeError('ACE-Step is running an older unload implementation. Stop and relaunch the ACE-Step service, then try again.')
+
+    deadline = time.time() + 15
+    last_health = health
+    while time.time() < deadline:
+        last_health = get_ace_health()
+        if not last_health['online'] or last_health['status'] in ('lazy', 'offline'):
+            return result
+        time.sleep(0.25)
+
+    raise RuntimeError(f"ACE-Step remained in '{last_health['status']}' state after unload.")
+
+def required_music_free_mb(model_name):
+    return 10240 if 'xl-' in (model_name or '').lower() else 6144
+
+def required_llm_free_mb(model_name):
+    name = (model_name or '').lower()
+    if '26b' in name:
+        return 15360
+    if 'e4b' in name or '12b' in name:
+        return 10240
+    if 'e2b' in name:
+        return 6144
+    return 8192
+
+def get_accelerator_snapshot():
+    ace = get_ace_health()
+    ollama = get_ollama_runtime_status()
+    gpu = get_gpu_memory_status()
+    owner = accelerator_state['owner']
+    inferred_owner = owner
+    conflict = False
+    if ace['status'] == 'ok':
+        if owner == 'llm' or ollama['models']:
+            conflict = True
+        if owner == 'idle':
+            inferred_owner = 'music'
+    elif ollama['models'] and owner == 'idle':
+        inferred_owner = 'llm'
+    return {
+        'owner': owner,
+        'inferred_owner': inferred_owner,
+        'transitioning': accelerator_state['transitioning'],
+        'last_error': accelerator_state['last_error'],
+        'updated_at': accelerator_state['updated_at'],
+        'active_vram_profile': active_vram_profile,
+        'ace': ace,
+        'ollama': ollama,
+        'gpu': gpu,
+        'conflict': conflict,
+    }
+
+def transition_accelerator(target_owner, music_model=None, llm_model=None, vram_profile=None):
+    if target_owner not in ('idle', 'llm', 'music'):
+        raise ValueError(f"Unsupported accelerator owner: {target_owner}")
+
+    if not accelerator_lock.acquire(timeout=1):
+        raise RuntimeError('The accelerator is busy generating a track. Wait for generation to finish before switching models.')
+    try:
+        accelerator_state['transitioning'] = True
+        accelerator_state['last_error'] = None
+        accelerator_state['updated_at'] = time.time()
+        try:
+            current = get_accelerator_snapshot()
+            if target_owner == 'llm' and current['owner'] == 'llm' and current['ace']['status'] in ('lazy', 'offline'):
+                accelerator_state['transitioning'] = False
+                return get_accelerator_snapshot()
+            if target_owner == 'music' and current['owner'] == 'music' and current['ace']['status'] == 'ok' and not current['ollama']['models']:
+                accelerator_state['transitioning'] = False
+                return get_accelerator_snapshot()
+            if target_owner == 'music':
+                unload_ollama_models()
+                gpu = get_gpu_memory_status()
+                ace = get_ace_health()
+                if vram_profile == 'high' and gpu and gpu['total_mb'] < 20480:
+                    raise RuntimeError('The high VRAM profile requires at least 20 GB. Use optimized on this GPU.')
+                if ace['status'] != 'ok' and gpu:
+                    minimum_free = required_music_free_mb(music_model)
+                    if gpu['free_mb'] < minimum_free:
+                        raise RuntimeError(
+                            f"Only {gpu['free_mb']} MB VRAM is free; {minimum_free} MB is required before loading {music_model or 'the music model'}."
+                        )
+            elif target_owner == 'llm':
+                unload_ace_models()
+                gpu = get_gpu_memory_status()
+                ollama = get_ollama_runtime_status()
+                if gpu and not ollama['models']:
+                    minimum_free = required_llm_free_mb(llm_model)
+                    if gpu['free_mb'] < minimum_free:
+                        raise RuntimeError(
+                            f"Only {gpu['free_mb']} MB VRAM is free after ACE-Step unload; {minimum_free} MB is required before loading {llm_model or 'the LLM'}. Check for stranded GPU processes."
+                        )
+            else:
+                unload_ollama_models()
+                unload_ace_models()
+
+            accelerator_state['owner'] = target_owner
+            accelerator_state['updated_at'] = time.time()
+            accelerator_state['transitioning'] = False
+            return get_accelerator_snapshot()
+        except Exception as exc:
+            accelerator_state['owner'] = 'idle'
+            accelerator_state['last_error'] = str(exc)
+            accelerator_state['updated_at'] = time.time()
+            raise
+        finally:
+            accelerator_state['transitioning'] = False
+    finally:
+        accelerator_lock.release()
 
 def kill_openrouter_processes():
     import subprocess
@@ -334,7 +560,19 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         global install_thread, install_status
-        if self.path == '/api/hardware-info':
+        if self.path == '/api/accelerator/status':
+            try:
+                response = {'status': 'success', 'accelerator': get_accelerator_snapshot()}
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+            except Exception as exc:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
+        elif self.path == '/api/hardware-info':
             try:
                 system_ram_gb = get_system_ram_gb()
                 gpus = get_gpu_info()
@@ -513,13 +751,56 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-ComfyUI-Path')
+        self.send_header('Access-Control-Allow-Private-Network', 'true')
         self.end_headers()
 
     def do_POST(self):
-        if self.path == '/api/launch-ollama':
+        global active_vram_profile, managed_ace_process
+        request_origin = self.headers.get('Origin')
+        if request_origin and request_origin not in ALLOWED_WEB_ORIGINS:
+            self.send_response(403)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'status': 'error',
+                'message': 'This origin is not allowed to control the local Gnosys helper.',
+            }).encode('utf-8'))
+            return
+        if self.path == '/api/accelerator/acquire':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = json.loads(self.rfile.read(content_length).decode('utf-8')) if content_length else {}
+                snapshot = transition_accelerator(
+                    body.get('owner', 'idle'),
+                    music_model=body.get('music_model'),
+                    llm_model=body.get('llm_model'),
+                    vram_profile=body.get('vram_profile'),
+                )
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'accelerator': snapshot}).encode('utf-8'))
+            except Exception as exc:
+                self.send_response(409)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
+        elif self.path == '/api/launch-ollama':
             try:
                 system = platform.system()
                 print(f"[Launcher] Request received. Launching Ollama on {system}...")
+
+                ollama_status = get_ollama_runtime_status()
+                if ollama_status['online']:
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'status': 'success',
+                        'message': 'Ollama is already running; no duplicate process was started.',
+                    }).encode('utf-8'))
+                    return
                 
                 if system == 'Windows':
                     # Launch the Ollama App on Windows using native startfile to avoid cmd.exe permissions blocks
@@ -682,6 +963,8 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'comfy_installed': ace_installed,
                     'comfy_running': ace_running,
                     'comfy_state': comfy_state,
+                    'active_vram_profile': active_vram_profile,
+                    'accelerator_owner': accelerator_state['owner'],
                     'custom_node_installed': True, # Mock true for backward compatibility
                     'models_installed': len(discovered_models) > 0,
                     'active_downloads': active_downloads,
@@ -708,15 +991,20 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/launch':
             try:
-                global active_vram_profile
                 ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
-                vram_profile = 'high'
+                vram_profile = 'optimized'
                 content_length = int(self.headers.get('Content-Length', 0))
                 if content_length > 0:
                     body = json.loads(self.rfile.read(content_length).decode('utf-8'))
                     ace_path = body.get('comfy_path', ace_path)
-                    vram_profile = body.get('vram_profile', 'high')
+                    vram_profile = body.get('vram_profile', 'optimized')
                 ace_path = auto_resolve_ace_path(ace_path)
+
+                gpu_status = get_gpu_memory_status()
+                profile_adjusted = False
+                if vram_profile == 'high' and gpu_status and gpu_status['total_mb'] < 20480:
+                    vram_profile = 'optimized'
+                    profile_adjusted = True
 
                 # Early Exit: If the API server is already running with the correct VRAM profile, share it
                 if probe_port(8002) and active_vram_profile == vram_profile:
@@ -725,7 +1013,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_header('Content-type', 'application/json')
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
-                    self.wfile.write(json.dumps({'status': 'success', 'message': 'API Server is already running.'}).encode('utf-8'))
+                    self.wfile.write(json.dumps({
+                        'status': 'success',
+                        'message': 'API Server is already running.',
+                        'vram_profile': vram_profile,
+                        'profile_adjusted': profile_adjusted,
+                    }).encode('utf-8'))
                     return
 
                 # Terminate any starting/running API processes to prevent concurrent duplicates
@@ -735,8 +1028,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     import time
                     kill_port_process(8002)
                     time.sleep(1.0)
-
-                active_vram_profile = vram_profile
+                active_vram_profile = None
 
                 # Launch environment copy with lazy loading enabled
                 env_copy = os.environ.copy()
@@ -754,7 +1046,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         cmd.append('--lowvram')
                     elif vram_profile == 'optimized':
                         cmd.append('--medvram')
-                    subprocess.Popen(cmd, cwd=ace_path, env=env_copy)
+                    managed_ace_process = subprocess.Popen(cmd, cwd=ace_path, env=env_copy)
                     msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via venv python"
                 else:
                     # Fallback to system python
@@ -763,14 +1055,21 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         cmd.append('--lowvram')
                     elif vram_profile == 'optimized':
                         cmd.append('--medvram')
-                    subprocess.Popen(cmd, cwd=ace_path, env=env_copy)
+                    managed_ace_process = subprocess.Popen(cmd, cwd=ace_path, env=env_copy)
                     msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via system python"
+
+                active_vram_profile = vram_profile
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(json.dumps({'status': 'success', 'message': msg}).encode('utf-8'))
+                self.wfile.write(json.dumps({
+                    'status': 'success',
+                    'message': msg,
+                    'vram_profile': vram_profile,
+                    'profile_adjusted': profile_adjusted,
+                }).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
@@ -991,20 +1290,35 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
                 payload = self.rfile.read(content_length)
-                
-                # Proxy to local openrouter_api_server.py on port 8002
-                import urllib.request
-                import urllib.error
-                
-                req = urllib.request.Request(
-                    'http://127.0.0.1:8002/v1/chat/completions',
-                    data=payload,
-                    headers={'Content-Type': 'application/json'}
-                )
-                
-                # Send with high timeout (600s) to survive slow inference
-                with urllib.request.urlopen(req, timeout=600) as response_conn:
-                    response_data = response_conn.read()
+
+                # Keep generation compatible with an older or cached GitHub
+                # Pages frontend. The current UI acquires music ownership before
+                # this request, but the backend must also be able to recover after
+                # a helper restart, which resets its in-memory owner to idle.
+                if accelerator_state['owner'] != 'music':
+                    try:
+                        generation_request = json.loads(payload.decode('utf-8'))
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        generation_request = {}
+                    transition_accelerator(
+                        'music',
+                        music_model=generation_request.get('model'),
+                        vram_profile=active_vram_profile or 'optimized',
+                    )
+
+                with accelerator_lock:
+                    if accelerator_state['owner'] != 'music':
+                        raise RuntimeError('Music does not own the accelerator. Complete the VRAM transition before generating.')
+                    req = urllib.request.Request(
+                        'http://127.0.0.1:8002/v1/chat/completions',
+                        data=payload,
+                        headers={'Content-Type': 'application/json'}
+                    )
+
+                    # Hold the coordinator lock for the full inference so another
+                    # tab cannot unload weights while a track is being generated.
+                    with urllib.request.urlopen(req, timeout=600) as response_conn:
+                        response_data = response_conn.read()
                     
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
@@ -1017,26 +1331,62 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(he.read())
+            except (urllib.error.URLError, TimeoutError, RuntimeError) as exc:
+                self.send_response(503)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
+            except Exception as exc:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
         elif self.path == '/api/music/unload':
             try:
-                import urllib.request
-                import urllib.error
-                req = urllib.request.Request(
-                    'http://127.0.0.1:8002/v1/unload',
-                    method='POST'
-                )
-                try:
-                    with urllib.request.urlopen(req, timeout=5) as response_conn:
-                        response_data = response_conn.read()
-                except Exception:
-                    # Ignore offline errors - if the backend isn't running, it doesn't hold VRAM anyway
-                    response_data = json.dumps({'status': 'success', 'message': 'API server offline, no VRAM to unload.'}).encode('utf-8')
+                with accelerator_lock:
+                    result = unload_ace_models()
+                    accelerator_state['owner'] = 'idle'
+                    accelerator_state['last_error'] = None
+                    accelerator_state['updated_at'] = time.time()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'result': result}).encode('utf-8'))
+            except Exception as e:
+                accelerator_state['last_error'] = str(e)
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/stop':
+            try:
+                with accelerator_lock:
+                    print("[Launcher] Stopping ACE-Step service processes...")
+                    if managed_ace_process and managed_ace_process.poll() is None:
+                        managed_ace_process.terminate()
+                        try:
+                            managed_ace_process.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            managed_ace_process.kill()
+                    managed_ace_process = None
+                    if probe_port(8002):
+                        kill_openrouter_processes()
+                    if probe_port(8002):
+                        kill_port_process(8002)
+                    active_vram_profile = None
+                    accelerator_state['owner'] = 'idle'
+                    accelerator_state['last_error'] = None
+                    accelerator_state['updated_at'] = time.time()
                 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(response_data)
+                self.wfile.write(json.dumps({'status': 'success', 'message': 'ACE-Step service stopped successfully.'}).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
@@ -1371,6 +1721,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def send_header(self, keyword, value):
         if keyword.lower() == 'access-control-allow-origin':
             self._cors_sent = True
+            request_origin = self.headers.get('Origin', '')
+            if request_origin in ALLOWED_WEB_ORIGINS:
+                value = request_origin
+            else:
+                value = 'null'
+            super().send_header('Vary', 'Origin')
         super().send_header(keyword, value)
 
     # Override end_headers to inject CORS into normal GET file requests too
@@ -1390,6 +1746,14 @@ def run_server():
     try:
         with socketserver.ThreadingTCPServer(("", PORT), GnosysHTTPRequestHandler) as httpd:
             print(f"[Gnosys-AI Server] Listening on http://localhost:{PORT}")
+            if os.environ.get('GNOSYS_OPEN_BROWSER', '').lower() in ('1', 'true', 'yes'):
+                def open_local_app():
+                    try:
+                        import webbrowser
+                        webbrowser.open(f'http://127.0.0.1:{PORT}/')
+                    except Exception as exc:
+                        print(f"[Gnosys-AI Server] Could not open local app: {exc}")
+                threading.Timer(0.5, open_local_app).start()
             try:
                 httpd.serve_forever()
             except KeyboardInterrupt:

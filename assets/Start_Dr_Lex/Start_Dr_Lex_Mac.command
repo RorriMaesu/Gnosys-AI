@@ -25,7 +25,7 @@ fi
 
 echo "Detected ${RAM_MB} MB Unified Memory."
 
-if [ "$RAM_MB" -ge 24000 ]; then
+if [ "$RAM_MB" -ge 32000 ]; then
     MODEL="VladimirGav/gemma4-26b-16GB-VRAM:latest"
 elif [ "$RAM_MB" -ge 16000 ]; then
     MODEL="gemma4:e4b"
