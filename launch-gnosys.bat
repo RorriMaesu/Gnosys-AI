@@ -40,8 +40,10 @@ if exist .git (
 
 :: Run the backend script
 if exist run_backend.bat (
+    set "GNOSYS_OPEN_BROWSER=1"
     call run_backend.bat
 ) else (
+    set "GNOSYS_OPEN_BROWSER=1"
     python server.py
     pause
 )

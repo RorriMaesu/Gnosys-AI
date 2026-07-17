@@ -25,7 +25,7 @@ for /f "tokens=1" %%a in ('nvidia-smi --query-gpu^=memory.total --format^=csv^,n
 
 if !VRAM_MB! GTR 0 (
     echo Detected NVIDIA GPU with !VRAM_MB! MB VRAM.
-    if !VRAM_MB! GEQ 14000 (
+    if !VRAM_MB! GEQ 24000 (
         set "MODEL=VladimirGav/gemma4-26b-16GB-VRAM:latest"
     ) else if !VRAM_MB! GEQ 10000 (
         set "MODEL=gemma4:e4b"
@@ -40,7 +40,7 @@ if !VRAM_MB! GTR 0 (
     if "!RAM_MB!"=="" set "RAM_MB=0"
     echo Detected !RAM_MB! MB System RAM.
     
-    if !RAM_MB! GEQ 24000 (
+    if !RAM_MB! GEQ 48000 (
         set "MODEL=VladimirGav/gemma4-26b-16GB-VRAM:latest"
     ) else if !RAM_MB! GEQ 16000 (
         set "MODEL=gemma4:e4b"

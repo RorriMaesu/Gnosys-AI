@@ -799,7 +799,7 @@
             <div class="flex items-center gap-4 flex-wrap">
                 <div class="flex items-center gap-3">
                     <label class="flex items-center gap-1.5 cursor-pointer select-none">
-                        <input type="checkbox" id="auto-start-checkbox" checked class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3 h-3">
+                        <input type="checkbox" id="auto-start-checkbox" class="rounded bg-slate-900 border-white/10 text-violet-600 focus:ring-0 focus:ring-offset-0 w-3 h-3">
                         <span class="text-[10px] text-slate-400 font-semibold">Auto-Start</span>
                     </label>
                     <label class="flex items-center gap-1.5 cursor-pointer select-none">
@@ -816,6 +816,12 @@
                     </button>
                     <button id="btn-launch-service" class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-[10px] font-bold text-white transition-all shadow-md shadow-violet-600/20 hidden">
                         <i class="fa-solid fa-rocket mr-1"></i> Launch Service
+                    </button>
+                    <button id="btn-stop-service" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-[10px] font-bold text-white transition-all shadow-md shadow-rose-600/20 hidden">
+                        <i class="fa-solid fa-power-off mr-1"></i> Stop Service
+                    </button>
+                    <button id="btn-reset-vram" class="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-[10px] font-bold text-amber-300 hover:text-white transition-all whitespace-nowrap" title="Unload all Gnosys AI models from GPU memory">
+                        <i class="fa-solid fa-memory mr-1"></i> Reset VRAM
                     </button>
                     <button id="btn-install-wizard" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-500 to-violet-600 text-[10px] font-bold text-white transition-all glow-button hidden">
                         <i class="fa-solid fa-download mr-1"></i> Install ACE
@@ -834,6 +840,7 @@
                     <h2 class="text-xs font-bold text-white">Local Assistant Server is Offline</h2>
                     <p class="text-[11px] text-slate-300 mt-0.5 max-w-xl leading-relaxed">
                         To enable the AI Lyric Assistant, run the local server helper. Open your folder and double-click <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> (Windows) or <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.sh</code> (Mac/Linux).
+                        <span class="block mt-1">For the most reliable connection, open <a href="http://127.0.0.1:8020/music/" class="font-bold text-teal-300 hover:text-teal-200 underline">the local Music Studio</a>. When using GitHub Pages, allow Local Network Access for this site when the browser asks.</span>
                         <span class="block mt-1 font-bold text-amber-400"><i class="fa-solid fa-folder-open mr-1"></i> Crucial for ZIP downloads: You must right-click the zip file, select "Extract All", and run the file from the extracted folder!</span>
                     </p>
                 </div>
@@ -1166,16 +1173,16 @@
                             <div>
                                 <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Model Selection</label>
                                 <select id="music-model" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
-                                    <option value="acemusic/acestep-v15-xl-turbo" selected>acemusic/acestep-v15-xl-turbo (4B XL Turbo - Premium Fast)</option>
+                                    <option value="acemusic/acestep-v15-xl-turbo">acemusic/acestep-v15-xl-turbo (4B XL Turbo - Premium Fast)</option>
                                     <option value="acemusic/acestep-v15-xl-sft">acemusic/acestep-v15-xl-sft (4B XL SFT - High Quality Fine-Tuned)</option>
-                                    <option value="acemusic/acestep-v15-turbo">acemusic/acestep-v15-turbo (2B Turbo - Lightweight/Ultra Fast)</option>
+                                    <option value="acemusic/acestep-v15-turbo" selected>acemusic/acestep-v15-turbo (2B Turbo - Recommended for 16GB)</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">VRAM Profile</label>
                                 <select id="music-vram-profile" class="w-full studio-input rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition-colors cursor-pointer">
-                                    <option value="high" selected>Standard (Recommended for 12GB+ VRAM - Maximum Speed)</option>
-                                    <option value="optimized">Optimized (Recommended for 8-12GB VRAM - Partial CPU Offload)</option>
+                                    <option value="high">Standard (20GB+ VRAM - Maximum Speed)</option>
+                                    <option value="optimized" selected>Optimized (Recommended for 12-20GB VRAM - Partial CPU Offload)</option>
                                     <option value="low">Low VRAM (Recommended for <8GB VRAM - Full CPU Offload)</option>
                                 </select>
                             </div>
@@ -1499,6 +1506,7 @@
     </div>
 
     <script src="../assets/llm-router.js"></script>
+    <script src="../assets/ollama-launcher.js"></script>
     <script src="music-studio.js"></script>
     <script src="../assets/js/global-player.js" defer></script>
 </body>
