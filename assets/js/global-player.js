@@ -140,6 +140,10 @@
         const iframe = document.createElement('iframe');
         iframe.id = 'gnosys-content-frame';
         iframe.src = currentUrl;
+        // Edge requires explicit Permissions Policy delegation before content
+        // inside an iframe can contact a localhost/loopback helper. Keep the
+        // legacy permission plus Edge's split local and loopback permissions.
+        iframe.setAttribute('allow', 'local-network-access; loopback-network; local-network');
         iframe.style.cssText = 'border: none; width: 100%; height: 100%; margin: 0; padding: 0; display: block;';
         body.appendChild(iframe);
 
