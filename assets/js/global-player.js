@@ -14,6 +14,32 @@
         return; // Abort remaining script initialization in the child iframe
     }
 
+    // Music Studio is displayed inside the full-screen content iframe below.
+    // Edge may still reject loopback fetches made by that frame even when the
+    // permission is granted and delegated. Provide a tightly scoped top-level
+    // bridge so child pages can reach only the Gnosys helper API.
+    window.GnosysLocalHelperFetch = async function(input, init = {}) {
+        const target = new URL(input, window.location.href);
+        const allowedOrigins = new Set([
+            'http://127.0.0.1:8020',
+            'http://localhost:8020',
+        ]);
+        if (!allowedOrigins.has(target.origin) || !target.pathname.startsWith('/api/')) {
+            throw new Error('Blocked an invalid local helper request.');
+        }
+
+        const requestInit = {
+            method: init.method || 'GET',
+            headers: init.headers,
+            body: init.body,
+            targetAddressSpace: 'loopback',
+        };
+        if (init.timeoutMs && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+            requestInit.signal = AbortSignal.timeout(init.timeoutMs);
+        }
+        return fetch(target.href, requestInit);
+    };
+
     // Determine the API base URL
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
     

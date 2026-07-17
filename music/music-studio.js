@@ -1212,11 +1212,12 @@
             if (window.GnosysLLM?.vramManager) {
                 snapshot = await window.GnosysLLM.vramManager.releaseAll(false);
             } else {
-                const response = await fetch(`${API_BASE}/api/accelerator/acquire`, {
+                const localFetch = window.GnosysFetchLocalHelper || fetch;
+                const response = await localFetch(`${API_BASE}/api/accelerator/acquire`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ owner: 'idle' }),
-                    signal: AbortSignal.timeout(60000),
+                    timeoutMs: 60000,
                     targetAddressSpace: 'loopback'
                 });
                 const payload = await response.json().catch(() => ({}));
@@ -3138,7 +3139,8 @@ Keep the body balanced in the homeostatic light!
         };
 
         try {
-            const res = await fetch(`${API_BASE}/api/music/generate`, {
+            const localFetch = window.GnosysFetchLocalHelper || fetch;
+            const res = await localFetch(`${API_BASE}/api/music/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -3183,7 +3185,7 @@ Keep the body balanced in the homeostatic light!
                 && (err instanceof TypeError || /failed to fetch|network|cors/i.test(msg));
             const isOOM = /out of memory|cuda|oom|allocation|allocat/i.test(msg);
             if (isLocalNetworkBlock) {
-                statusText.innerHTML = 'Chrome blocked access to the local music helper. Allow <strong>Local network access</strong> for this site, reload, and try again. You can also <a class="text-teal-300 underline" href="http://127.0.0.1:8020/music/" target="_blank" rel="noopener">open the local Music Studio</a>.';
+                statusText.innerHTML = 'The browser blocked access to the local music helper. Allow <strong>Local network access</strong> for this site, reload, and try again. You can also <a class="text-teal-300 underline" href="http://127.0.0.1:8020/music/" target="_blank" rel="noopener">open the local Music Studio</a>.';
                 showBannerNotification('Local Network Access is blocked. Open this site\'s browser permissions, set Local network access to Allow, then reload.', 'warning');
             } else if (isOOM) {
                 showBannerNotification('Generation failed due to GPU VRAM limits. Try switching to a lower VRAM profile or stopping other GPU processes.', 'warning');

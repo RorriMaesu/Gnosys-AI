@@ -341,8 +341,30 @@
         ? new BroadcastChannel('gnosys_accelerator_channel')
         : null;
 
+    async function fetchLocalHelper(url, init = {}) {
+        if (window.parent !== window) {
+            try {
+                const parentBridge = window.parent.GnosysLocalHelperFetch;
+                if (typeof parentBridge === 'function') {
+                    return parentBridge(url, init);
+                }
+            } catch (err) {
+                console.warn('[GnosysLLM] Top-level local helper bridge unavailable:', err);
+            }
+        }
+
+        const directInit = { ...init };
+        const timeoutMs = directInit.timeoutMs;
+        delete directInit.timeoutMs;
+        if (timeoutMs && !directInit.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+            directInit.signal = AbortSignal.timeout(timeoutMs);
+        }
+        return fetch(url, directInit);
+    }
+    window.GnosysFetchLocalHelper = fetchLocalHelper;
+
     async function requestAcceleratorOwner(owner, options = {}) {
-        const response = await fetch(`${API_BASE}/api/accelerator/acquire`, {
+        const response = await fetchLocalHelper(`${API_BASE}/api/accelerator/acquire`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -351,7 +373,7 @@
                 llm_model: options.llmModel || null,
                 vram_profile: options.vramProfile || null,
             }),
-            signal: AbortSignal.timeout(60000),
+            timeoutMs: 60000,
             targetAddressSpace: 'loopback',
         });
         let payload = {};
