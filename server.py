@@ -1291,6 +1291,21 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 content_length = int(self.headers.get('Content-Length', 0))
                 payload = self.rfile.read(content_length)
 
+                # Keep generation compatible with an older or cached GitHub
+                # Pages frontend. The current UI acquires music ownership before
+                # this request, but the backend must also be able to recover after
+                # a helper restart, which resets its in-memory owner to idle.
+                if accelerator_state['owner'] != 'music':
+                    try:
+                        generation_request = json.loads(payload.decode('utf-8'))
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        generation_request = {}
+                    transition_accelerator(
+                        'music',
+                        music_model=generation_request.get('model'),
+                        vram_profile=active_vram_profile or 'optimized',
+                    )
+
                 with accelerator_lock:
                     if accelerator_state['owner'] != 'music':
                         raise RuntimeError('Music does not own the accelerator. Complete the VRAM transition before generating.')
