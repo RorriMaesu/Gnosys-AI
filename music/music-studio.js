@@ -1522,6 +1522,7 @@
             });
             const data = await res.json();
             if (res.ok && data.status === 'success') {
+                const forcedCleanup = Boolean(data.result?.forced_state_cleanup);
                 isTrackGenerating = false;
                 const generateBtn = document.getElementById('btn-generate-track');
                 const progressContainer = document.getElementById('generation-progress-container');
@@ -1530,15 +1531,25 @@
                 const percent = document.getElementById('gen-percent');
                 if (generateBtn) generateBtn.disabled = false;
                 if (progressContainer && wasGenerating) progressContainer.classList.remove('hidden');
-                if (statusText && wasGenerating) statusText.textContent = 'Generation stopped. You can start a new track.';
-                if (monitorMessage && wasGenerating) monitorMessage.textContent = 'ACE-Step was stopped and its GPU memory was released.';
+                if (statusText && wasGenerating) {
+                    statusText.textContent = forcedCleanup
+                        ? 'Generation stopped and stale request state recovered.'
+                        : 'Generation stopped. You can start a new track.';
+                }
+                if (monitorMessage && wasGenerating) {
+                    monitorMessage.textContent = forcedCleanup
+                        ? 'ACE-Step stopped; Gnosys also cleared a non-responsive generation worker.'
+                        : 'ACE-Step was stopped and its GPU memory was released.';
+                }
                 if (percent && wasGenerating) percent.textContent = 'Stopped';
                 if (window.VRAMManager) window.VRAMManager.activeOwner = 'idle';
                 stopGenerationTelemetry();
                 void pollGenerationTelemetry();
                 showBannerNotification(
-                    wasGenerating ? 'Track generation stopped and VRAM released.' : 'ACE-Step service stopped and VRAM released.',
-                    'success'
+                    forcedCleanup
+                        ? 'Track stopped and a stale generation lock was safely recovered.'
+                        : (wasGenerating ? 'Track generation stopped and VRAM released.' : 'ACE-Step service stopped and VRAM released.'),
+                    forcedCleanup ? 'warning' : 'success'
                 );
             } else {
                 showBannerNotification(`Failed to stop service: ${data.message}`, 'error');
