@@ -17,6 +17,7 @@ active_download_processes = {}  # {repo_id: subprocess.Popen}
 install_status = {'progress': 0, 'step': 'idle', 'error': None}
 active_vram_profile = None
 active_music_model = None
+active_ace_path = None
 managed_ace_process = None
 accelerator_lock = threading.RLock()
 accelerator_state = {
@@ -39,6 +40,142 @@ SUPPORTED_MUSIC_MODELS = {
     'acestep-v15-xl-sft',
 }
 MUSIC_GENERATION_TIMEOUT_SECONDS = 1800
+
+MUSIC_MODEL_ARTIFACTS = {
+    'xl_sft': {
+        'model': 'acestep-v15-xl-sft',
+        'directory': 'checkpoints/acestep-v15-xl-sft',
+        'single_file': 'checkpoints/acestep-v15-xl-sft.safetensors',
+        'repo_id': 'ACE-Step/acestep-v15-xl-sft',
+    },
+    'xl_turbo': {
+        'model': 'acestep-v15-xl-turbo',
+        'directory': 'checkpoints/acestep-v15-xl-turbo',
+        'single_file': 'checkpoints/acestep-v15-xl-turbo.safetensors',
+        'repo_id': 'ACE-Step/acestep-v15-xl-turbo',
+    },
+    'turbo': {
+        'model': 'acestep-v15-turbo',
+        'directory': 'checkpoints/acestep-v15-turbo',
+        'single_file': 'checkpoints/acestep-v15-turbo.safetensors',
+        'repo_id': 'ACE-Step/acestep-v15-turbo',
+    },
+}
+MUSIC_MODEL_KEYS = {
+    spec['model']: key for key, spec in MUSIC_MODEL_ARTIFACTS.items()
+}
+
+
+def _nonempty_file(path):
+    try:
+        return os.path.isfile(path) and os.path.getsize(path) > 0
+    except OSError:
+        return False
+
+
+def inspect_transformers_checkpoint(model_dir):
+    """Return a serializable completeness report for a Transformers checkpoint."""
+    report = {
+        'installed': False,
+        'state': 'missing',
+        'path': model_dir,
+        'layout': None,
+        'expected_files': [],
+        'missing_files': [],
+        'invalid_files': [],
+        'expected_bytes': None,
+        'partial_bytes': 0,
+        'message': 'Checkpoint directory is missing.',
+    }
+    if not os.path.isdir(model_dir):
+        return report
+
+    report['state'] = 'incomplete'
+    report['message'] = 'Checkpoint directory exists, but model weights are missing.'
+    index_path = os.path.join(model_dir, 'model.safetensors.index.json')
+    single_path = os.path.join(model_dir, 'model.safetensors')
+
+    if os.path.isfile(index_path):
+        report['layout'] = 'sharded'
+        try:
+            with open(index_path, 'r', encoding='utf-8') as index_file:
+                index_data = json.load(index_file)
+            weight_map = index_data.get('weight_map') or {}
+            expected_files = sorted(set(weight_map.values()))
+            if not expected_files:
+                raise ValueError('weight_map does not reference any shard files')
+            report['expected_files'] = expected_files
+            expected_size = (index_data.get('metadata') or {}).get('total_size')
+            if isinstance(expected_size, int):
+                report['expected_bytes'] = expected_size
+
+            root = os.path.abspath(model_dir)
+            for relative_path in expected_files:
+                shard_path = os.path.abspath(os.path.join(model_dir, relative_path))
+                try:
+                    inside_model = os.path.commonpath([root, shard_path]) == root
+                except ValueError:
+                    inside_model = False
+                if not inside_model:
+                    report['invalid_files'].append(relative_path)
+                elif not os.path.isfile(shard_path):
+                    report['missing_files'].append(relative_path)
+                elif os.path.getsize(shard_path) <= 0:
+                    report['invalid_files'].append(relative_path)
+
+            if not report['missing_files'] and not report['invalid_files']:
+                report['installed'] = True
+                report['state'] = 'complete'
+                report['message'] = f"Verified all {len(expected_files)} checkpoint shards."
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            report['state'] = 'invalid'
+            report['message'] = f'Checkpoint index is invalid: {exc}'
+    elif _nonempty_file(single_path):
+        report.update({
+            'installed': True,
+            'state': 'complete',
+            'layout': 'single',
+            'expected_files': ['model.safetensors'],
+            'message': 'Verified single-file checkpoint.',
+        })
+
+    cache_dir = os.path.join(model_dir, '.cache', 'huggingface', 'download')
+    if os.path.isdir(cache_dir):
+        try:
+            report['partial_bytes'] = sum(
+                entry.stat().st_size
+                for entry in os.scandir(cache_dir)
+                if entry.is_file() and entry.name.endswith('.incomplete')
+            )
+        except OSError:
+            pass
+    return report
+
+
+def inspect_music_model(ace_path, model_key):
+    spec = MUSIC_MODEL_ARTIFACTS[model_key]
+    single_path = os.path.join(ace_path, spec['single_file'])
+    if _nonempty_file(single_path):
+        return {
+            'installed': True,
+            'state': 'complete',
+            'path': single_path,
+            'layout': 'single',
+            'expected_files': [os.path.basename(single_path)],
+            'missing_files': [],
+            'invalid_files': [],
+            'expected_bytes': os.path.getsize(single_path),
+            'partial_bytes': 0,
+            'message': 'Verified single-file checkpoint.',
+        }
+    return inspect_transformers_checkpoint(os.path.join(ace_path, spec['directory']))
+
+
+def inspect_music_models(ace_path):
+    return {
+        key: inspect_music_model(ace_path, key)
+        for key in MUSIC_MODEL_ARTIFACTS
+    }
 
 def get_quantime_install_path():
     if platform.system() != 'Windows':
@@ -178,30 +315,41 @@ def get_ace_health():
         return {'online': True, 'status': 'unresponsive', 'error': str(exc)}
 
 def unload_ace_models():
+    global active_vram_profile, active_music_model, managed_ace_process
     health = get_ace_health()
     if not health['online']:
+        active_vram_profile = None
+        active_music_model = None
         return {'status': 'offline'}
 
-    result = request_json(
-        'http://127.0.0.1:8002/v1/unload',
-        payload={},
-        timeout=45,
-        method='POST',
-    )
-    if result.get('status') != 'unloaded':
-        raise RuntimeError(result.get('message') or 'ACE-Step did not confirm model unload.')
-    if result.get('music_lm_unloaded') is not True:
-        raise RuntimeError('ACE-Step is running an older unload implementation. Stop and relaunch the ACE-Step service, then try again.')
+    # Moving a compiled 4B model from CUDA back to CPU can hang for minutes and
+    # temporarily duplicate its memory. Stopping the helper-managed service is
+    # both faster and more reliable when handing the GPU back to Ollama.
+    if managed_ace_process is not None and managed_ace_process.poll() is None:
+        managed_ace_process.terminate()
+        try:
+            managed_ace_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            managed_ace_process.kill()
+    managed_ace_process = None
+
+    if probe_port(8002):
+        kill_port_process(8002)
 
     deadline = time.time() + 15
-    last_health = health
     while time.time() < deadline:
-        last_health = get_ace_health()
-        if not last_health['online'] or last_health['status'] in ('lazy', 'offline'):
-            return result
+        if not probe_port(8002):
+            active_vram_profile = None
+            active_music_model = None
+            return {
+                'status': 'unloaded',
+                'music_lm_unloaded': True,
+                'mode': 'service_stopped',
+                'message': 'ACE-Step service stopped and GPU memory released.',
+            }
         time.sleep(0.25)
 
-    raise RuntimeError(f"ACE-Step remained in '{last_health['status']}' state after unload.")
+    raise RuntimeError('ACE-Step remained online after its managed process was stopped.')
 
 def required_music_free_mb(model_name):
     return 10240 if 'xl-' in (model_name or '').lower() else 6144
@@ -772,7 +920,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        global active_vram_profile, active_music_model, managed_ace_process
+        global active_vram_profile, active_music_model, active_ace_path, managed_ace_process
         request_origin = self.headers.get('Origin')
         if request_origin and request_origin not in ALLOWED_WEB_ORIGINS:
             self.send_response(403)
@@ -958,12 +1106,14 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     except Exception:
                         pass
 
-                # Diagnostics checker for core assets
+                # Verify checkpoint weights, not just directory names. Hugging Face
+                # creates the target directory and index before all shards finish.
+                model_integrity = inspect_music_models(ace_path)
+                xl_sft_found = model_integrity['xl_sft']['installed']
+                xl_turbo_found = model_integrity['xl_turbo']['installed']
+                turbo_found = model_integrity['turbo']['installed']
                 check_file = lambda sub1, sub2: os.path.exists(os.path.join(ace_path, sub1)) or os.path.exists(os.path.join(ace_path, sub2))
-                xl_sft_found = check_file("checkpoints/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft.safetensors")
                 xl_base_found = check_file("checkpoints/acestep-v15-xl-base", "checkpoints/acestep-v15-xl-base.safetensors")
-                xl_turbo_found = check_file("checkpoints/acestep-v15-xl-turbo", "checkpoints/acestep-v15-xl-turbo.safetensors")
-                turbo_found = check_file("checkpoints/acestep-v15-turbo", "checkpoints/acestep-v15-turbo.safetensors")
                 vocoder_found = check_file("models/TTS/ACE-Step-v1-3.5B/music_vocoder", "music_vocoder") or check_file("models/checkpoints/music_vocoder", "music_vocoder")
                 dcae_found = check_file("models/TTS/ACE-Step-v1-3.5B/music_dcae_f8c8", "music_dcae_f8c8") or check_file("models/checkpoints/music_dcae_f8c8", "music_dcae_f8c8")
                 umt5_found = check_file("models/TTS/ACE-Step-v1-3.5B/umt5-base", "umt5-base") or check_file("models/checkpoints/umt5-base", "umt5-base")
@@ -997,8 +1147,10 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         'vocoder': vocoder_found,
                         'dcae': dcae_found,
                         'umt5': umt5_found
-                    }
+                    },
+                    'model_integrity': model_integrity,
                 }
+                active_ace_path = ace_path
                 self.wfile.write(json.dumps(response).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
@@ -1018,6 +1170,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     vram_profile = body.get('vram_profile', 'optimized')
                     music_model = normalize_music_model(body.get('music_model'))
                 ace_path = auto_resolve_ace_path(ace_path)
+                active_ace_path = ace_path
 
                 gpu_status = get_gpu_memory_status()
                 profile_adjusted = False
@@ -1332,6 +1485,35 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     }).encode('utf-8'))
                     return
 
+                requested_model = normalize_music_model(generation_request.get('model'))
+                model_key = MUSIC_MODEL_KEYS.get(requested_model)
+                checkpoint_root = auto_resolve_ace_path(
+                    self.headers.get('X-ComfyUI-Path', '').strip()
+                    or active_ace_path
+                    or r'D:\ComfyUI\ACE-Step-1.5'
+                )
+                if model_key:
+                    integrity = inspect_music_model(checkpoint_root, model_key)
+                    if not integrity['installed']:
+                        missing = integrity.get('missing_files') or []
+                        missing_summary = ', '.join(missing[:4]) or 'model weight files'
+                        error_data = json.dumps({
+                            'status': 'repair_required',
+                            'message': (
+                                f'{requested_model} is incomplete. Missing: {missing_summary}. '
+                                'Use the model badge or Download All Missing Models to resume the checkpoint download.'
+                            ),
+                            'model': requested_model,
+                            'integrity': integrity,
+                        }).encode('utf-8')
+                        self.send_response(409)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.send_header('Content-Length', str(len(error_data)))
+                        self.end_headers()
+                        self.wfile.write(error_data)
+                        return
+
                 # Keep generation compatible with an older or cached GitHub
                 # Pages frontend. The current UI acquires music ownership before
                 # this request, but the backend must also be able to recover after
@@ -1357,7 +1539,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     with urllib.request.urlopen(req, timeout=MUSIC_GENERATION_TIMEOUT_SECONDS) as response_conn:
                         response_data = response_conn.read()
 
-                active_music_model = normalize_music_model(generation_request.get('model'))
+                active_music_model = requested_model
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -1460,12 +1642,30 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
                 payload = json.loads(self.rfile.read(content_length))
-                repo_id = payload.get('repo_id')
-                target_dir = payload.get('target_dir')
+                repo_id = str(payload.get('repo_id') or '').strip()
+                target_dir = str(payload.get('target_dir') or '').strip()
+                allowed_repos = {
+                    spec['repo_id'] for spec in MUSIC_MODEL_ARTIFACTS.values()
+                } | {'Comfy-Org/ACE-Step_ComfyUI_repackaged'}
+                if repo_id not in allowed_repos:
+                    raise ValueError('Unsupported model repository.')
+                if not target_dir:
+                    raise ValueError('A model target directory is required.')
+                existing_process = active_download_processes.get(repo_id)
+                if existing_process is not None and existing_process.poll() is None:
+                    raise RuntimeError(f'A download for {repo_id} is already running.')
                 
                 # Check ACE-Step virtual environment python first (from path header)
                 ace_path = self.headers.get('X-ComfyUI-Path', '').strip() or 'D:\\ComfyUI\\ACE-Step-1.5'
                 ace_path = auto_resolve_ace_path(ace_path)
+                ace_root = os.path.abspath(ace_path)
+                target_dir = os.path.abspath(target_dir)
+                try:
+                    target_is_safe = os.path.commonpath([ace_root, target_dir]) == ace_root
+                except ValueError:
+                    target_is_safe = False
+                if not target_is_safe:
+                    raise ValueError('The download target must be inside the selected ACE-Step installation.')
                 ace_python = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
                 # Check helper server virtual environment python
@@ -1479,8 +1679,19 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 else:
                     python_exe = 'python'
 
-                # Build python download script
-                script = f"from huggingface_hub import snapshot_download; snapshot_download(repo_id='{repo_id}', local_dir=r'{target_dir}')"
+                # Pass user-controlled values as argv instead of interpolating
+                # them into executable Python source.
+                script = (
+                    "import sys; "
+                    "from huggingface_hub import snapshot_download; "
+                    "snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2])"
+                )
+                preflight = inspect_transformers_checkpoint(target_dir)
+                initial_progress = 0
+                if preflight.get('expected_bytes') and preflight.get('partial_bytes'):
+                    initial_progress = min(99, int(
+                        preflight['partial_bytes'] * 100 / preflight['expected_bytes']
+                    ))
                 
                 # Run download in background thread
                 import threading as th
@@ -1489,32 +1700,36 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     active_downloads[repo_id] = 'downloading'
                     active_downloads_status[repo_id] = {
                         'status': 'downloading',
-                        'progress': 0,
+                        'progress': initial_progress,
                         'speed': '0 MB/s',
-                        'eta': '--:--'
+                        'eta': '--:--',
+                        'error': None,
                     }
                     print(f"[Downloader] Starting download for {repo_id} to {target_dir}...")
                     try:
                         proc = subprocess.Popen(
-                            [python_exe, '-u', '-c', script],
+                            [python_exe, '-u', '-c', script, repo_id, target_dir],
                             stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
                             text=True,
                             bufsize=1
                         )
                         active_download_processes[repo_id] = proc
                         
                         buffer = ""
+                        recent_output = []
                         while True:
                             if proc.poll() is not None:
                                 break
-                            char = proc.stderr.read(1)
+                            char = proc.stdout.read(1)
                             if not char:
                                 break
                             if char in ('\r', '\n'):
                                 line = buffer.strip()
                                 buffer = ""
                                 if line:
+                                    recent_output.append(line)
+                                    recent_output = recent_output[-25:]
                                     pct_match = re.search(r'(\d+)%', line)
                                     speed_match = re.search(r'(\d+\.?\d*\s*[kMGT]B/s)', line)
                                     eta_match = re.search(r'\[\d*(?::\d+)*<([0-9:]+)', line)
@@ -1524,7 +1739,10 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                                         active_downloads_status[repo_id] = {'status': 'downloading', 'progress': 0, 'speed': '0 MB/s', 'eta': '--:--'}
                                     
                                     if pct_match:
-                                        active_downloads_status[repo_id]['progress'] = int(pct_match.group(1))
+                                        active_downloads_status[repo_id]['progress'] = max(
+                                            active_downloads_status[repo_id].get('progress', 0),
+                                            int(pct_match.group(1)),
+                                        )
                                         updated = True
                                     if speed_match:
                                         active_downloads_status[repo_id]['speed'] = speed_match.group(1)
@@ -1537,17 +1755,38 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                                         active_downloads[repo_id] = 'downloading'
                             else:
                                 buffer += char
-                                
-                        stdout, stderr = proc.communicate()
+
+                        remainder = proc.stdout.read() if proc.stdout else ''
+                        if remainder.strip():
+                            recent_output.extend(remainder.strip().splitlines())
+                            recent_output = recent_output[-25:]
+                        proc.wait()
                         if proc.returncode == 0:
-                            active_downloads[repo_id] = 'success'
-                            active_downloads_status[repo_id] = {
-                                'status': 'success',
-                                'progress': 100,
-                                'speed': '0 MB/s',
-                                'eta': '--:--'
-                             }
-                            print(f"[Downloader] Successfully downloaded {repo_id}!")
+                            model_spec = next(
+                                (spec for spec in MUSIC_MODEL_ARTIFACTS.values() if spec['repo_id'] == repo_id),
+                                None,
+                            )
+                            verification = inspect_transformers_checkpoint(target_dir) if model_spec else None
+                            if verification is not None and not verification['installed']:
+                                active_downloads[repo_id] = 'failed'
+                                active_downloads_status[repo_id] = {
+                                    'status': 'failed',
+                                    'progress': min(99, active_downloads_status[repo_id].get('progress', 0)),
+                                    'speed': '0 MB/s',
+                                    'eta': '--:--',
+                                    'error': verification['message'],
+                                }
+                                print(f"[Downloader] Verification failed for {repo_id}: {verification['message']}")
+                            else:
+                                active_downloads[repo_id] = 'success'
+                                active_downloads_status[repo_id] = {
+                                    'status': 'success',
+                                    'progress': 100,
+                                    'speed': '0 MB/s',
+                                    'eta': '--:--',
+                                    'error': None,
+                                }
+                                print(f"[Downloader] Successfully downloaded and verified {repo_id}!")
                         else:
                             if active_downloads_status.get(repo_id, {}).get('status') == 'stopped':
                                 print(f"[Downloader] Download for {repo_id} was stopped by user.")
@@ -1555,18 +1794,20 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                                 active_downloads[repo_id] = 'failed'
                                 active_downloads_status[repo_id] = {
                                     'status': 'failed',
-                                    'progress': 0,
+                                    'progress': active_downloads_status.get(repo_id, {}).get('progress', 0),
                                     'speed': '0 MB/s',
-                                    'eta': '--:--'
+                                    'eta': '--:--',
+                                    'error': '\n'.join(recent_output[-8:]) or f'Downloader exited with code {proc.returncode}',
                                 }
                                 print(f"[Downloader] Failed to download {repo_id} with exit code {proc.returncode}")
                     except Exception as err:
                         active_downloads[repo_id] = 'failed'
                         active_downloads_status[repo_id] = {
                             'status': 'failed',
-                            'progress': 0,
+                            'progress': active_downloads_status.get(repo_id, {}).get('progress', 0),
                             'speed': '0 MB/s',
-                            'eta': '--:--'
+                            'eta': '--:--',
+                            'error': str(err),
                         }
                         print(f"[Downloader] Failed to download {repo_id}: {err}")
                     finally:

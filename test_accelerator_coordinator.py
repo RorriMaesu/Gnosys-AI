@@ -1,10 +1,64 @@
 import http.client
 import json
+import os
+import tempfile
 import threading
 import unittest
 from unittest import mock
 
 import server
+
+
+class CheckpointIntegrityTests(unittest.TestCase):
+    def test_missing_checkpoint_directory_is_not_installed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = server.inspect_transformers_checkpoint(
+                os.path.join(temp_dir, 'missing-model')
+            )
+        self.assertFalse(report['installed'])
+        self.assertEqual(report['state'], 'missing')
+
+    def test_partial_sharded_checkpoint_reports_missing_files_and_cache_bytes(self):
+        with tempfile.TemporaryDirectory() as model_dir:
+            index = {
+                'metadata': {'total_size': 1000},
+                'weight_map': {
+                    'first': 'model-00001-of-00002.safetensors',
+                    'second': 'model-00002-of-00002.safetensors',
+                },
+            }
+            with open(os.path.join(model_dir, 'model.safetensors.index.json'), 'w', encoding='utf-8') as handle:
+                json.dump(index, handle)
+            cache_dir = os.path.join(model_dir, '.cache', 'huggingface', 'download')
+            os.makedirs(cache_dir)
+            with open(os.path.join(cache_dir, 'shard.incomplete'), 'wb') as handle:
+                handle.write(b'x' * 125)
+
+            report = server.inspect_transformers_checkpoint(model_dir)
+
+        self.assertFalse(report['installed'])
+        self.assertEqual(report['state'], 'incomplete')
+        self.assertEqual(len(report['missing_files']), 2)
+        self.assertEqual(report['expected_bytes'], 1000)
+        self.assertEqual(report['partial_bytes'], 125)
+
+    def test_complete_sharded_checkpoint_is_verified(self):
+        with tempfile.TemporaryDirectory() as model_dir:
+            shards = [
+                'model-00001-of-00002.safetensors',
+                'model-00002-of-00002.safetensors',
+            ]
+            with open(os.path.join(model_dir, 'model.safetensors.index.json'), 'w', encoding='utf-8') as handle:
+                json.dump({'weight_map': {'a': shards[0], 'b': shards[1]}}, handle)
+            for shard in shards:
+                with open(os.path.join(model_dir, shard), 'wb') as handle:
+                    handle.write(b'weights')
+
+            report = server.inspect_transformers_checkpoint(model_dir)
+
+        self.assertTrue(report['installed'])
+        self.assertEqual(report['state'], 'complete')
+        self.assertEqual(report['missing_files'], [])
 
 
 class AcceleratorCoordinatorTests(unittest.TestCase):
@@ -116,6 +170,35 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             server.DEFAULT_MUSIC_MODEL,
         )
 
+    def test_ace_unload_stops_managed_service_instead_of_copying_xl_to_cpu(self):
+        fake_process = mock.Mock()
+        fake_process.poll.return_value = None
+        original_process = server.managed_ace_process
+        original_profile = server.active_vram_profile
+        original_model = server.active_music_model
+        server.managed_ace_process = fake_process
+        server.active_vram_profile = 'optimized'
+        server.active_music_model = 'acestep-v15-xl-sft'
+        try:
+            with (
+                mock.patch.object(server, 'get_ace_health', return_value={'online': True, 'status': 'ok'}),
+                mock.patch.object(server, 'probe_port', side_effect=[True, False]),
+                mock.patch.object(server, 'kill_port_process', return_value=True) as kill_port,
+            ):
+                result = server.unload_ace_models()
+
+            fake_process.terminate.assert_called_once_with()
+            fake_process.wait.assert_called_once_with(timeout=5)
+            kill_port.assert_called_once_with(8002)
+            self.assertEqual(result['mode'], 'service_stopped')
+            self.assertIsNone(server.active_vram_profile)
+            self.assertIsNone(server.active_music_model)
+            self.assertIsNone(server.managed_ace_process)
+        finally:
+            server.managed_ace_process = original_process
+            server.active_vram_profile = original_profile
+            server.active_music_model = original_model
+
     def test_music_generate_proxy_returns_upstream_response(self):
         expected_payload = {
             'choices': [{
@@ -147,11 +230,18 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
         thread.start()
 
         try:
-            with mock.patch.object(
-                server.urllib.request,
-                'urlopen',
-                return_value=FakeUpstreamResponse(),
-            ) as urlopen:
+            with (
+                mock.patch.object(
+                    server.urllib.request,
+                    'urlopen',
+                    return_value=FakeUpstreamResponse(),
+                ) as urlopen,
+                mock.patch.object(
+                    server,
+                    'inspect_music_model',
+                    return_value={'installed': True},
+                ),
+            ):
                 connection = http.client.HTTPConnection(
                     '127.0.0.1',
                     httpd.server_address[1],
@@ -203,10 +293,17 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
         thread.start()
 
         try:
-            with mock.patch.object(
-                server.urllib.request,
-                'urlopen',
-                side_effect=server.urllib.error.URLError('upstream unavailable'),
+            with (
+                mock.patch.object(
+                    server.urllib.request,
+                    'urlopen',
+                    side_effect=server.urllib.error.URLError('upstream unavailable'),
+                ),
+                mock.patch.object(
+                    server,
+                    'inspect_music_model',
+                    return_value={'installed': True},
+                ),
             ):
                 connection = http.client.HTTPConnection(
                     '127.0.0.1',
@@ -232,6 +329,57 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             self.assertEqual(response.status, 503)
             self.assertEqual(response_body['status'], 'error')
             self.assertIn('upstream unavailable', response_body['message'])
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
+
+    def test_music_generate_rejects_incomplete_checkpoint_before_upstream_call(self):
+        server.accelerator_state['owner'] = 'music'
+        httpd = server.socketserver.ThreadingTCPServer(
+            ('127.0.0.1', 0),
+            server.GnosysHTTPRequestHandler,
+        )
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+
+        integrity = {
+            'installed': False,
+            'state': 'incomplete',
+            'missing_files': ['model-00001-of-00004.safetensors'],
+            'invalid_files': [],
+            'expected_files': ['model-00001-of-00004.safetensors'],
+        }
+        try:
+            with (
+                mock.patch.object(server, 'inspect_music_model', return_value=integrity),
+                mock.patch.object(server.urllib.request, 'urlopen') as urlopen,
+            ):
+                connection = http.client.HTTPConnection(
+                    '127.0.0.1',
+                    httpd.server_address[1],
+                    timeout=5,
+                )
+                connection.request(
+                    'POST',
+                    '/api/music/generate',
+                    body=json.dumps({
+                        'model': 'acemusic/acestep-v15-xl-sft',
+                        'messages': [{'role': 'user', 'content': '<prompt>test</prompt>'}],
+                    }),
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Origin': 'https://rorrimaesu.github.io',
+                    },
+                )
+                response = connection.getresponse()
+                response_body = json.loads(response.read().decode('utf-8'))
+                connection.close()
+
+            self.assertEqual(response.status, 409)
+            self.assertEqual(response_body['status'], 'repair_required')
+            self.assertIn('model-00001-of-00004.safetensors', response_body['message'])
+            urlopen.assert_not_called()
         finally:
             httpd.shutdown()
             httpd.server_close()

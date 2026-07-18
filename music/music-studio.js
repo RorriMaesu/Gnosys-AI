@@ -16,6 +16,17 @@
 
     let downloadPollInterval = null;
 
+    function fetchHelper(url, init = {}) {
+        const localFetch = window.GnosysFetchLocalHelper || fetch;
+        const normalizedUrl = url.startsWith('/')
+            ? `http://127.0.0.1:8020${url}`
+            : url;
+        return localFetch(normalizedUrl, {
+            targetAddressSpace: 'loopback',
+            ...init
+        });
+    }
+
     // Chat and Lyric Editor State
     window.lyricStudioState = {
         history: [], // Undo stack
@@ -48,7 +59,7 @@
         }
         statusDiv.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Probing folder contents...</span>';
         try {
-            const res = await fetch(`${API_BASE}/api/music/status`, {
+            const res = await fetchHelper(`${API_BASE}/api/music/status`, {
                 headers: { 'X-ComfyUI-Path': path }
             });
             const data = await res.json();
@@ -69,7 +80,7 @@
         listContainer.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Scanning directory...</div>';
         
         try {
-            const res = await fetch(`${API_BASE}/api/explorer?path=${encodeURIComponent(path)}`);
+            const res = await fetchHelper(`${API_BASE}/api/explorer?path=${encodeURIComponent(path)}`);
             const data = await res.json();
             if (data.status === 'success') {
                 explorerCurrentPath = path;
@@ -192,7 +203,7 @@
         }
     }    async function syncPlaylistOptions() {
         try {
-            const res = await fetch(`${API_BASE}/api/playlists`);
+            const res = await fetchHelper(`${API_BASE}/api/playlists`);
             if (!res.ok) throw new Error(`Playlist service returned ${res.status}.`);
             const data = await res.json();
             if (data && data.playlists) {
@@ -412,7 +423,7 @@
                 btnPlaylistNewSubmit.disabled = true;
                 btnPlaylistNewSubmit.textContent = '...';
                 try {
-                    const response = await fetch(`${API_BASE}/api/playlists/create`, {
+                    const response = await fetchHelper(`${API_BASE}/api/playlists/create`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -522,7 +533,7 @@
                 btnAddPlaylist.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Saving...</span>`;
 
                 try {
-                    const response = await fetch(`${API_BASE}/api/playlists/save-track`, {
+                    const response = await fetchHelper(`${API_BASE}/api/playlists/save-track`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -692,7 +703,7 @@
             btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Detecting...';
             
             try {
-                const res = await fetch(`${API_BASE}/api/music/auto-detect`);
+                const res = await fetchHelper(`${API_BASE}/api/music/auto-detect`);
                 const data = await res.json();
                 if (data.status === 'success' && data.candidates && data.candidates.length > 0) {
                     const bestCandidate = data.candidates[0].path;
@@ -757,7 +768,7 @@
             document.getElementById('btn-start-install').textContent = 'Installing...';
 
             try {
-                const res = await fetch(`${API_BASE}/api/music/install`, {
+                const res = await fetchHelper(`${API_BASE}/api/music/install`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ install_path: path })
@@ -1087,7 +1098,7 @@
             attempts++;
             if (descEl) descEl.innerHTML = `Connecting to custom protocol <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">gnosys-assistant://</code>... Attempting connection (${attempts}/${maxAttempts})`;
             try {
-                const res = await fetch(`${API_BASE}/api/music/status`, {
+                const res = await fetchHelper(`${API_BASE}/api/music/status`, {
                     headers: { 'X-ComfyUI-Path': comfyPath }
                 });
                 if (res.ok) {
@@ -1289,8 +1300,9 @@
         }
 
         if (selectedModel === "acemusic/acestep-v15-xl-sft" && !data.diagnostics.xl_sft) {
+            const needsRepair = data.model_integrity?.xl_sft?.state === 'incomplete';
             missing.push({
-                label: "XL SFT Model",
+                label: needsRepair ? "XL SFT Model Repair" : "XL SFT Model",
                 repoId: "ACE-Step/acestep-v15-xl-sft",
                 targetSubdir: "checkpoints/acestep-v15-xl-sft"
             });
@@ -1318,18 +1330,25 @@
             if (!window.latestStatusData.active_downloads) window.latestStatusData.active_downloads = {};
             window.latestStatusData.active_downloads[repoId] = 'downloading';
             
-            const dlRes = await fetch(`${API_BASE}/api/music/download`, {
+            const dlRes = await fetchHelper(`${API_BASE}/api/music/download`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-ComfyUI-Path': comfyPath
+                },
                 body: JSON.stringify({ repo_id: repoId, target_dir: targetPath })
             });
             const dlData = await dlRes.json();
-            if (dlData.status === 'success') {
+            if (dlRes.ok && dlData.status === 'success') {
                 showBannerNotification(`Background download initiated for ${label}!`, 'success');
                 checkMusicServiceStatus();
+            } else {
+                throw new Error(dlData.message || `Download request failed (${dlRes.status})`);
             }
         } catch (err) {
             console.error(`Failed to start download for ${label}:`, err);
+            showBannerNotification(`Failed to start ${label}: ${err.message}`, 'error');
+            checkMusicServiceStatus();
         }
     }
 
@@ -1360,7 +1379,7 @@
         const installBtn = document.getElementById('btn-install-wizard');
 
         try {
-            const res = await fetch(`${API_BASE}/api/music/status`, {
+            const res = await fetchHelper(`${API_BASE}/api/music/status`, {
                 headers: { 'X-ComfyUI-Path': comfyPath }
             });
             const data = await res.json();
@@ -1390,8 +1409,12 @@
             if (diagBox) {
                 diagBox.innerHTML = '';
                 if (data.diagnostics) {
-                    const makeBadge = (label, status, repoId, targetSubdir) => {
+                    const makeBadge = (label, status, repoId, targetSubdir, modelKey = null) => {
                         const dlStatus = data.active_downloads_status && data.active_downloads_status[repoId];
+                        const integrity = modelKey && data.model_integrity
+                            ? data.model_integrity[modelKey]
+                            : null;
+                        const isPartial = !status && integrity && integrity.state === 'incomplete';
                         const isSuccess = status || (data.active_downloads && data.active_downloads[repoId] === 'success') || (dlStatus && dlStatus.status === 'success');
                         const isDownloading = !isSuccess && (dlStatus ? dlStatus.status === 'downloading' : (data.active_downloads && data.active_downloads[repoId] === 'downloading'));
                         const isStopped = !isSuccess && dlStatus && dlStatus.status === 'stopped';
@@ -1424,10 +1447,20 @@
                             themeClass = "bg-teal-500/10 text-teal-400 border-teal-500/20 hover:bg-teal-500/20";
                             iconHtml = '<i class="fa-solid fa-circle-check"></i>';
                             tooltip = "Installed and verified.";
+                        } else if (isPartial) {
+                            themeClass = "bg-amber-500/10 text-amber-300 border-amber-500/25 hover:bg-amber-500/20";
+                            iconHtml = '<i class="fa-solid fa-screwdriver-wrench"></i>';
+                            const expected = integrity.expected_bytes || 0;
+                            const partial = integrity.partial_bytes || 0;
+                            const partialPct = expected > 0 ? Math.min(99, Math.floor(partial * 100 / expected)) : null;
+                            text = partialPct === null ? `${label} (Repair)` : `${label} (Repair ${partialPct}%)`;
+                            const missingCount = integrity.missing_files?.length || 0;
+                            tooltip = `Incomplete checkpoint (${missingCount} shard${missingCount === 1 ? '' : 's'} missing). Click to resume.`;
                         } else {
                             themeClass = "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 animate-pulse";
                             iconHtml = '<i class="fa-solid fa-download"></i>';
-                            tooltip = isFailed ? "Download failed. Click to retry." : "Missing. Click to download directly.";
+                            const errorDetail = dlStatus?.error ? ` ${dlStatus.error}` : '';
+                            tooltip = isFailed ? `Download failed. Click to retry.${errorDetail}` : "Missing. Click to download directly.";
                         }
 
                         const targetPath = `${comfyPath}\\${targetSubdir.replace(/\//g, '\\')}`;
@@ -1441,9 +1474,12 @@
                                 e.preventDefault();
                                 showBannerNotification(`Starting download for ${label}...`, 'info');
                                 try {
-                                    const dlRes = await fetch(`${API_BASE}/api/music/download`, {
+                                    const dlRes = await fetchHelper(`${API_BASE}/api/music/download`, {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-ComfyUI-Path': comfyPath
+                                        },
                                         body: JSON.stringify({ repo_id: repoId, target_dir: targetPath })
                                     });
                                     const dlData = await dlRes.json();
@@ -1473,7 +1509,7 @@
                                 e.stopPropagation();
                                 showBannerNotification(`Pausing download for ${label}...`, 'info');
                                 try {
-                                    const stopRes = await fetch(`${API_BASE}/api/music/download/stop`, {
+                                    const stopRes = await fetchHelper(`${API_BASE}/api/music/download/stop`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ repo_id: repoId })
@@ -1495,9 +1531,9 @@
                         return wrapper;
                     };
 
-                    diagBox.appendChild(makeBadge("XL SFT", data.diagnostics.xl_sft, "ACE-Step/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft"));
-                    diagBox.appendChild(makeBadge("XL Turbo", data.diagnostics.xl_turbo, "ACE-Step/acestep-v15-xl-turbo", "checkpoints/acestep-v15-xl-turbo"));
-                    diagBox.appendChild(makeBadge("Turbo 2B", data.diagnostics.turbo, "ACE-Step/acestep-v15-turbo", "checkpoints/acestep-v15-turbo"));
+                    diagBox.appendChild(makeBadge("XL SFT", data.diagnostics.xl_sft, "ACE-Step/acestep-v15-xl-sft", "checkpoints/acestep-v15-xl-sft", "xl_sft"));
+                    diagBox.appendChild(makeBadge("XL Turbo", data.diagnostics.xl_turbo, "ACE-Step/acestep-v15-xl-turbo", "checkpoints/acestep-v15-xl-turbo", "xl_turbo"));
+                    diagBox.appendChild(makeBadge("Turbo 2B", data.diagnostics.turbo, "ACE-Step/acestep-v15-turbo", "checkpoints/acestep-v15-turbo", "turbo"));
                     diagBox.appendChild(makeBadge("Vocoder", data.diagnostics.vocoder, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_vocoder"));
                     diagBox.appendChild(makeBadge("DCAE Encoder", data.diagnostics.dcae, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/music_dcae_f8c8"));
                     diagBox.appendChild(makeBadge("UMT5 Text", data.diagnostics.umt5, "Comfy-Org/ACE-Step_ComfyUI_repackaged", "models/TTS/ACE-Step-v1-3.5B/umt5-base"));
@@ -1651,7 +1687,7 @@
         const select = document.getElementById('music-model');
         if (!select) return;
         try {
-            const res = await fetch(`${API_BASE}/api/music/models`, { signal: AbortSignal.timeout(4000) });
+            const res = await fetchHelper(`${API_BASE}/api/music/models`, { timeoutMs: 4000 });
             if (res.ok) {
                 const data = await res.json();
                 if (data && data.data && data.data.length > 0) {
@@ -1779,7 +1815,7 @@
         
         installPollInterval = setInterval(async () => {
             try {
-                const res = await fetch(`${API_BASE}/api/music/install-status`);
+                const res = await fetchHelper(`${API_BASE}/api/music/install-status`);
                 const data = await res.json();
                 
                 stepText.textContent = data.step;
