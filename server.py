@@ -38,8 +38,18 @@ music_generation_state = {
     'trace_id': None,
     'model': None,
     'stage': 'idle',
+    'stage_started_at': None,
     'started_at': None,
     'cancel_requested': False,
+    'request_summary': {},
+    'timeline': [],
+    'heartbeat_at': None,
+    'heartbeat_count': 0,
+    'last_compute_activity_at': None,
+    'last_gpu_sample': None,
+    'gpu_sample_count': 0,
+    'monitor_status': 'idle',
+    'monitor_message': 'No music generation is active.',
     'last_result': None,
     'last_error': None,
     'last_error_code': None,
@@ -65,6 +75,9 @@ SUPPORTED_MUSIC_MODELS = {
     'acestep-v15-xl-sft',
 }
 MUSIC_GENERATION_TIMEOUT_SECONDS = 1800
+MUSIC_TELEMETRY_STALL_SECONDS = 180
+MUSIC_TELEMETRY_HEARTBEAT_STALE_SECONDS = 12
+MUSIC_TELEMETRY_GPU_ACTIVE_PERCENT = 5
 
 MUSIC_MODEL_ARTIFACTS = {
     'xl_sft': {
@@ -288,6 +301,35 @@ def get_gpu_memory_status():
     except Exception:
         return None
 
+def get_gpu_activity_status():
+    """Return a lightweight, point-in-time GPU activity sample."""
+    if platform.system() != 'Windows' and not shutil.which('nvidia-smi'):
+        return None
+    try:
+        output = subprocess.check_output([
+            'nvidia-smi',
+            '--query-gpu=name,utilization.gpu,utilization.memory,memory.total,memory.used,memory.free,temperature.gpu,power.draw',
+            '--format=csv,noheader,nounits',
+        ], text=True, timeout=3, stderr=subprocess.DEVNULL)
+        first = output.strip().splitlines()[0]
+        parts = [part.strip() for part in first.split(',')]
+        if len(parts) < 8:
+            return None
+        name, gpu_util, memory_util, total, used, free, temperature, power = parts[:8]
+        return {
+            'name': name,
+            'utilization_gpu_percent': int(float(gpu_util)),
+            'utilization_memory_percent': int(float(memory_util)),
+            'total_mb': int(float(total)),
+            'used_mb': int(float(used)),
+            'free_mb': int(float(free)),
+            'temperature_c': int(float(temperature)),
+            'power_watts': round(float(power), 2),
+            'sampled_at': time.time(),
+        }
+    except Exception:
+        return None
+
 def get_ollama_runtime_status():
     try:
         data = request_json('http://127.0.0.1:11434/api/ps', timeout=3)
@@ -471,11 +513,110 @@ def extract_upstream_error(raw_body):
             return sanitize_diagnostic_text(detail)
     return sanitize_diagnostic_text(text)
 
+def read_ace_generation_response(response_conn, request_id, model_name):
+    """Convert ACE-Step's live SSE response back to the JSON shape used by the UI."""
+    headers = getattr(response_conn, 'headers', None)
+    content_type = headers.get('Content-Type', '') if headers is not None else ''
+    if 'text/event-stream' not in str(content_type).lower():
+        return response_conn.read()
+
+    content_parts = []
+    audio_items = None
+    completion_id = None
+    created = int(time.time())
+    response_model = model_name
+    finish_reason = 'stop'
+
+    update_music_generation_stage(
+        request_id,
+        'ace_step_inference',
+        monitor_message='ACE-Step accepted the live stream and is generating audio.',
+    )
+    for raw_line in response_conn:
+        line = raw_line.decode('utf-8', errors='replace').strip() if isinstance(raw_line, bytes) else str(raw_line).strip()
+        if not line or not line.startswith('data:'):
+            continue
+        payload_text = line[5:].strip()
+        if payload_text == '[DONE]':
+            break
+        try:
+            chunk = json.loads(payload_text)
+        except json.JSONDecodeError:
+            continue
+
+        mark_music_generation_heartbeat(request_id)
+        completion_id = chunk.get('id') or completion_id
+        created = chunk.get('created') or created
+        response_model = chunk.get('model') or response_model
+        choices = chunk.get('choices') or []
+        if not choices:
+            continue
+        choice = choices[0] or {}
+        delta = choice.get('delta') or {}
+        content = delta.get('content')
+        if content and content != '.':
+            content_parts.append(content)
+        if delta.get('audio'):
+            audio_items = delta['audio']
+            update_music_generation_stage(
+                request_id,
+                'audio_received',
+                monitor_message='ACE-Step returned the generated audio; validating the response.',
+            )
+        if choice.get('finish_reason'):
+            finish_reason = choice['finish_reason']
+
+    if not audio_items:
+        upstream_message = ''.join(content_parts).strip()
+        raise RuntimeError(upstream_message or 'ACE-Step ended its stream without returning audio.')
+
+    response_payload = {
+        'id': completion_id or f'chatcmpl-{uuid.uuid4().hex}',
+        'object': 'chat.completion',
+        'created': created,
+        'model': response_model,
+        'choices': [{
+            'index': 0,
+            'message': {
+                'role': 'assistant',
+                'content': ''.join(content_parts),
+                'audio': audio_items,
+            },
+            'finish_reason': finish_reason,
+        }],
+    }
+    return json.dumps(response_payload, ensure_ascii=False).encode('utf-8')
+
+MUSIC_STAGE_LABELS = {
+    'idle': 'Idle',
+    'accepted': 'Request accepted',
+    'connecting_to_ace': 'Connecting to ACE-Step',
+    'ace_step_initializing': 'ACE-Step is loading or preparing the model',
+    'ace_step_inference': 'ACE-Step is generating audio',
+    'audio_received': 'Audio response received',
+    'validating_audio': 'Validating generated audio',
+    'completed': 'Generation complete',
+    'cancelling': 'Stopping generation',
+    'failed': 'Generation failed',
+}
+
+def _music_timeline_entry(stage, label=None, timestamp=None):
+    return {
+        'stage': stage,
+        'label': label or MUSIC_STAGE_LABELS.get(stage, stage.replace('_', ' ').title()),
+        'timestamp': timestamp or time.time(),
+    }
+
 def get_music_generation_snapshot():
     with music_generation_state_lock:
-        return dict(music_generation_state)
+        snapshot = dict(music_generation_state)
+        snapshot['timeline'] = list(music_generation_state.get('timeline') or [])
+        snapshot['request_summary'] = dict(music_generation_state.get('request_summary') or {})
+        if music_generation_state.get('last_gpu_sample'):
+            snapshot['last_gpu_sample'] = dict(music_generation_state['last_gpu_sample'])
+        return snapshot
 
-def begin_music_generation(model_name, trace_id=None):
+def begin_music_generation(model_name, trace_id=None, request_summary=None):
     if not music_generation_lock.acquire(blocking=False):
         return None
     request_id = f"music-{time.time_ns()}"
@@ -487,21 +628,181 @@ def begin_music_generation(model_name, trace_id=None):
             'trace_id': trace_id,
             'model': model_name,
             'stage': 'accepted',
+            'stage_started_at': now,
             'started_at': now,
             'cancel_requested': False,
+            'request_summary': sanitize_diagnostic_value(request_summary or {}),
+            'timeline': [_music_timeline_entry('accepted', timestamp=now)],
+            'heartbeat_at': None,
+            'heartbeat_count': 0,
+            'last_compute_activity_at': now,
+            'last_gpu_sample': None,
+            'gpu_sample_count': 0,
+            'monitor_status': 'starting',
+            'monitor_message': 'The helper accepted the request and is preparing ACE-Step.',
             'last_result': 'running',
             'last_error': None,
+            'last_error_code': None,
             'updated_at': now,
         })
     return request_id
 
-def update_music_generation_stage(request_id, stage):
+def update_music_generation_stage(request_id, stage, label=None, monitor_message=None):
+    now = time.time()
     with music_generation_state_lock:
         if music_generation_state['request_id'] != request_id:
             return False
-        music_generation_state['stage'] = stage
-        music_generation_state['updated_at'] = time.time()
+        if music_generation_state['stage'] != stage:
+            music_generation_state['stage'] = stage
+            music_generation_state['stage_started_at'] = now
+            music_generation_state['timeline'].append(
+                _music_timeline_entry(stage, label=label, timestamp=now)
+            )
+        if monitor_message:
+            music_generation_state['monitor_message'] = monitor_message
+        music_generation_state['updated_at'] = now
         return True
+
+def mark_music_generation_heartbeat(request_id):
+    """Record a direct heartbeat emitted by ACE-Step while its future is running."""
+    now = time.time()
+    with music_generation_state_lock:
+        if music_generation_state['request_id'] != request_id:
+            return False
+        first_heartbeat = music_generation_state['heartbeat_count'] == 0
+        music_generation_state['heartbeat_at'] = now
+        music_generation_state['heartbeat_count'] += 1
+        music_generation_state['updated_at'] = now
+        if first_heartbeat:
+            music_generation_state['timeline'].append(_music_timeline_entry(
+                'ace_heartbeat',
+                label='Live ACE-Step heartbeat received',
+                timestamp=now,
+            ))
+        return True
+
+def classify_music_generation_activity(snapshot, gpu, service_online, now=None):
+    """Conservatively classify liveness without inventing an inference percentage."""
+    now = now or time.time()
+    if not snapshot.get('active'):
+        result = snapshot.get('last_result')
+        if result == 'completed':
+            return 'completed', 'The most recent track completed successfully.', False
+        if result == 'cancelled':
+            return 'cancelled', 'The most recent generation was stopped.', False
+        if result in ('error', 'failed'):
+            return 'failed', 'The most recent generation failed. Download diagnostics for details.', False
+        return 'idle', 'No music generation is active.', False
+    if snapshot.get('cancel_requested'):
+        return 'cancelling', 'Stopping ACE-Step and releasing its GPU memory…', False
+    if not service_online:
+        return 'service_lost', 'ACE-Step is no longer listening on port 8002.', True
+
+    gpu_util = int((gpu or {}).get('utilization_gpu_percent') or 0)
+    gpu_active = gpu_util >= MUSIC_TELEMETRY_GPU_ACTIVE_PERCENT
+    heartbeat_at = snapshot.get('heartbeat_at')
+    heartbeat_age = (now - heartbeat_at) if heartbeat_at else None
+    compute_at = snapshot.get('last_compute_activity_at') or snapshot.get('started_at') or now
+    compute_quiet = max(0, now - compute_at)
+    elapsed = max(0, now - (snapshot.get('started_at') or now))
+    used_mb = int((gpu or {}).get('used_mb') or 0)
+    model_name = str(snapshot.get('model') or '').lower()
+    vram_profile = str((snapshot.get('request_summary') or {}).get('vram_profile') or '').lower()
+    minimum_resident_mb = 4500 if 'xl-' in model_name else 2500
+
+    if (
+        elapsed >= 60
+        and vram_profile != 'low'
+        and used_mb > 0
+        and used_mb < minimum_resident_mb
+        and snapshot.get('stage') in ('ace_step_initializing', 'ace_step_inference')
+    ):
+        return (
+            'model_released',
+            f'The request is still marked active, but GPU memory fell to {used_mb} MB. The {"XL " if "xl-" in model_name else ""}music model is no longer resident in VRAM.',
+            True,
+        )
+
+    if snapshot.get('stage') in ('accepted', 'connecting_to_ace'):
+        return 'starting', 'Preparing the request and opening the ACE-Step generation stream.', False
+    if heartbeat_age is not None and heartbeat_age <= MUSIC_TELEMETRY_HEARTBEAT_STALE_SECONDS:
+        if gpu_active:
+            return 'active', f'ACE-Step is responding; the GPU is working at {gpu_util}%.', False
+        if elapsed >= MUSIC_TELEMETRY_STALL_SECONDS and compute_quiet >= MUSIC_TELEMETRY_STALL_SECONDS:
+            return (
+                'suspected_stall',
+                'ACE-Step’s control loop still responds, but no measurable GPU work has been observed for several minutes. The generation may be stalled.',
+                True,
+            )
+        return 'quiet', 'ACE-Step is responding; the GPU is momentarily quiet (CPU or audio work can do this).', False
+    if gpu_active:
+        return 'active', f'The GPU is working at {gpu_util}%; waiting for the next ACE-Step heartbeat.', False
+    if elapsed >= MUSIC_TELEMETRY_STALL_SECONDS and compute_quiet >= MUSIC_TELEMETRY_STALL_SECONDS:
+        return (
+            'suspected_stall',
+            'No ACE-Step heartbeat or measurable GPU work has been observed recently. The generation may be stalled.',
+            True,
+        )
+    return 'quiet', 'ACE-Step is online, but no measurable GPU work was seen in this sample.', False
+
+def get_music_generation_realtime_snapshot():
+    """Build the fast polling response without scanning models or contacting Ollama."""
+    gpu = get_gpu_activity_status()
+    service_online = probe_port(8002)
+    process_alive = None
+    if managed_ace_process is not None:
+        process_alive = managed_ace_process.poll() is None
+    now = time.time()
+
+    with music_generation_state_lock:
+        if music_generation_state.get('active'):
+            previous_gpu = music_generation_state.get('last_gpu_sample') or {}
+            gpu_util = int((gpu or {}).get('utilization_gpu_percent') or 0)
+            memory_delta = abs(
+                int((gpu or {}).get('used_mb') or 0)
+                - int(previous_gpu.get('used_mb') or 0)
+            ) if previous_gpu and gpu else 0
+            if gpu_util >= MUSIC_TELEMETRY_GPU_ACTIVE_PERCENT or memory_delta >= 16:
+                music_generation_state['last_compute_activity_at'] = now
+            music_generation_state['last_gpu_sample'] = gpu
+            music_generation_state['gpu_sample_count'] += 1
+
+        snapshot = dict(music_generation_state)
+        snapshot['timeline'] = list(music_generation_state.get('timeline') or [])
+        snapshot['request_summary'] = dict(music_generation_state.get('request_summary') or {})
+        if music_generation_state.get('last_gpu_sample'):
+            snapshot['last_gpu_sample'] = dict(music_generation_state['last_gpu_sample'])
+
+        monitor_status, monitor_message, stall_suspected = classify_music_generation_activity(
+            snapshot,
+            gpu,
+            service_online,
+            now=now,
+        )
+        music_generation_state['monitor_status'] = monitor_status
+        music_generation_state['monitor_message'] = monitor_message
+        snapshot['monitor_status'] = monitor_status
+        snapshot['monitor_message'] = monitor_message
+
+    started_at = snapshot.get('started_at')
+    heartbeat_at = snapshot.get('heartbeat_at')
+    compute_at = snapshot.get('last_compute_activity_at')
+    snapshot.update({
+        'server_time': now,
+        'elapsed_seconds': round(max(0, now - started_at), 1) if started_at else 0,
+        'heartbeat_age_seconds': round(max(0, now - heartbeat_at), 1) if heartbeat_at else None,
+        'compute_quiet_seconds': round(max(0, now - compute_at), 1) if compute_at else None,
+        'stage_label': MUSIC_STAGE_LABELS.get(snapshot.get('stage'), str(snapshot.get('stage') or 'idle').replace('_', ' ').title()),
+        'exact_progress_available': False,
+        'stall_suspected': stall_suspected,
+        'timeout_seconds': MUSIC_GENERATION_TIMEOUT_SECONDS,
+        'gpu': gpu,
+        'service': {
+            'port_8002_open': service_online,
+            'managed_process_alive': process_alive,
+        },
+    })
+    return snapshot
 
 def request_music_generation_cancel():
     now = time.time()
@@ -510,6 +811,13 @@ def request_music_generation_cancel():
         if was_active:
             music_generation_state['cancel_requested'] = True
             music_generation_state['last_result'] = 'cancelling'
+            music_generation_state['stage'] = 'cancelling'
+            music_generation_state['stage_started_at'] = now
+            music_generation_state['monitor_status'] = 'cancelling'
+            music_generation_state['monitor_message'] = 'Stopping ACE-Step and releasing its GPU memory…'
+            music_generation_state['timeline'].append(
+                _music_timeline_entry('cancelling', timestamp=now)
+            )
             music_generation_state['updated_at'] = now
         snapshot = dict(music_generation_state)
     return was_active, snapshot
@@ -533,14 +841,28 @@ def finish_music_generation(request_id, result, error=None, error_code=None, htt
                 error = None
                 error_code = 'MUSIC_GENERATION_CANCELLED'
                 http_status = 409
+            terminal_stage = 'completed' if result == 'completed' else ('cancelling' if result == 'cancelled' else 'failed')
+            if not music_generation_state['timeline'] or music_generation_state['timeline'][-1]['stage'] != terminal_stage:
+                music_generation_state['timeline'].append(
+                    _music_timeline_entry(terminal_stage, timestamp=now)
+                )
+            terminal_status = 'completed' if result == 'completed' else ('cancelled' if result == 'cancelled' else 'failed')
+            terminal_message = {
+                'completed': 'The track completed successfully.',
+                'cancelled': 'Generation was stopped and the GPU is being released.',
+                'failed': 'Generation failed. Download diagnostics for details.',
+            }[terminal_status]
             music_generation_state.update({
                 'active': False,
                 'request_id': None,
                 'trace_id': None,
                 'model': None,
                 'stage': 'idle',
+                'stage_started_at': now,
                 'started_at': None,
                 'cancel_requested': False,
+                'monitor_status': terminal_status,
+                'monitor_message': terminal_message,
                 'last_result': result,
                 'last_error': error,
                 'last_error_code': error_code,
@@ -1202,6 +1524,22 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
+        elif self.path == '/api/music/generation/status':
+            generation = get_music_generation_realtime_snapshot()
+            response_data = json.dumps({
+                'status': 'success',
+                'generation': generation,
+            }).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+            if generation.get('trace_id'):
+                self.send_header('X-Gnosys-Trace-Id', generation['trace_id'])
+            if generation.get('request_id'):
+                self.send_header('X-Gnosys-Request-Id', generation['request_id'])
+            self.send_header('Content-Length', str(len(response_data)))
+            self.end_headers()
+            self.wfile.write(response_data)
         elif self.path in ['/api/music/status', '/api/music/install-status', '/api/music/auto-detect', '/api/music/models']:
             self.do_POST()
         else:
@@ -1845,6 +2183,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                 requested_model = normalize_music_model(generation_request.get('model'))
                 request_summary = summarize_music_request(generation_request)
+                # ACE-Step's OpenRouter-compatible server emits a genuine SSE
+                # heartbeat every two seconds while its generation future runs.
+                # The helper consumes that stream and still returns the original
+                # non-streaming JSON shape expected by GitHub Pages.
+                generation_request['stream'] = True
+                payload = json.dumps(generation_request).encode('utf-8')
                 record_music_diagnostic('request_validated', trace_id=trace_id, details=request_summary)
                 model_key = MUSIC_MODEL_KEYS.get(requested_model)
                 checkpoint_root = auto_resolve_ace_path(
@@ -1908,7 +2252,11 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with accelerator_lock:
                     if accelerator_state['owner'] != 'music':
                         raise RuntimeError('Music does not own the accelerator. Complete the VRAM transition before generating.')
-                    generation_id = begin_music_generation(requested_model, trace_id=trace_id)
+                    generation_id = begin_music_generation(
+                        requested_model,
+                        trace_id=trace_id,
+                        request_summary=request_summary,
+                    )
 
                 if generation_id is None:
                     generation = get_music_generation_snapshot()
@@ -1939,8 +2287,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self.wfile.write(error_data)
                     return
 
-                diagnostic_stage = 'ace_step_inference'
-                update_music_generation_stage(generation_id, diagnostic_stage)
+                diagnostic_stage = 'connecting_to_ace'
+                update_music_generation_stage(
+                    generation_id,
+                    diagnostic_stage,
+                    monitor_message='Opening ACE-Step’s live generation stream.',
+                )
                 record_music_diagnostic('generation_started', trace_id=trace_id, request_id=generation_id, details=request_summary)
                 req = urllib.request.Request(
                     'http://127.0.0.1:8002/v1/chat/completions',
@@ -1953,11 +2305,25 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                 # Inference runs without the coordinator lock so the Stop
                 # Generation endpoint can terminate ACE-Step immediately.
+                diagnostic_stage = 'ace_step_initializing'
+                update_music_generation_stage(
+                    generation_id,
+                    diagnostic_stage,
+                    monitor_message='ACE-Step is loading or preparing the selected model. GPU and VRAM samples remain live during this phase.',
+                )
                 with urllib.request.urlopen(req, timeout=MUSIC_GENERATION_TIMEOUT_SECONDS) as response_conn:
-                    response_data = response_conn.read()
+                    response_data = read_ace_generation_response(
+                        response_conn,
+                        generation_id,
+                        requested_model,
+                    )
 
-                diagnostic_stage = 'response_received'
-                update_music_generation_stage(generation_id, diagnostic_stage)
+                diagnostic_stage = 'validating_audio'
+                update_music_generation_stage(
+                    generation_id,
+                    diagnostic_stage,
+                    monitor_message='The audio arrived; Gnosys is validating and returning it to the player.',
+                )
                 if music_generation_was_cancelled(generation_id):
                     raise RuntimeError('Generation cancelled by user.')
 

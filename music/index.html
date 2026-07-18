@@ -76,6 +76,81 @@
             0% { background-position: 0% 50%; }
             100% { background-position: 200% 50%; }
         }
+        .generation-live-bar .progress-bar-fill {
+            width: 36%;
+            animation: generation-live-sweep 1.8s ease-in-out infinite, progress-slide 1.5s linear infinite;
+        }
+        .generation-live-bar[data-state="quiet"] .progress-bar-fill {
+            background: linear-gradient(90deg, #f59e0b, #fde68a, #f59e0b);
+            animation-duration: 2.8s, 2s;
+        }
+        .generation-live-bar[data-state="model_released"] .progress-bar-fill,
+        .generation-live-bar[data-state="suspected_stall"] .progress-bar-fill,
+        .generation-live-bar[data-state="service_lost"] .progress-bar-fill {
+            background: linear-gradient(90deg, #ef4444, #fb7185, #ef4444);
+            animation-duration: 4s, 2.5s;
+        }
+        .generation-live-bar[data-state="completed"] .progress-bar-fill,
+        .generation-live-bar[data-state="cancelled"] .progress-bar-fill,
+        .generation-live-bar[data-state="failed"] .progress-bar-fill,
+        .generation-live-bar[data-state="idle"] .progress-bar-fill {
+            width: 100%;
+            transform: none;
+            animation: none;
+        }
+        .generation-live-bar[data-state="completed"] .progress-bar-fill { background: #2dd4bf; }
+        .generation-live-bar[data-state="cancelled"] .progress-bar-fill,
+        .generation-live-bar[data-state="idle"] .progress-bar-fill { background: #64748b; }
+        .generation-live-bar[data-state="failed"] .progress-bar-fill { background: #fb7185; }
+        @keyframes generation-live-sweep {
+            0% { transform: translateX(-115%); }
+            55% { transform: translateX(185%); }
+            100% { transform: translateX(185%); }
+        }
+        .generation-telemetry-chip {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 0.65rem;
+            padding: 0.45rem 0.55rem;
+            min-width: 0;
+        }
+        .generation-telemetry-dot {
+            width: 0.45rem;
+            height: 0.45rem;
+            border-radius: 9999px;
+            background: #64748b;
+            box-shadow: 0 0 0 rgba(100, 116, 139, 0);
+        }
+        .generation-telemetry-dot[data-state="active"],
+        .generation-telemetry-dot[data-state="starting"] {
+            background: #2dd4bf;
+            box-shadow: 0 0 10px rgba(45, 212, 191, 0.8);
+            animation: pulse-amber 1.6s infinite ease-in-out;
+        }
+        .generation-telemetry-dot[data-state="quiet"] { background: #fbbf24; }
+        .generation-telemetry-dot[data-state="completed"] { background: #2dd4bf; }
+        .generation-telemetry-dot[data-state="cancelled"],
+        .generation-telemetry-dot[data-state="idle"] { background: #64748b; }
+        .generation-telemetry-dot[data-state="failed"],
+        .generation-telemetry-dot[data-state="model_released"],
+        .generation-telemetry-dot[data-state="suspected_stall"],
+        .generation-telemetry-dot[data-state="service_lost"] { background: #fb7185; }
+        .generation-timeline-item {
+            position: relative;
+            padding-left: 1.25rem;
+            color: #94a3b8;
+        }
+        .generation-timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 0.1rem;
+            top: 0.35rem;
+            width: 0.42rem;
+            height: 0.42rem;
+            border-radius: 9999px;
+            background: #2dd4bf;
+            box-shadow: 0 0 8px rgba(45, 212, 191, 0.45);
+        }
         @keyframes pulse-amber {
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.6; transform: scale(0.96); }
@@ -1105,14 +1180,57 @@
                             </button>
 
                             <!-- Generation Progress UI -->
-                            <div id="generation-progress-container" class="hidden space-y-2 p-3 rounded-xl bg-slate-950/40 border border-white/5">
-                                <div class="flex justify-between items-center text-[10px] font-bold text-slate-300">
-                                    <span id="gen-status-text">Queuing...</span>
-                                    <span id="gen-percent">0%</span>
+                            <div id="generation-progress-container" class="hidden space-y-2.5 p-3 rounded-xl bg-slate-950/50 border border-white/5">
+                                <div class="flex justify-between items-start gap-3 text-[10px] font-bold text-slate-300">
+                                    <div class="flex items-start gap-2 min-w-0">
+                                        <span id="gen-live-dot" class="generation-telemetry-dot mt-1" data-state="starting"></span>
+                                        <div class="min-w-0">
+                                            <p id="gen-status-text" class="text-slate-200 leading-tight">Preparing request…</p>
+                                            <p id="gen-monitor-message" class="mt-1 text-[9px] font-medium leading-relaxed text-slate-500">Waiting for live telemetry.</p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right shrink-0">
+                                        <span id="gen-elapsed" class="block font-mono text-teal-300">00:00</span>
+                                        <span id="gen-percent" class="block mt-0.5 text-[8px] text-slate-500">No exact %</span>
+                                    </div>
                                 </div>
-                                <div class="progress-bar">
+                                <div id="generation-live-bar" class="progress-bar generation-live-bar" data-state="starting">
                                     <div id="gen-progress-bar-fill" class="progress-bar-fill"></div>
                                 </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div class="generation-telemetry-chip">
+                                        <p class="text-[7px] uppercase tracking-wider text-slate-600 font-black">ACE heartbeat</p>
+                                        <p id="gen-heartbeat-value" class="text-[9px] mt-0.5 truncate text-slate-300 font-bold">Waiting…</p>
+                                    </div>
+                                    <div class="generation-telemetry-chip">
+                                        <p class="text-[7px] uppercase tracking-wider text-slate-600 font-black">GPU activity</p>
+                                        <p id="gen-gpu-value" class="text-[9px] mt-0.5 truncate text-slate-300 font-bold">Waiting…</p>
+                                    </div>
+                                    <div class="generation-telemetry-chip">
+                                        <p class="text-[7px] uppercase tracking-wider text-slate-600 font-black">VRAM</p>
+                                        <p id="gen-vram-value" class="text-[9px] mt-0.5 truncate text-slate-300 font-bold">Waiting…</p>
+                                    </div>
+                                    <div class="generation-telemetry-chip">
+                                        <p class="text-[7px] uppercase tracking-wider text-slate-600 font-black">Local service</p>
+                                        <p id="gen-service-value" class="text-[9px] mt-0.5 truncate text-slate-300 font-bold">Checking…</p>
+                                    </div>
+                                </div>
+                                <div id="generation-stall-warning" class="hidden rounded-lg border border-rose-500/25 bg-rose-500/10 p-2.5 text-[9px] text-rose-100 space-y-2">
+                                    <p id="generation-stall-warning-text" class="leading-relaxed">Generation may be stalled.</p>
+                                    <button id="btn-stop-stalled-generation" type="button" class="w-full rounded-md border border-rose-400/20 bg-rose-500/15 py-1.5 font-bold hover:bg-rose-500/25">
+                                        <i class="fa-solid fa-stop mr-1"></i> Stop Generation Safely
+                                    </button>
+                                </div>
+                                <div class="rounded-lg border border-white/5 bg-black/20 p-2.5">
+                                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                                        <p class="text-[8px] uppercase tracking-wider text-slate-500 font-black">Verified steps</p>
+                                        <span id="gen-last-update" class="text-[8px] text-slate-600">Not connected</span>
+                                    </div>
+                                    <ol id="generation-live-timeline" class="space-y-1 text-[9px]"></ol>
+                                </div>
+                                <p class="text-[8px] leading-relaxed text-slate-600">
+                                    ACE-Step does not expose diffusion-step percentages through this endpoint. Gnosys reports direct heartbeats and measured hardware activity instead.
+                                </p>
                                 <div id="music-generation-diagnostic-summary" class="hidden rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 text-[10px] text-slate-300 space-y-1">
                                     <div class="flex items-center gap-1.5 font-bold text-amber-300">
                                         <i class="fa-solid fa-stethoscope"></i>
@@ -1517,9 +1635,9 @@
         </div>
     </div>
 
-    <script src="../assets/llm-router.js?v=20260718-music-diagnostics2"></script>
-    <script src="../assets/ollama-launcher.js?v=20260718-music-diagnostics2"></script>
-    <script src="music-studio.js?v=20260718-music-diagnostics2"></script>
-    <script src="../assets/js/global-player.js?v=20260718-music-diagnostics2" defer></script>
+    <script src="../assets/llm-router.js?v=20260718-generation-telemetry1"></script>
+    <script src="../assets/ollama-launcher.js?v=20260718-generation-telemetry1"></script>
+    <script src="music-studio.js?v=20260718-generation-telemetry1"></script>
+    <script src="../assets/js/global-player.js?v=20260718-generation-telemetry1" defer></script>
 </body>
 </html>
