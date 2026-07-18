@@ -1113,7 +1113,19 @@
                                 <div class="progress-bar">
                                     <div id="gen-progress-bar-fill" class="progress-bar-fill"></div>
                                 </div>
+                                <div id="music-generation-diagnostic-summary" class="hidden rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 text-[10px] text-slate-300 space-y-1">
+                                    <div class="flex items-center gap-1.5 font-bold text-amber-300">
+                                        <i class="fa-solid fa-stethoscope"></i>
+                                        <span id="music-generation-error-code">Generation diagnostic</span>
+                                    </div>
+                                    <p id="music-generation-error-action" class="leading-relaxed text-slate-400"></p>
+                                    <p id="music-generation-trace-id" class="font-mono text-[9px] text-slate-500 break-all"></p>
+                                </div>
                             </div>
+
+                            <button id="btn-download-music-diagnostics" type="button" class="w-full py-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.07] text-[9px] font-bold text-slate-500 hover:text-teal-300 border border-white/5 hover:border-teal-500/20 transition-all">
+                                <i class="fa-solid fa-file-arrow-down mr-1"></i> Download Safe Diagnostic Report
+                            </button>
 
                             <!-- Audio Player Box -->
                             <div id="player-container" class="hidden p-3.5 rounded-xl bg-slate-950/30 border border-white/5 flex flex-col gap-2.5 shadow-inner">
@@ -1505,9 +1517,9 @@
         </div>
     </div>
 
-    <script src="../assets/llm-router.js"></script>
-    <script src="../assets/ollama-launcher.js"></script>
-    <script src="music-studio.js"></script>
-    <script src="../assets/js/global-player.js" defer></script>
+    <script src="../assets/llm-router.js?v=20260718-music-diagnostics2"></script>
+    <script src="../assets/ollama-launcher.js?v=20260718-music-diagnostics2"></script>
+    <script src="music-studio.js?v=20260718-music-diagnostics2"></script>
+    <script src="../assets/js/global-player.js?v=20260718-music-diagnostics2" defer></script>
 </body>
 </html>

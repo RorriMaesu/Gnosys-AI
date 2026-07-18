@@ -2,15 +2,19 @@ import http.server
 import socketserver
 import subprocess
 import platform
+import collections
 import json
 import os
+import re
 import shutil
 import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 PORT = 8020
+HELPER_STARTED_AT = time.time()
 active_downloads = {}
 active_downloads_status = {}  # {repo_id: {'status': ..., 'progress': ..., 'speed': ..., 'eta': ...}}
 active_download_processes = {}  # {repo_id: subprocess.Popen}
@@ -31,13 +35,22 @@ music_generation_state_lock = threading.Lock()
 music_generation_state = {
     'active': False,
     'request_id': None,
+    'trace_id': None,
     'model': None,
+    'stage': 'idle',
     'started_at': None,
     'cancel_requested': False,
     'last_result': None,
     'last_error': None,
+    'last_error_code': None,
+    'last_http_status': None,
+    'last_request_id': None,
+    'last_trace_id': None,
+    'last_duration_seconds': None,
     'updated_at': None,
 }
+music_diagnostic_lock = threading.Lock()
+music_diagnostic_events = collections.deque(maxlen=200)
 
 ALLOWED_WEB_ORIGINS = {
     'https://rorrimaesu.github.io',
@@ -374,11 +387,95 @@ def normalize_music_model(model_name):
         return DEFAULT_MUSIC_MODEL
     return normalized
 
+def sanitize_diagnostic_text(value, limit=4000):
+    """Remove user-authored prompt/audio content before retaining diagnostics."""
+    text = str(value or '')
+    text = re.sub(r'<prompt>[\s\S]*?</prompt>', '<prompt>[redacted]</prompt>', text, flags=re.IGNORECASE)
+    text = re.sub(r'<lyrics>[\s\S]*?</lyrics>', '<lyrics>[redacted]</lyrics>', text, flags=re.IGNORECASE)
+    text = re.sub(r'data:audio/[^;,\s]+;base64,[A-Za-z0-9+/=]+', 'data:audio/[redacted]', text)
+    if len(text) > limit:
+        text = text[:limit] + '... [truncated]'
+    return text
+
+def sanitize_diagnostic_value(value):
+    sensitive_keys = {'messages', 'prompt', 'lyrics', 'content', 'audio', 'audio_url'}
+    if isinstance(value, dict):
+        return {
+            str(key): ('[redacted]' if str(key).lower() in sensitive_keys else sanitize_diagnostic_value(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [sanitize_diagnostic_value(item) for item in value[:25]]
+    if isinstance(value, str):
+        return sanitize_diagnostic_text(value)
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return sanitize_diagnostic_text(value)
+
+def make_music_trace_id(candidate=None):
+    candidate = (candidate or '').strip()
+    if candidate and re.fullmatch(r'[A-Za-z0-9._:-]{8,80}', candidate):
+        return candidate
+    return f'music-trace-{uuid.uuid4().hex[:16]}'
+
+def summarize_music_request(generation_request):
+    audio_config = generation_request.get('audio_config') or {}
+    messages = generation_request.get('messages') or []
+    content_length = 0
+    for message in messages:
+        if isinstance(message, dict):
+            content_length += len(str(message.get('content') or ''))
+    return {
+        'model': normalize_music_model(generation_request.get('model')),
+        'duration': audio_config.get('duration'),
+        'bpm': audio_config.get('bpm'),
+        'instrumental': audio_config.get('instrumental'),
+        'inference_steps': generation_request.get('inference_steps'),
+        'vram_profile': active_vram_profile,
+        'text_length': content_length,
+    }
+
+def record_music_diagnostic(event, trace_id=None, request_id=None, level='info', details=None):
+    now = time.time()
+    entry = {
+        'timestamp': now,
+        'timestamp_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now)),
+        'event': event,
+        'level': level,
+        'trace_id': trace_id,
+        'request_id': request_id,
+        'details': sanitize_diagnostic_value(details or {}),
+    }
+    with music_diagnostic_lock:
+        music_diagnostic_events.append(entry)
+    print(f"[MusicDiagnostics][{trace_id or '-'}] {level.upper()} {event}: "
+          f"{json.dumps(entry['details'], ensure_ascii=True, separators=(',', ':'))}")
+    return entry
+
+def get_recent_music_diagnostics(limit=100):
+    limit = max(1, min(int(limit or 100), 200))
+    with music_diagnostic_lock:
+        return list(music_diagnostic_events)[-limit:]
+
+def extract_upstream_error(raw_body):
+    text = raw_body.decode('utf-8', errors='replace') if isinstance(raw_body, bytes) else str(raw_body or '')
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return sanitize_diagnostic_text(text or 'ACE-Step returned an empty error response.')
+    if isinstance(payload, dict):
+        detail = payload.get('detail') or payload.get('message') or payload.get('error') or payload.get('status')
+        if isinstance(detail, dict):
+            detail = detail.get('message') or detail.get('detail') or json.dumps(detail)
+        if detail:
+            return sanitize_diagnostic_text(detail)
+    return sanitize_diagnostic_text(text)
+
 def get_music_generation_snapshot():
     with music_generation_state_lock:
         return dict(music_generation_state)
 
-def begin_music_generation(model_name):
+def begin_music_generation(model_name, trace_id=None):
     if not music_generation_lock.acquire(blocking=False):
         return None
     request_id = f"music-{time.time_ns()}"
@@ -387,7 +484,9 @@ def begin_music_generation(model_name):
         music_generation_state.update({
             'active': True,
             'request_id': request_id,
+            'trace_id': trace_id,
             'model': model_name,
+            'stage': 'accepted',
             'started_at': now,
             'cancel_requested': False,
             'last_result': 'running',
@@ -395,6 +494,14 @@ def begin_music_generation(model_name):
             'updated_at': now,
         })
     return request_id
+
+def update_music_generation_stage(request_id, stage):
+    with music_generation_state_lock:
+        if music_generation_state['request_id'] != request_id:
+            return False
+        music_generation_state['stage'] = stage
+        music_generation_state['updated_at'] = time.time()
+        return True
 
 def request_music_generation_cancel():
     now = time.time()
@@ -414,22 +521,33 @@ def music_generation_was_cancelled(request_id):
             and music_generation_state['cancel_requested']
         )
 
-def finish_music_generation(request_id, result, error=None):
+def finish_music_generation(request_id, result, error=None, error_code=None, http_status=None):
     should_release = False
     now = time.time()
     with music_generation_state_lock:
         if music_generation_state['request_id'] == request_id:
+            started_at = music_generation_state['started_at']
+            trace_id = music_generation_state['trace_id']
             if music_generation_state['cancel_requested']:
                 result = 'cancelled'
                 error = None
+                error_code = 'MUSIC_GENERATION_CANCELLED'
+                http_status = 409
             music_generation_state.update({
                 'active': False,
                 'request_id': None,
+                'trace_id': None,
                 'model': None,
+                'stage': 'idle',
                 'started_at': None,
                 'cancel_requested': False,
                 'last_result': result,
                 'last_error': error,
+                'last_error_code': error_code,
+                'last_http_status': http_status,
+                'last_request_id': request_id,
+                'last_trace_id': trace_id,
+                'last_duration_seconds': round(now - started_at, 3) if started_at else None,
                 'updated_at': now,
             })
             should_release = True
@@ -445,6 +563,13 @@ def wait_for_music_generation_idle(timeout=10):
     return snapshot
 
 def stop_music_service():
+    current_generation = get_music_generation_snapshot()
+    trace_id = current_generation.get('trace_id') or make_music_trace_id()
+    record_music_diagnostic('stop_requested', trace_id=trace_id, request_id=current_generation.get('request_id'), details={
+        'generation_active': current_generation.get('active'),
+        'generation_stage': current_generation.get('stage'),
+        'accelerator_owner': accelerator_state.get('owner'),
+    })
     was_generating, generation_before = request_music_generation_cancel()
     with accelerator_lock:
         service_result = unload_ace_models()
@@ -452,6 +577,12 @@ def stop_music_service():
         accelerator_state['last_error'] = None
         accelerator_state['updated_at'] = time.time()
     generation_after = wait_for_music_generation_idle()
+    record_music_diagnostic('stop_completed', trace_id=trace_id, request_id=generation_before.get('request_id'), details={
+        'stopped_active_generation': was_generating,
+        'generation_active': generation_after.get('active'),
+        'last_result': generation_after.get('last_result'),
+        'service_status': service_result.get('status'),
+    })
     return {
         'service': service_result,
         'stopped_active_generation': was_generating,
@@ -495,6 +626,40 @@ def get_accelerator_snapshot():
         'ollama': ollama,
         'gpu': gpu,
         'conflict': conflict,
+    }
+
+def build_music_diagnostic_report(limit=100):
+    checkpoint_root = auto_resolve_ace_path(
+        active_ace_path or r'D:\ComfyUI\ACE-Step-1.5'
+    )
+    try:
+        model_integrity = inspect_music_models(checkpoint_root)
+    except Exception as exc:
+        model_integrity = {'error': sanitize_diagnostic_text(exc)}
+    try:
+        accelerator = get_accelerator_snapshot()
+    except Exception as exc:
+        accelerator = {'error': sanitize_diagnostic_text(exc)}
+    return {
+        'schema_version': 1,
+        'generated_at_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'privacy': 'Prompts, lyrics, message content, and generated audio are excluded or redacted.',
+        'helper': {
+            'pid': os.getpid(),
+            'started_at': HELPER_STARTED_AT,
+            'uptime_seconds': round(time.time() - HELPER_STARTED_AT, 3),
+            'platform': platform.platform(),
+            'python': platform.python_version(),
+        },
+        'music': {
+            'checkpoint_root': checkpoint_root,
+            'active_model': active_music_model,
+            'active_vram_profile': active_vram_profile,
+            'generation': get_music_generation_snapshot(),
+            'model_integrity': model_integrity,
+        },
+        'accelerator': accelerator,
+        'recent_events': get_recent_music_diagnostics(limit),
     }
 
 def transition_accelerator(target_owner, music_model=None, llm_model=None, vram_profile=None):
@@ -838,6 +1003,36 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
+        elif self.path.split('?', 1)[0] == '/api/music/diagnostics':
+            try:
+                import urllib.parse
+                parsed_url = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed_url.query)
+                requested_limit = params.get('limit', ['100'])[0]
+                try:
+                    limit = max(1, min(int(requested_limit), 200))
+                except (TypeError, ValueError):
+                    limit = 100
+                response_data = json.dumps({
+                    'status': 'success',
+                    'report': build_music_diagnostic_report(limit),
+                }).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Content-Length', str(len(response_data)))
+                self.end_headers()
+                self.wfile.write(response_data)
+            except Exception as exc:
+                response_data = json.dumps({
+                    'status': 'error',
+                    'error_code': 'MUSIC_DIAGNOSTICS_FAILED',
+                    'message': sanitize_diagnostic_text(exc),
+                }).encode('utf-8')
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Content-Length', str(len(response_data)))
+                self.end_headers()
+                self.wfile.write(response_data)
         elif self.path == '/api/hardware-info':
             try:
                 system_ram_gb = get_system_ram_gb()
@@ -1016,7 +1211,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200, "ok")
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-ComfyUI-Path')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-ComfyUI-Path, X-Gnosys-Trace-Id, X-Gnosys-Client-Id')
         self.send_header('Access-Control-Allow-Private-Network', 'true')
         self.end_headers()
 
@@ -1033,24 +1228,59 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             }).encode('utf-8'))
             return
         if self.path == '/api/accelerator/acquire':
+            trace_id = make_music_trace_id(self.headers.get('X-Gnosys-Trace-Id'))
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
                 body = json.loads(self.rfile.read(content_length).decode('utf-8')) if content_length else {}
+                target_owner = body.get('owner', 'idle')
+                if target_owner == 'music' or body.get('trace_id'):
+                    record_music_diagnostic('accelerator_transition_requested', trace_id=trace_id, details={
+                        'target_owner': target_owner,
+                        'music_model': body.get('music_model'),
+                        'vram_profile': body.get('vram_profile'),
+                    })
                 snapshot = transition_accelerator(
-                    body.get('owner', 'idle'),
+                    target_owner,
                     music_model=body.get('music_model'),
                     llm_model=body.get('llm_model'),
                     vram_profile=body.get('vram_profile'),
                 )
+                response_data = json.dumps({
+                    'status': 'success',
+                    'trace_id': trace_id,
+                    'accelerator': snapshot,
+                }).encode('utf-8')
+                if target_owner == 'music' or body.get('trace_id'):
+                    record_music_diagnostic('accelerator_transition_completed', trace_id=trace_id, details={
+                        'target_owner': target_owner,
+                        'actual_owner': snapshot.get('owner'),
+                        'gpu': snapshot.get('gpu'),
+                    })
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
+                self.send_header('X-Gnosys-Trace-Id', trace_id)
+                self.send_header('Content-Length', str(len(response_data)))
                 self.end_headers()
-                self.wfile.write(json.dumps({'status': 'success', 'accelerator': snapshot}).encode('utf-8'))
+                self.wfile.write(response_data)
             except Exception as exc:
+                response_data = json.dumps({
+                    'status': 'error',
+                    'error_code': 'MUSIC_ACCELERATOR_TRANSITION_FAILED',
+                    'message': sanitize_diagnostic_text(exc),
+                    'trace_id': trace_id,
+                    'retryable': True,
+                    'suggested_action': 'Reset VRAM, confirm no track is already running, and retry.',
+                }).encode('utf-8')
+                record_music_diagnostic('accelerator_transition_failed', trace_id=trace_id, level='error', details={
+                    'error_code': 'MUSIC_ACCELERATOR_TRANSITION_FAILED',
+                    'message': sanitize_diagnostic_text(exc),
+                })
                 self.send_response(409)
                 self.send_header('Content-type', 'application/json')
+                self.send_header('X-Gnosys-Trace-Id', trace_id)
+                self.send_header('Content-Length', str(len(response_data)))
                 self.end_headers()
-                self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
+                self.wfile.write(response_data)
         elif self.path == '/api/launch-ollama':
             try:
                 system = platform.system()
@@ -1572,25 +1802,50 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/generate':
+            trace_id = make_music_trace_id(self.headers.get('X-Gnosys-Trace-Id'))
             generation_id = None
             generation_result = 'failed'
             generation_error = None
+            generation_error_code = None
+            generation_http_status = None
+            request_started_at = time.time()
+            diagnostic_stage = 'request_received'
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
                 payload = self.rfile.read(content_length)
+                record_music_diagnostic('request_received', trace_id=trace_id, details={
+                    'content_bytes': content_length,
+                    'origin': self.headers.get('Origin'),
+                    'client_id': self.headers.get('X-Gnosys-Client-Id'),
+                })
                 try:
                     generation_request = json.loads(payload.decode('utf-8'))
                 except (UnicodeDecodeError, json.JSONDecodeError):
-                    self.send_response(400)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({
+                    generation_http_status = 400
+                    generation_error_code = 'MUSIC_INVALID_REQUEST'
+                    error_data = json.dumps({
                         'status': 'error',
+                        'error_code': generation_error_code,
                         'message': 'Music generation requires a valid JSON request body.',
-                    }).encode('utf-8'))
+                        'trace_id': trace_id,
+                        'retryable': False,
+                        'suggested_action': 'Reload the Music Studio and try again.',
+                    }).encode('utf-8')
+                    record_music_diagnostic('request_rejected', trace_id=trace_id, level='error', details={
+                        'error_code': generation_error_code,
+                        'http_status': generation_http_status,
+                    })
+                    self.send_response(generation_http_status)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('X-Gnosys-Trace-Id', trace_id)
+                    self.send_header('Content-Length', str(len(error_data)))
+                    self.end_headers()
+                    self.wfile.write(error_data)
                     return
 
                 requested_model = normalize_music_model(generation_request.get('model'))
+                request_summary = summarize_music_request(generation_request)
+                record_music_diagnostic('request_validated', trace_id=trace_id, details=request_summary)
                 model_key = MUSIC_MODEL_KEYS.get(requested_model)
                 checkpoint_root = auto_resolve_ace_path(
                     self.headers.get('X-ComfyUI-Path', '').strip()
@@ -1602,18 +1857,32 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     if not integrity['installed']:
                         missing = integrity.get('missing_files') or []
                         missing_summary = ', '.join(missing[:4]) or 'model weight files'
+                        generation_http_status = 409
+                        generation_error_code = 'MUSIC_CHECKPOINT_REPAIR_REQUIRED'
                         error_data = json.dumps({
                             'status': 'repair_required',
+                            'error_code': generation_error_code,
                             'message': (
                                 f'{requested_model} is incomplete. Missing: {missing_summary}. '
                                 'Use the model badge or Download All Missing Models to resume the checkpoint download.'
                             ),
+                            'trace_id': trace_id,
+                            'retryable': False,
+                            'suggested_action': 'Repair or finish downloading the selected model, then retry.',
                             'model': requested_model,
                             'integrity': integrity,
                         }).encode('utf-8')
-                        self.send_response(409)
+                        record_music_diagnostic('checkpoint_rejected', trace_id=trace_id, level='error', details={
+                            'error_code': generation_error_code,
+                            'http_status': generation_http_status,
+                            'model': requested_model,
+                            'integrity_state': integrity.get('state'),
+                            'missing_files': missing,
+                            'invalid_files': integrity.get('invalid_files') or [],
+                        })
+                        self.send_response(generation_http_status)
                         self.send_header('Content-type', 'application/json')
-                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.send_header('X-Gnosys-Trace-Id', trace_id)
                         self.send_header('Content-Length', str(len(error_data)))
                         self.end_headers()
                         self.wfile.write(error_data)
@@ -1623,6 +1892,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 # Pages frontend. The current UI acquires music ownership before
                 # this request, but the backend must also be able to recover after
                 # a helper restart, which resets its in-memory owner to idle.
+                diagnostic_stage = 'accelerator_preparation'
+                record_music_diagnostic('accelerator_preparation_started', trace_id=trace_id, details={
+                    'current_owner': accelerator_state['owner'],
+                    'requested_model': requested_model,
+                    'vram_profile': active_vram_profile or 'optimized',
+                })
                 if accelerator_state['owner'] != 'music':
                     transition_accelerator(
                         'music',
@@ -1633,27 +1908,47 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with accelerator_lock:
                     if accelerator_state['owner'] != 'music':
                         raise RuntimeError('Music does not own the accelerator. Complete the VRAM transition before generating.')
-                    generation_id = begin_music_generation(requested_model)
+                    generation_id = begin_music_generation(requested_model, trace_id=trace_id)
 
                 if generation_id is None:
                     generation = get_music_generation_snapshot()
+                    generation_http_status = 409
+                    generation_error_code = 'MUSIC_GENERATION_IN_PROGRESS'
                     error_data = json.dumps({
                         'status': 'generation_in_progress',
+                        'error_code': generation_error_code,
                         'message': 'A track is already being generated. Use Stop Generation to cancel it before starting another.',
+                        'trace_id': trace_id,
+                        'active_request_id': generation.get('request_id'),
+                        'active_trace_id': generation.get('trace_id'),
+                        'retryable': True,
+                        'suggested_action': 'Wait for the active track or use Stop Generation before retrying.',
                         'generation': generation,
                     }).encode('utf-8')
-                    self.send_response(409)
+                    record_music_diagnostic('duplicate_request_rejected', trace_id=trace_id, level='warning', details={
+                        'error_code': generation_error_code,
+                        'http_status': generation_http_status,
+                        'active_request_id': generation.get('request_id'),
+                        'active_trace_id': generation.get('trace_id'),
+                    })
+                    self.send_response(generation_http_status)
                     self.send_header('Content-type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('X-Gnosys-Trace-Id', trace_id)
                     self.send_header('Content-Length', str(len(error_data)))
                     self.end_headers()
                     self.wfile.write(error_data)
                     return
 
+                diagnostic_stage = 'ace_step_inference'
+                update_music_generation_stage(generation_id, diagnostic_stage)
+                record_music_diagnostic('generation_started', trace_id=trace_id, request_id=generation_id, details=request_summary)
                 req = urllib.request.Request(
                     'http://127.0.0.1:8002/v1/chat/completions',
                     data=payload,
-                    headers={'Content-Type': 'application/json'}
+                    headers={
+                        'Content-Type': 'application/json',
+                        'X-Gnosys-Trace-Id': trace_id,
+                    }
                 )
 
                 # Inference runs without the coordinator lock so the Stop
@@ -1661,64 +1956,171 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with urllib.request.urlopen(req, timeout=MUSIC_GENERATION_TIMEOUT_SECONDS) as response_conn:
                     response_data = response_conn.read()
 
+                diagnostic_stage = 'response_received'
+                update_music_generation_stage(generation_id, diagnostic_stage)
                 if music_generation_was_cancelled(generation_id):
                     raise RuntimeError('Generation cancelled by user.')
 
                 active_music_model = requested_model
                 generation_result = 'completed'
+                generation_http_status = 200
+                record_music_diagnostic('generation_completed', trace_id=trace_id, request_id=generation_id, details={
+                    'http_status': generation_http_status,
+                    'response_bytes': len(response_data),
+                    'elapsed_seconds': round(time.time() - request_started_at, 3),
+                })
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('X-Gnosys-Trace-Id', trace_id)
+                self.send_header('X-Gnosys-Request-Id', generation_id)
                 self.send_header('Content-Length', str(len(response_data)))
                 self.end_headers()
                 self.wfile.write(response_data)
             except urllib.error.HTTPError as he:
-                generation_error = str(he)
                 cancelled = generation_id and music_generation_was_cancelled(generation_id)
                 if cancelled:
-                    error_data = json.dumps({
-                        'status': 'cancelled',
-                        'message': 'Track generation was stopped.',
-                    }).encode('utf-8')
-                    status_code = 409
+                    generation_error = None
+                    generation_error_code = 'MUSIC_GENERATION_CANCELLED'
+                    generation_http_status = 409
+                    message = 'Track generation was stopped.'
+                    suggested_action = 'Start a new track when you are ready.'
                 else:
-                    error_data = he.read()
-                    status_code = he.code
-                self.send_response(status_code)
+                    upstream_body = he.read()
+                    generation_error = extract_upstream_error(upstream_body)
+                    generation_error_code = 'MUSIC_ACE_STEP_HTTP_ERROR'
+                    generation_http_status = he.code
+                    message = generation_error or f'ACE-Step returned HTTP {he.code}.'
+                    suggested_action = 'Download the diagnostic report, then check the selected model and ACE-Step service state.'
+                error_data = json.dumps({
+                    'status': 'cancelled' if cancelled else 'error',
+                    'error_code': generation_error_code,
+                    'message': message,
+                    'trace_id': trace_id,
+                    'request_id': generation_id,
+                    'upstream_status': None if cancelled else he.code,
+                    'stage': diagnostic_stage,
+                    'retryable': not cancelled,
+                    'suggested_action': suggested_action,
+                }).encode('utf-8')
+                record_music_diagnostic(
+                    'generation_cancelled' if cancelled else 'ace_step_http_error',
+                    trace_id=trace_id,
+                    request_id=generation_id,
+                    level='warning' if cancelled else 'error',
+                    details={
+                        'error_code': generation_error_code,
+                        'http_status': generation_http_status,
+                        'stage': diagnostic_stage,
+                        'message': message,
+                        'elapsed_seconds': round(time.time() - request_started_at, 3),
+                    },
+                )
+                self.send_response(generation_http_status)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('X-Gnosys-Trace-Id', trace_id)
+                if generation_id:
+                    self.send_header('X-Gnosys-Request-Id', generation_id)
                 self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
                 self.wfile.write(error_data)
             except (urllib.error.URLError, TimeoutError, RuntimeError) as exc:
-                generation_error = str(exc)
                 cancelled = generation_id and music_generation_was_cancelled(generation_id)
+                generation_error = None if cancelled else sanitize_diagnostic_text(exc)
+                if cancelled:
+                    generation_error_code = 'MUSIC_GENERATION_CANCELLED'
+                    generation_http_status = 409
+                    suggested_action = 'Start a new track when you are ready.'
+                elif isinstance(exc, TimeoutError):
+                    generation_error_code = 'MUSIC_GENERATION_TIMEOUT'
+                    generation_http_status = 504
+                    suggested_action = 'Stop the service, use the optimized VRAM profile, and retry with a shorter track.'
+                elif generation_id is None:
+                    generation_error_code = 'MUSIC_ACCELERATOR_PREPARATION_FAILED'
+                    generation_http_status = 503
+                    suggested_action = 'Reset VRAM, confirm no other GPU job is active, and retry.'
+                else:
+                    generation_error_code = 'MUSIC_ACE_STEP_UNAVAILABLE'
+                    generation_http_status = 503
+                    suggested_action = 'Restart the ACE-Step service and retry. Download diagnostics if it happens again.'
+                message = 'Track generation was stopped.' if cancelled else generation_error
                 error_data = json.dumps({
                     'status': 'cancelled' if cancelled else 'error',
-                    'message': 'Track generation was stopped.' if cancelled else str(exc),
+                    'error_code': generation_error_code,
+                    'message': message,
+                    'trace_id': trace_id,
+                    'request_id': generation_id,
+                    'stage': diagnostic_stage,
+                    'retryable': not cancelled,
+                    'suggested_action': suggested_action,
                 }).encode('utf-8')
-                self.send_response(409 if cancelled else 503)
+                record_music_diagnostic(
+                    'generation_cancelled' if cancelled else 'generation_transport_error',
+                    trace_id=trace_id,
+                    request_id=generation_id,
+                    level='warning' if cancelled else 'error',
+                    details={
+                        'error_code': generation_error_code,
+                        'http_status': generation_http_status,
+                        'stage': diagnostic_stage,
+                        'message': message,
+                        'elapsed_seconds': round(time.time() - request_started_at, 3),
+                    },
+                )
+                self.send_response(generation_http_status)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('X-Gnosys-Trace-Id', trace_id)
+                if generation_id:
+                    self.send_header('X-Gnosys-Request-Id', generation_id)
                 self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
                 self.wfile.write(error_data)
             except Exception as exc:
-                generation_error = str(exc)
                 cancelled = generation_id and music_generation_was_cancelled(generation_id)
+                generation_error = None if cancelled else sanitize_diagnostic_text(exc)
+                generation_error_code = 'MUSIC_GENERATION_CANCELLED' if cancelled else 'MUSIC_GENERATION_INTERNAL_ERROR'
+                generation_http_status = 409 if cancelled else 500
+                message = 'Track generation was stopped.' if cancelled else generation_error
                 error_data = json.dumps({
                     'status': 'cancelled' if cancelled else 'error',
-                    'message': 'Track generation was stopped.' if cancelled else str(exc),
+                    'error_code': generation_error_code,
+                    'message': message,
+                    'trace_id': trace_id,
+                    'request_id': generation_id,
+                    'stage': diagnostic_stage,
+                    'retryable': not cancelled,
+                    'suggested_action': 'Download the diagnostic report and restart the local helper before retrying.',
                 }).encode('utf-8')
-                self.send_response(409 if cancelled else 500)
+                record_music_diagnostic(
+                    'generation_cancelled' if cancelled else 'generation_internal_error',
+                    trace_id=trace_id,
+                    request_id=generation_id,
+                    level='warning' if cancelled else 'error',
+                    details={
+                        'error_code': generation_error_code,
+                        'http_status': generation_http_status,
+                        'stage': diagnostic_stage,
+                        'exception_type': type(exc).__name__,
+                        'message': message,
+                        'elapsed_seconds': round(time.time() - request_started_at, 3),
+                    },
+                )
+                self.send_response(generation_http_status)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('X-Gnosys-Trace-Id', trace_id)
+                if generation_id:
+                    self.send_header('X-Gnosys-Request-Id', generation_id)
                 self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
                 self.wfile.write(error_data)
             finally:
                 if generation_id is not None:
-                    finish_music_generation(generation_id, generation_result, generation_error)
+                    finish_music_generation(
+                        generation_id,
+                        generation_result,
+                        generation_error,
+                        generation_error_code,
+                        generation_http_status,
+                    )
         elif self.path == '/api/music/unload':
             try:
                 result = stop_music_service()
@@ -2154,6 +2556,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         if not getattr(self, '_cors_sent', False):
             self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Expose-Headers', 'X-Gnosys-Trace-Id, X-Gnosys-Request-Id')
         super().end_headers()
 
 def run_server():

@@ -76,13 +76,22 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             server.music_generation_state.update({
                 'active': False,
                 'request_id': None,
+                'trace_id': None,
                 'model': None,
+                'stage': 'idle',
                 'started_at': None,
                 'cancel_requested': False,
                 'last_result': None,
                 'last_error': None,
+                'last_error_code': None,
+                'last_http_status': None,
+                'last_request_id': None,
+                'last_trace_id': None,
+                'last_duration_seconds': None,
                 'updated_at': None,
             })
+        with server.music_diagnostic_lock:
+            server.music_diagnostic_events.clear()
 
     @staticmethod
     def snapshot(owner='idle', ace_status='lazy', ollama_models=None):
@@ -438,7 +447,11 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
                     'model': 'acemusic/acestep-v15-turbo',
                     'messages': [{'role': 'user', 'content': '<prompt>test</prompt>'}],
                 }),
-                headers={'Content-Type': 'application/json'},
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-Gnosys-Trace-Id': 'music-ui-primary-test',
+                    'X-Gnosys-Client-Id': 'test-client',
+                },
             )
             response = connection.getresponse()
             generation_response['status'] = response.status
@@ -476,13 +489,22 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
                         'model': 'acemusic/acestep-v15-turbo',
                         'messages': [{'role': 'user', 'content': '<prompt>duplicate</prompt>'}],
                     }),
-                    headers={'Content-Type': 'application/json'},
+                    headers={
+                        'Content-Type': 'application/json',
+                        'X-Gnosys-Trace-Id': 'music-ui-duplicate-test',
+                        'X-Gnosys-Client-Id': 'test-client',
+                    },
                 )
                 duplicate_response = duplicate.getresponse()
                 duplicate_body = json.loads(duplicate_response.read().decode('utf-8'))
                 duplicate.close()
                 self.assertEqual(duplicate_response.status, 409)
                 self.assertEqual(duplicate_body['status'], 'generation_in_progress')
+                self.assertEqual(duplicate_body['error_code'], 'MUSIC_GENERATION_IN_PROGRESS')
+                self.assertEqual(duplicate_body['trace_id'], 'music-ui-duplicate-test')
+                self.assertEqual(duplicate_body['active_trace_id'], 'music-ui-primary-test')
+                self.assertTrue(duplicate_body['active_request_id'].startswith('music-'))
+                self.assertIn('wait', duplicate_body['suggested_action'].lower())
                 self.assertIn('Stop Generation', duplicate_body['message'])
                 self.assertEqual(urlopen.call_count, 1)
 
@@ -506,15 +528,106 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
                 unload.assert_called_once_with()
                 self.assertEqual(generation_response['status'], 409)
                 self.assertEqual(generation_response['body']['status'], 'cancelled')
+                self.assertEqual(generation_response['body']['error_code'], 'MUSIC_GENERATION_CANCELLED')
+                self.assertEqual(generation_response['body']['trace_id'], 'music-ui-primary-test')
                 snapshot = server.get_music_generation_snapshot()
                 self.assertFalse(snapshot['active'])
                 self.assertEqual(snapshot['last_result'], 'cancelled')
+                self.assertEqual(snapshot['last_error_code'], 'MUSIC_GENERATION_CANCELLED')
+                self.assertEqual(snapshot['last_http_status'], 409)
+                self.assertEqual(snapshot['last_trace_id'], 'music-ui-primary-test')
+                event_names = [event['event'] for event in server.get_recent_music_diagnostics(50)]
+                self.assertIn('duplicate_request_rejected', event_names)
+                self.assertIn('generation_cancelled', event_names)
+                self.assertIn('stop_completed', event_names)
                 self.assertEqual(server.accelerator_state['owner'], 'idle')
         finally:
             stop_upstream.set()
             httpd.shutdown()
             httpd.server_close()
             server_thread.join(timeout=5)
+
+    def test_music_diagnostic_endpoint_redacts_user_content(self):
+        server.record_music_diagnostic('redaction_test', trace_id='music-ui-redaction-test', details={
+            'content': 'TOP SECRET CONTENT',
+            'message': '<prompt>PRIVATE PROMPT</prompt><lyrics>PRIVATE LYRICS</lyrics>',
+            'audio_url': 'data:audio/wav;base64,PRIVATEAUDIO',
+        })
+        httpd = server.socketserver.ThreadingTCPServer(
+            ('127.0.0.1', 0),
+            server.GnosysHTTPRequestHandler,
+        )
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        try:
+            with (
+                mock.patch.object(server, 'get_accelerator_snapshot', return_value=self.snapshot()),
+                mock.patch.object(server, 'inspect_music_models', return_value={'turbo': {'installed': True}}),
+            ):
+                connection = http.client.HTTPConnection(
+                    '127.0.0.1',
+                    httpd.server_address[1],
+                    timeout=5,
+                )
+                connection.request(
+                    'GET',
+                    '/api/music/diagnostics?limit=20',
+                    headers={'Origin': 'https://rorrimaesu.github.io'},
+                )
+                response = connection.getresponse()
+                response_text = response.read().decode('utf-8')
+                response_body = json.loads(response_text)
+                connection.close()
+
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response_body['status'], 'success')
+            self.assertEqual(response_body['report']['schema_version'], 1)
+            self.assertIn('redaction_test', [
+                event['event'] for event in response_body['report']['recent_events']
+            ])
+            self.assertNotIn('TOP SECRET CONTENT', response_text)
+            self.assertNotIn('PRIVATE PROMPT', response_text)
+            self.assertNotIn('PRIVATE LYRICS', response_text)
+            self.assertNotIn('PRIVATEAUDIO', response_text)
+            self.assertIn('[redacted]', response_text)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            server_thread.join(timeout=5)
+
+
+class FrontendMusicDiagnosticsTests(unittest.TestCase):
+    def test_client_guard_runs_before_local_permission_await(self):
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(project_root, 'music', 'music-studio.js'), 'r', encoding='utf-8') as handle:
+            source = handle.read()
+        function_start = source.index('async function generateStudyTrack()')
+        function_source = source[function_start:]
+        guard_position = function_source.index(
+            'if (generationStartPending || pendingGeneration || isTrackGenerating || activeGenerationController)'
+        )
+        latch_position = function_source.index('generationStartPending = true;')
+        permission_position = function_source.index('await window.parent.GnosysEnsureLocalNetworkAccess()')
+
+        self.assertLess(guard_position, permission_position)
+        self.assertLess(latch_position, permission_position)
+        self.assertIn("'gnosys-ai-music-generation'", function_source)
+        self.assertIn("{ mode: 'exclusive', ifAvailable: true }", function_source)
+        self.assertIn("'X-Gnosys-Trace-Id': generationTraceId", function_source)
+        self.assertIn('createGenerationResponseError(res, generationTraceId)', function_source)
+
+    def test_music_studio_exposes_safe_diagnostic_download(self):
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(project_root, 'music', 'index.html'), 'r', encoding='utf-8') as handle:
+            page = handle.read()
+        with open(os.path.join(project_root, 'music', 'music-studio.js'), 'r', encoding='utf-8') as handle:
+            source = handle.read()
+
+        self.assertIn('btn-download-music-diagnostics', page)
+        self.assertIn('music-studio.js?v=20260718-music-diagnostics2', page)
+        self.assertIn('/api/music/diagnostics?limit=150', source)
+        self.assertIn('Prompts, lyrics, message content, and generated audio are not included.', source)
 
 
 if __name__ == '__main__':
