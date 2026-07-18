@@ -1,5 +1,9 @@
 (function() {
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
+    // Oldest helper_version (YYYY.MM.DD, string-comparable) this page fully
+    // supports. Helpers that predate the field report undefined and are
+    // treated as out of date.
+    const MINIMUM_HELPER_VERSION = '2026.07.18';
     let comfyPath = localStorage.getItem('gnosys_comfy_path') || 'D:\\ComfyUI\\ACE-Step-1.5';
     let vramProfile = localStorage.getItem('gnosys_music_vram_profile') || 'optimized';
     const clientId = Math.random().toString(36).substring(2, 15);
@@ -1783,6 +1787,31 @@
         }
     }
 
+    function renderHelperVersionNotice(helperVersion) {
+        const banner = document.getElementById('helper-update-banner');
+        if (!banner) return;
+        const upToDate = helperVersion && String(helperVersion) >= MINIMUM_HELPER_VERSION;
+        if (upToDate) {
+            banner.classList.add('hidden');
+            return;
+        }
+        if (localStorage.getItem('gnosys_helper_update_dismissed') === MINIMUM_HELPER_VERSION) return;
+        const versionText = document.getElementById('helper-update-banner-version');
+        if (versionText) {
+            versionText.textContent = helperVersion
+                ? `Installed helper version: ${helperVersion}. This page expects ${MINIMUM_HELPER_VERSION} or newer.`
+                : 'The installed helper is older than this page expects.';
+        }
+        if (!banner.dataset.dismissBound) {
+            banner.dataset.dismissBound = '1';
+            document.getElementById('btn-dismiss-helper-update')?.addEventListener('click', () => {
+                localStorage.setItem('gnosys_helper_update_dismissed', MINIMUM_HELPER_VERSION);
+                banner.classList.add('hidden');
+            });
+        }
+        banner.classList.remove('hidden');
+    }
+
     async function checkMusicServiceStatus() {
         const badge = document.getElementById('comfy-status-badge');
         if (!badge) return;
@@ -1795,6 +1824,8 @@
                 headers: { 'X-ComfyUI-Path': comfyPath }
             });
             const data = await res.json();
+
+            renderHelperVersionNotice(data.helper_version);
 
             if (data.active_vram_profile && data.active_vram_profile !== vramProfile) {
                 vramProfile = data.active_vram_profile;

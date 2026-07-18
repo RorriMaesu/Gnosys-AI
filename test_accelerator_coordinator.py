@@ -91,6 +91,9 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
                 'last_compute_activity_at': None,
                 'last_gpu_sample': None,
                 'gpu_sample_count': 0,
+                'peak_gpu_used_mb': 0,
+                'model_confirmed_resident_at': None,
+                'last_ace_process_sample': None,
                 'monitor_status': 'idle',
                 'monitor_message': 'No music generation is active.',
                 'last_result': None,
@@ -269,6 +272,8 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             snapshot,
             model='acestep-v15-xl-sft',
             request_summary={'vram_profile': 'optimized'},
+            model_confirmed_resident_at=900.0,
+            peak_gpu_used_mb=9800,
         )
         status, message, stalled = server.classify_music_generation_activity(
             released_snapshot,
@@ -278,7 +283,99 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
         )
         self.assertEqual(status, 'model_released')
         self.assertIn('no longer resident', message)
+        self.assertIn('9800 MB', message)
         self.assertTrue(stalled)
+
+    def test_cold_checkpoint_load_is_not_reported_as_model_released(self):
+        now = 1000.0
+        cold_load_snapshot = {
+            'active': True,
+            'cancel_requested': False,
+            'stage': 'ace_step_initializing',
+            'model': 'acestep-v15-xl-turbo',
+            'request_summary': {'vram_profile': 'optimized'},
+            'started_at': 900.0,
+            'heartbeat_at': None,
+            'last_compute_activity_at': 998.0,
+            'model_confirmed_resident_at': None,
+            'peak_gpu_used_mb': 1019,
+            'last_ace_process_sample': {
+                'alive': True,
+                'pid': 4242,
+                'working_set_mb': 9900,
+                'cpu_seconds': 84.5,
+            },
+        }
+        # 100 seconds in, VRAM near 1 GB, but the process is visibly loading:
+        # this must read as a normal loading phase, not a released model.
+        status, message, stalled = server.classify_music_generation_activity(
+            cold_load_snapshot,
+            {'utilization_gpu_percent': 0, 'used_mb': 1019},
+            True,
+            now=now,
+        )
+        self.assertEqual(status, 'loading')
+        self.assertIn('system RAM', message)
+        self.assertIn('9.7 GB', message)
+        self.assertIn('normal', message)
+        self.assertFalse(stalled)
+
+        # Only a load with no CPU, RAM, or GPU activity for the stall window
+        # may be flagged, and it must be described as a stuck load.
+        stuck_snapshot = dict(cold_load_snapshot, last_compute_activity_at=700.0, started_at=700.0)
+        status, message, stalled = server.classify_music_generation_activity(
+            stuck_snapshot,
+            {'utilization_gpu_percent': 0, 'used_mb': 1019},
+            True,
+            now=now,
+        )
+        self.assertEqual(status, 'suspected_stall')
+        self.assertIn('no loading activity', message)
+        self.assertTrue(stalled)
+
+    def test_realtime_snapshot_confirms_residency_and_counts_cpu_loading_as_activity(self):
+        request_id = server.begin_music_generation(
+            'acestep-v15-xl-turbo',
+            trace_id='music-ui-residency-test',
+            request_summary={'vram_profile': 'optimized'},
+        )
+        server.update_music_generation_stage(request_id, 'ace_step_initializing')
+        try:
+            with server.music_generation_state_lock:
+                server.music_generation_state['last_compute_activity_at'] = time.time() - 120
+                server.music_generation_state['last_ace_process_sample'] = {
+                    'alive': True,
+                    'pid': 4242,
+                    'working_set_mb': 5100,
+                    'cpu_seconds': 30.0,
+                }
+
+            low_vram = {'utilization_gpu_percent': 0, 'used_mb': 1019, 'total_mb': 16311, 'free_mb': 15292}
+            growing_process = {'alive': True, 'pid': 4242, 'working_set_mb': 8400, 'cpu_seconds': 55.0}
+            with (
+                mock.patch.object(server, 'get_gpu_activity_status', return_value=low_vram),
+                mock.patch.object(server, 'probe_port', return_value=True),
+                mock.patch.object(server, 'get_ace_process_telemetry', return_value=growing_process),
+            ):
+                snapshot = server.get_music_generation_realtime_snapshot()
+
+            self.assertEqual(snapshot['monitor_status'], 'loading')
+            self.assertFalse(snapshot['stall_suspected'])
+            self.assertIsNone(snapshot['model_confirmed_resident_at'])
+            self.assertLess(snapshot['compute_quiet_seconds'], 5)
+
+            resident_vram = {'utilization_gpu_percent': 40, 'used_mb': 9800, 'total_mb': 16311, 'free_mb': 6511}
+            with (
+                mock.patch.object(server, 'get_gpu_activity_status', return_value=resident_vram),
+                mock.patch.object(server, 'probe_port', return_value=True),
+                mock.patch.object(server, 'get_ace_process_telemetry', return_value=growing_process),
+            ):
+                snapshot = server.get_music_generation_realtime_snapshot()
+
+            self.assertIsNotNone(snapshot['model_confirmed_resident_at'])
+            self.assertEqual(snapshot['peak_gpu_used_mb'], 9800)
+        finally:
+            server.finish_music_generation(request_id, 'completed', http_status=200)
 
     def test_ace_stream_heartbeats_are_reassembled_without_fake_progress(self):
         class FakeStreamResponse:
@@ -866,6 +963,62 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             httpd.server_close()
             server_thread.join(timeout=5)
 
+    def test_status_endpoints_report_helper_version(self):
+        httpd = server.socketserver.ThreadingTCPServer(
+            ('127.0.0.1', 0),
+            server.GnosysHTTPRequestHandler,
+        )
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+
+        integrity = {
+            key: {'installed': False, 'state': 'missing', 'missing_files': [], 'invalid_files': []}
+            for key in ('xl_sft', 'xl_turbo', 'turbo')
+        }
+        try:
+            with (
+                tempfile.TemporaryDirectory() as ace_dir,
+                mock.patch.object(server, 'auto_resolve_ace_path', return_value=ace_dir),
+                mock.patch.object(server, 'inspect_music_models', return_value=integrity),
+                mock.patch.object(server, 'probe_port', return_value=False),
+                mock.patch.object(server, 'get_accelerator_snapshot', return_value=self.snapshot()),
+            ):
+                for path in ('/api/music/status', '/api/accelerator/status'):
+                    connection = http.client.HTTPConnection(
+                        '127.0.0.1',
+                        httpd.server_address[1],
+                        timeout=5,
+                    )
+                    connection.request('GET', path, headers={'Origin': 'https://rorrimaesu.github.io'})
+                    response = connection.getresponse()
+                    payload = json.loads(response.read().decode('utf-8'))
+                    connection.close()
+
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(payload['helper_version'], server.GNOSYS_HELPER_VERSION)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
+
+    def test_music_studio_prompts_for_stale_helper_updates(self):
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(project_root, 'music', 'index.html'), 'r', encoding='utf-8') as handle:
+            page = handle.read()
+        with open(os.path.join(project_root, 'music', 'music-studio.js'), 'r', encoding='utf-8') as handle:
+            source = handle.read()
+
+        self.assertIn('helper-update-banner', page)
+        self.assertIn('btn-dismiss-helper-update', page)
+        self.assertIn('archive/refs/heads/main.zip', page)
+        self.assertIn('run_backend.bat', page)
+        self.assertIn("MINIMUM_HELPER_VERSION = '2026.07.18'", source)
+        self.assertIn('renderHelperVersionNotice(data.helper_version)', source)
+        self.assertIn("localStorage.getItem('gnosys_helper_update_dismissed')", source)
+        # The minimum the page demands must never run ahead of what the
+        # bundled helper actually reports.
+        self.assertGreaterEqual(server.GNOSYS_HELPER_VERSION, '2026.07.18')
+
     def test_music_diagnostic_endpoint_redacts_user_content(self):
         server.record_music_diagnostic('redaction_test', trace_id='music-ui-redaction-test', details={
             'content': 'TOP SECRET CONTENT',
@@ -944,7 +1097,7 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
             source = handle.read()
 
         self.assertIn('btn-download-music-diagnostics', page)
-        self.assertIn('music-studio.js?v=20260718-chatbot-diagnostics1', page)
+        self.assertIn('music-studio.js?v=20260718-helper-version1', page)
         self.assertIn('/api/music/diagnostics?limit=150', source)
         self.assertIn('Prompts, lyrics, message content, and generated audio are not included.', source)
 
@@ -960,6 +1113,7 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
         self.assertIn('ACE-Step does not expose diffusion-step percentages', page)
         self.assertIn('generation-live-timeline', page)
         self.assertIn('btn-stop-stalled-generation', page)
+        self.assertIn('data-state="loading"', page)
         self.assertNotIn('const loadingStages', source)
         self.assertNotIn("pct: 92", source)
 
