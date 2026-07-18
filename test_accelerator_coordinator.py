@@ -1,3 +1,6 @@
+import http.client
+import json
+import threading
 import unittest
 from unittest import mock
 
@@ -102,6 +105,137 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'stranded GPU processes'):
                 server.transition_accelerator('llm', llm_model='gemma4:e4b')
         self.assertEqual(server.accelerator_state['owner'], 'idle')
+
+    def test_music_model_normalization_rejects_unknown_models(self):
+        self.assertEqual(
+            server.normalize_music_model('acemusic/acestep-v15-turbo'),
+            'acestep-v15-turbo',
+        )
+        self.assertEqual(
+            server.normalize_music_model('../../unexpected-model'),
+            server.DEFAULT_MUSIC_MODEL,
+        )
+
+    def test_music_generate_proxy_returns_upstream_response(self):
+        expected_payload = {
+            'choices': [{
+                'message': {
+                    'audio': [{
+                        'audio_url': {'url': 'data:audio/wav;base64,TEST'},
+                    }],
+                },
+            }],
+        }
+        expected_bytes = json.dumps(expected_payload).encode('utf-8')
+
+        class FakeUpstreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self):
+                return expected_bytes
+
+        server.accelerator_state['owner'] = 'music'
+        httpd = server.socketserver.ThreadingTCPServer(
+            ('127.0.0.1', 0),
+            server.GnosysHTTPRequestHandler,
+        )
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            with mock.patch.object(
+                server.urllib.request,
+                'urlopen',
+                return_value=FakeUpstreamResponse(),
+            ) as urlopen:
+                connection = http.client.HTTPConnection(
+                    '127.0.0.1',
+                    httpd.server_address[1],
+                    timeout=5,
+                )
+                request_body = json.dumps({
+                    'model': 'acemusic/acestep-v15-turbo',
+                    'messages': [{'role': 'user', 'content': '<prompt>test</prompt>'}],
+                })
+                connection.request(
+                    'POST',
+                    '/api/music/generate',
+                    body=request_body,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Origin': 'https://rorrimaesu.github.io',
+                    },
+                )
+                response = connection.getresponse()
+                response_body = response.read()
+                connection.close()
+
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response_body, expected_bytes)
+            self.assertEqual(
+                response.getheader('Access-Control-Allow-Origin'),
+                'https://rorrimaesu.github.io',
+            )
+            self.assertEqual(
+                int(response.getheader('Content-Length')),
+                len(expected_bytes),
+            )
+            self.assertEqual(
+                urlopen.call_args.kwargs['timeout'],
+                server.MUSIC_GENERATION_TIMEOUT_SECONDS,
+            )
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
+
+    def test_music_generate_proxy_returns_json_when_upstream_fails(self):
+        server.accelerator_state['owner'] = 'music'
+        httpd = server.socketserver.ThreadingTCPServer(
+            ('127.0.0.1', 0),
+            server.GnosysHTTPRequestHandler,
+        )
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            with mock.patch.object(
+                server.urllib.request,
+                'urlopen',
+                side_effect=server.urllib.error.URLError('upstream unavailable'),
+            ):
+                connection = http.client.HTTPConnection(
+                    '127.0.0.1',
+                    httpd.server_address[1],
+                    timeout=5,
+                )
+                connection.request(
+                    'POST',
+                    '/api/music/generate',
+                    body=json.dumps({
+                        'model': 'acemusic/acestep-v15-turbo',
+                        'messages': [{'role': 'user', 'content': '<prompt>test</prompt>'}],
+                    }),
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Origin': 'https://rorrimaesu.github.io',
+                    },
+                )
+                response = connection.getresponse()
+                response_body = json.loads(response.read().decode('utf-8'))
+                connection.close()
+
+            self.assertEqual(response.status, 503)
+            self.assertEqual(response_body['status'], 'error')
+            self.assertIn('upstream unavailable', response_body['message'])
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
 
 
 if __name__ == '__main__':
