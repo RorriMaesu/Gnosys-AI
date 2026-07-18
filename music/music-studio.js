@@ -28,50 +28,12 @@
     let isCritiqueMode = false;
     let activeCritiqueData = null;
 
-    function restoreHostedStudioHandoff() {
-        if (window.self === window.top) return;
-        const marker = '#gnosys-handoff=';
-        if (!window.location.hash.startsWith(marker)) return;
-
-        try {
-            const encoded = window.location.hash.slice(marker.length);
-            if (!encoded || encoded.length > 100000) throw new Error('Invalid handoff data.');
-            const handoff = JSON.parse(decodeURIComponent(encoded));
-            if (handoff?.version !== 1 || !handoff.fields || typeof handoff.fields !== 'object') {
-                throw new Error('Unsupported handoff data.');
-            }
-
-            for (const [id, saved] of Object.entries(handoff.fields)) {
-                const element = document.getElementById(id);
-                if (!element || !saved || typeof saved !== 'object') continue;
-                if (element.type === 'checkbox' && typeof saved.checked === 'boolean') {
-                    element.checked = saved.checked;
-                } else if (typeof saved.value === 'string') {
-                    element.value = saved.value;
-                }
-            }
-
-            const restoredProfile = document.getElementById('music-vram-profile')?.value;
-            if (restoredProfile) {
-                vramProfile = restoredProfile;
-                localStorage.setItem('gnosys_music_vram_profile', restoredProfile);
-            }
-            const restoredLyrics = document.getElementById('generated-lyrics')?.value;
-            if (typeof restoredLyrics === 'string') window.lyricStudioState.currentText = restoredLyrics;
-            window.history.replaceState(null, '', window.location.pathname + window.location.search);
-            showBannerNotification('Your hosted Music Studio settings were restored.', 'success');
-        } catch (err) {
-            console.warn('[Music Studio] Could not restore hosted settings:', err);
-        }
-    }
-
     document.addEventListener('DOMContentLoaded', () => {
         // If we are in the top-level parent window wrapper (where the page is wrapped in an iframe), abort
         if (window.self === window.top && document.getElementById('gnosys-content-frame')) {
             return;
         }
         initUI();
-        restoreHostedStudioHandoff();
         checkMusicServiceStatus();
         // Periodically refresh service status to keep indicators in sync
         setInterval(checkMusicServiceStatus, 15000);
