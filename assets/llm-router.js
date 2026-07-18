@@ -265,6 +265,65 @@
         badgeIntervalId: null,
         installedOllamaModels: [],
     };
+    const LLM_DIAGNOSTIC_LIMIT = 150;
+    const llmDiagnostics = [];
+
+    function createLlmTraceId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return `llm-ui-${window.crypto.randomUUID()}`;
+        }
+        return `llm-ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    function recordLlmDiagnostic(type, detail = {}) {
+        const event = {
+            timestamp: new Date().toISOString(),
+            type,
+            ...detail,
+        };
+        llmDiagnostics.push(event);
+        if (llmDiagnostics.length > LLM_DIAGNOSTIC_LIMIT) {
+            llmDiagnostics.splice(0, llmDiagnostics.length - LLM_DIAGNOSTIC_LIMIT);
+        }
+        const logger = type === 'ollama_heartbeat' ? console.debug : console.info;
+        logger.call(console, `[GnosysLLM][${event.traceId || 'no-trace'}] ${type}`, event);
+        return event;
+    }
+
+    function getDiagnostics() {
+        return llmDiagnostics.map(event => ({ ...event }));
+    }
+
+    function clearDiagnostics() {
+        llmDiagnostics.length = 0;
+    }
+
+    function downloadDiagnostics() {
+        const snapshot = VRAMManager?.lastSnapshot || {};
+        const report = {
+            generated_at: new Date().toISOString(),
+            privacy_notice: 'Prompts, lyrics, chat messages, model output, and hidden reasoning text are not included.',
+            router: getStatus(),
+            accelerator: {
+                owner: snapshot.owner || VRAMManager?.activeOwner || null,
+                transitioning: Boolean(snapshot.transitioning || VRAMManager?.isTransitioning),
+                ace_online: Boolean(snapshot.ace?.online),
+                ollama_online: Boolean(snapshot.ollama?.online),
+                ollama_models: Array.isArray(snapshot.ollama?.models) ? snapshot.ollama.models : [],
+                gpu: snapshot.gpu || null,
+            },
+            events: getDiagnostics(),
+        };
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `gnosys-llm-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    }
 
 
     const LITERT_SETUP_STATUS_EVENT = 'gnosys-litert-setup-status';
@@ -489,6 +548,9 @@
         getActiveDesktopModel,
         getPrettyModelName,
         getClientHardwareInfo,
+        getDiagnostics,
+        clearDiagnostics,
+        downloadDiagnostics,
         vramManager: VRAMManager,
     };
 
@@ -617,6 +679,8 @@
             webGpuSupported: state.isWebGpuSupported,
             opfsSupported: state.isOpfsSupported,
             mobileChoicePending: state.mobileChoicePending,
+            diagnosticEvents: llmDiagnostics.length,
+            lastTraceId: llmDiagnostics.length ? llmDiagnostics[llmDiagnostics.length - 1].traceId || null : null,
         };
     }
 
@@ -627,6 +691,21 @@
     }
 
     async function generateResponse(systemPrompt, userPrompt, options = {}) {
+        const requestOptions = {
+            ...options,
+            traceId: options.traceId || createLlmTraceId(),
+        };
+        const history = Array.isArray(requestOptions.history) ? requestOptions.history : [];
+        recordLlmDiagnostic('request_started', {
+            traceId: requestOptions.traceId,
+            provider: state.providerName,
+            stream: Boolean(requestOptions.stream),
+            structuredResponse: Boolean(requestOptions.structuredResponse),
+            systemPromptLength: String(systemPrompt || '').length,
+            userPromptLength: String(userPrompt || '').length,
+            historyMessages: history.length,
+            historyCharacters: history.reduce((total, entry) => total + String(entry?.content || '').length, 0),
+        });
         await init();
 
         // A temporary Ollama/helper outage during page startup used to leave the
@@ -636,7 +715,7 @@
             state.providerName === 'no-ai' &&
             localStorage.getItem(STORAGE_KEYS.routeMode) !== 'no-ai'
         ) {
-            emitGenerationStatus(options, 'probing_ollama', 'Checking the local Ollama service...');
+            emitGenerationStatus(requestOptions, 'probing_ollama', 'Checking the local Ollama service...');
             await init(true);
         }
 
@@ -649,14 +728,47 @@
         }
 
         // Proactively manage VRAM via VRAMManager
-        emitGenerationStatus(options, 'releasing_music', 'Releasing ACE-Step and reserving VRAM for the lyric assistant...');
-        await VRAMManager.acquireForLLM();
-        emitGenerationStatus(options, 'llm_vram_ready', 'VRAM is ready for the lyric assistant.');
-
-        return state.provider.generateResponse(systemPrompt, userPrompt, options);
+        try {
+            emitGenerationStatus(requestOptions, 'releasing_music', 'Releasing ACE-Step and reserving VRAM for the lyric assistant...');
+            const accelerator = await VRAMManager.acquireForLLM();
+            recordLlmDiagnostic('vram_acquired', {
+                traceId: requestOptions.traceId,
+                owner: accelerator?.owner || VRAMManager.activeOwner,
+                aceOnline: Boolean(accelerator?.ace?.online),
+                ollamaOnline: Boolean(accelerator?.ollama?.online),
+                gpuUsedMb: accelerator?.gpu?.used_mb ?? null,
+                gpuFreeMb: accelerator?.gpu?.free_mb ?? null,
+            });
+            emitGenerationStatus(requestOptions, 'llm_vram_ready', 'VRAM is ready for the lyric assistant.');
+            const result = await state.provider.generateResponse(systemPrompt, userPrompt, requestOptions);
+            recordLlmDiagnostic('request_completed', {
+                traceId: requestOptions.traceId,
+                provider: result?.provider || state.providerName,
+                model: result?.model || null,
+                recoveredFrom: result?.recoveredFrom || null,
+                responseLength: String(result?.text || '').length,
+            });
+            return { ...result, traceId: requestOptions.traceId };
+        } catch (err) {
+            err.traceId = err.traceId || requestOptions.traceId;
+            recordLlmDiagnostic('request_failed', {
+                traceId: err.traceId,
+                provider: state.providerName,
+                code: err.code || err.name || 'LLM_REQUEST_FAILED',
+                message: err.message || 'Unknown LLM failure.',
+                diagnostic: err.diagnostic || null,
+            });
+            throw err;
+        }
     }
 
     function emitGenerationStatus(options, stage, message, detail = {}) {
+        recordLlmDiagnostic('status', {
+            traceId: options?.traceId || null,
+            stage,
+            message,
+            ...detail,
+        });
         if (typeof options?.onStatus !== 'function') return;
         try {
             options.onStatus({ stage, message, ...detail });
@@ -826,9 +938,10 @@
             }) || '';
         }
 
-        function createOllamaError(code, message) {
+        function createOllamaError(code, message, diagnostic = null) {
             const error = new Error(message);
             error.code = code;
+            error.diagnostic = diagnostic;
             return error;
         }
 
@@ -840,18 +953,81 @@
             return placeholders.length >= 3 && remainder.length === 0;
         }
 
-        function validateOllamaText(text, model) {
+        function validateOllamaText(text, model, options, diagnostic) {
             const value = String(text || '').trim();
             if (!value) {
-                throw createOllamaError('OLLAMA_EMPTY_RESPONSE', `${model} returned an empty response.`);
+                const thinkingNote = diagnostic?.thinkingLength
+                    ? ` after producing ${diagnostic.thinkingLength} hidden reasoning characters`
+                    : '';
+                throw createOllamaError(
+                    'OLLAMA_EMPTY_RESPONSE',
+                    `${model} returned an empty response${thinkingNote}.`,
+                    diagnostic
+                );
             }
             if (looksLikePlaceholderCorruption(value)) {
                 throw createOllamaError(
                     'OLLAMA_CORRUPT_OUTPUT',
-                    `${model} returned invalid placeholder tokens instead of a usable response.`
+                    `${model} returned invalid placeholder tokens instead of a usable response.`,
+                    diagnostic
                 );
             }
+            if (options.structuredResponse) {
+                try {
+                    JSON.parse(value);
+                } catch (_err) {
+                    throw createOllamaError(
+                        'OLLAMA_INVALID_STRUCTURED_RESPONSE',
+                        `${model} returned incomplete or malformed structured data.`,
+                        diagnostic
+                    );
+                }
+            }
             return value;
+        }
+
+        function buildResponseDiagnostic(payload, model, options, startedAt, text = '') {
+            return {
+                traceId: options.traceId || null,
+                model,
+                stream: Boolean(options.stream),
+                structuredResponse: Boolean(options.structuredResponse),
+                think: options.think ?? null,
+                done: payload?.done ?? null,
+                doneReason: payload?.done_reason || null,
+                contentLength: String(text || '').length,
+                thinkingLength: String(payload?.message?.thinking || payload?.thinking || '').length,
+                promptEvalCount: payload?.prompt_eval_count ?? null,
+                evalCount: payload?.eval_count ?? null,
+                loadDurationMs: Number.isFinite(Number(payload?.load_duration))
+                    ? Math.round(Number(payload.load_duration) / 1e6)
+                    : null,
+                promptEvalDurationMs: Number.isFinite(Number(payload?.prompt_eval_duration))
+                    ? Math.round(Number(payload.prompt_eval_duration) / 1e6)
+                    : null,
+                evalDurationMs: Number.isFinite(Number(payload?.eval_duration))
+                    ? Math.round(Number(payload.eval_duration) / 1e6)
+                    : null,
+                clientDurationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+            };
+        }
+
+        function assertCompletedResponse(payload, model, diagnostic) {
+            const doneReason = String(payload?.done_reason || '').toLowerCase();
+            if (payload?.done === false) {
+                throw createOllamaError(
+                    'OLLAMA_INCOMPLETE_RESPONSE',
+                    `${model} stopped before completing its response.`,
+                    diagnostic
+                );
+            }
+            if (['length', 'max_tokens', 'token_limit'].includes(doneReason)) {
+                throw createOllamaError(
+                    'OLLAMA_TOKEN_LIMIT',
+                    `${model} reached its output-token limit before finishing.`,
+                    diagnostic
+                );
+            }
         }
 
         async function releaseFailedModel(model) {
@@ -867,6 +1043,80 @@
             }
         }
 
+        function startOllamaRequestMonitor(model, options) {
+            let stopped = false;
+            let lastLoadedState = null;
+            let monitorErrorReported = false;
+            let wakeMonitor = null;
+            let lastHeartbeatRecordedAt = 0;
+            const startedAt = performance.now();
+            const promise = (async () => {
+                while (!stopped) {
+                    await new Promise(resolve => {
+                        const timer = setTimeout(resolve, 1500);
+                        wakeMonitor = () => {
+                            clearTimeout(timer);
+                            resolve();
+                        };
+                    });
+                    wakeMonitor = null;
+                    if (stopped) break;
+                    try {
+                        const response = await fetch(`${OLLAMA_BASE_URL}/api/ps`, {
+                            method: 'GET',
+                            signal: AbortSignal.timeout(1500),
+                        });
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        const payload = await response.json();
+                        const loadedModel = (payload?.models || []).find(entry =>
+                            String(entry?.name || '').toLowerCase() === String(model).toLowerCase()
+                        );
+                        const isLoaded = Boolean(loadedModel);
+                        const stateChanged = isLoaded !== lastLoadedState;
+                        if (stateChanged) {
+                            lastLoadedState = isLoaded;
+                            emitGenerationStatus(
+                                options,
+                                isLoaded ? 'model_loaded' : 'model_loading',
+                                isLoaded
+                                    ? `${model} is loaded and generating the response...`
+                                    : `Loading ${model} into VRAM...`,
+                                { model }
+                            );
+                        }
+                        const elapsedMs = Math.max(0, Math.round(performance.now() - startedAt));
+                        if (stateChanged || elapsedMs - lastHeartbeatRecordedAt >= 5000) {
+                            lastHeartbeatRecordedAt = elapsedMs;
+                            recordLlmDiagnostic('ollama_heartbeat', {
+                                traceId: options.traceId || null,
+                                model,
+                                elapsedMs,
+                                loaded: isLoaded,
+                                sizeVramBytes: loadedModel?.size_vram ?? null,
+                                expiresAt: loadedModel?.expires_at || null,
+                            });
+                        }
+                    } catch (err) {
+                        if (!monitorErrorReported) {
+                            monitorErrorReported = true;
+                            recordLlmDiagnostic('ollama_monitor_unavailable', {
+                                traceId: options.traceId || null,
+                                model,
+                                message: err?.message || String(err),
+                            });
+                        }
+                    }
+                }
+            })();
+            return {
+                async stop() {
+                    stopped = true;
+                    wakeMonitor?.();
+                    await promise;
+                }
+            };
+        }
+
         function rememberRecoveredModel(model, failedModel) {
             if (!model || model === failedModel) return;
             localStorage.setItem('gnosys_active_llm', model);
@@ -879,6 +1129,7 @@
         async function requestOllamaModel(model, systemPrompt, userPrompt, options) {
             const stream = Boolean(options.stream);
             const history = Array.isArray(options.history) ? options.history : [];
+            const startedAt = performance.now();
 
             const messages = [];
             if (systemPrompt) {
@@ -890,19 +1141,39 @@
             }
             messages.push({ role: 'user', content: String(userPrompt || '') });
 
-            emitGenerationStatus(options, 'loading_model', `Loading ${model} into VRAM...`, { model });
-            const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model,
-                    messages,
-                    stream,
-                    options: options.ollamaOptions || {},
-                    format: options.responseFormat || (options.structuredResponse ? 'json' : undefined),
-                    keep_alive: '90s',
-                }),
+            const ollamaOptions = { ...(options.ollamaOptions || {}) };
+            recordLlmDiagnostic('ollama_request', {
+                traceId: options.traceId || null,
+                model,
+                stream,
+                structuredResponse: Boolean(options.structuredResponse),
+                think: options.think ?? null,
+                numPredict: ollamaOptions.num_predict ?? null,
+                messageCount: messages.length,
+                messageCharacters: messages.reduce((total, message) => total + message.content.length, 0),
             });
+            emitGenerationStatus(options, 'loading_model', `Loading ${model} into VRAM...`, { model });
+            const requestMonitor = stream ? null : startOllamaRequestMonitor(model, options);
+            let response;
+            try {
+                response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: options.signal || AbortSignal.timeout(options.timeoutMs || 240000),
+                    body: JSON.stringify({
+                        model,
+                        messages,
+                        stream,
+                        think: options.think,
+                        options: ollamaOptions,
+                        format: options.responseFormat || (options.structuredResponse ? 'json' : undefined),
+                        keep_alive: '90s',
+                    }),
+                });
+            } catch (err) {
+                await requestMonitor?.stop();
+                throw err;
+            }
 
             if (!response.ok) {
                 let detail = '';
@@ -911,24 +1182,48 @@
                 } catch (_err) {
                     detail = '';
                 }
+                const diagnostic = {
+                    traceId: options.traceId || null,
+                    model,
+                    httpStatus: response.status,
+                    responseBodyLength: detail.length,
+                    clientDurationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+                };
+                await requestMonitor?.stop();
+                recordLlmDiagnostic('ollama_http_error', diagnostic);
                 throw createOllamaError(
                     response.status >= 500 ? 'OLLAMA_MODEL_ERROR' : 'OLLAMA_REQUEST_FAILED',
-                    `Ollama request failed for ${model}: ${response.status}${detail ? ` ${detail}` : ''}`
+                    `Ollama request failed for ${model}: ${response.status}${detail ? ` ${detail}` : ''}`,
+                    diagnostic
                 );
             }
 
             emitGenerationStatus(options, 'generating_response', `${model} is analyzing the lyrics...`, { model });
 
             if (!stream) {
-                const payload = await response.json();
-                if (payload?.error) {
-                    throw createOllamaError('OLLAMA_MODEL_ERROR', `${model}: ${payload.error}`);
+                let payload;
+                try {
+                    payload = await response.json();
+                } finally {
+                    await requestMonitor?.stop();
                 }
-                if (payload?.done === false) {
-                    throw createOllamaError('OLLAMA_INCOMPLETE_RESPONSE', `${model} stopped before completing its response.`);
+                if (payload?.error) {
+                    throw createOllamaError(
+                        'OLLAMA_MODEL_ERROR',
+                        `${model}: ${payload.error}`,
+                        buildResponseDiagnostic(payload, model, options, startedAt)
+                    );
                 }
                 const text = payload?.message?.content || payload?.response || '';
-                return { provider: 'desktop-ollama', model, text: validateOllamaText(text, model) };
+                const diagnostic = buildResponseDiagnostic(payload, model, options, startedAt, text);
+                recordLlmDiagnostic('ollama_response', diagnostic);
+                assertCompletedResponse(payload, model, diagnostic);
+                return {
+                    provider: 'desktop-ollama',
+                    model,
+                    text: validateOllamaText(text, model, options, diagnostic),
+                    responseMetadata: diagnostic,
+                };
             }
 
             if (!response.body) {
@@ -940,6 +1235,7 @@
             let fullText = '';
             let lineBuffer = '';
             let sawCompletion = false;
+            let completionPayload = null;
 
             const consumeLine = (line) => {
                 if (!line.trim()) return;
@@ -952,7 +1248,10 @@
                 if (data?.error) {
                     throw createOllamaError('OLLAMA_MODEL_ERROR', `${model}: ${data.error}`);
                 }
-                if (data?.done === true) sawCompletion = true;
+                if (data?.done === true) {
+                    sawCompletion = true;
+                    completionPayload = data;
+                }
                 const token = typeof data?.message?.content === 'string' ? data.message.content : '';
                 if (!token) return;
                 fullText += token;
@@ -973,10 +1272,23 @@
             lineBuffer += decoder.decode();
             if (lineBuffer.trim()) consumeLine(lineBuffer);
             if (!sawCompletion) {
-                throw createOllamaError('OLLAMA_INCOMPLETE_RESPONSE', `${model} stream ended before Ollama reported completion.`);
+                const diagnostic = buildResponseDiagnostic(completionPayload, model, options, startedAt, fullText);
+                throw createOllamaError(
+                    'OLLAMA_INCOMPLETE_RESPONSE',
+                    `${model} stream ended before Ollama reported completion.`,
+                    diagnostic
+                );
             }
 
-            return { provider: 'desktop-ollama', model, text: validateOllamaText(fullText, model) };
+            const diagnostic = buildResponseDiagnostic(completionPayload, model, options, startedAt, fullText);
+            recordLlmDiagnostic('ollama_response', diagnostic);
+            assertCompletedResponse(completionPayload, model, diagnostic);
+            return {
+                provider: 'desktop-ollama',
+                model,
+                text: validateOllamaText(fullText, model, options, diagnostic),
+                responseMetadata: diagnostic,
+            };
         }
 
         return {
@@ -1001,28 +1313,71 @@
                     if (model !== selectedModel) rememberRecoveredModel(model, selectedModel);
                     return result;
                 } catch (err) {
+                    let recoveryError = err;
+                    const thinkingConsumedResponse = (
+                        ['OLLAMA_EMPTY_RESPONSE', 'OLLAMA_TOKEN_LIMIT', 'OLLAMA_INCOMPLETE_RESPONSE'].includes(err?.code) &&
+                        Number(err?.diagnostic?.thinkingLength || 0) > 0 &&
+                        options.think !== false
+                    );
+                    if (thinkingConsumedResponse) {
+                        emitGenerationStatus(
+                            options,
+                            'retry_without_thinking',
+                            `${model} used its response budget for hidden reasoning. Retrying without thinking...`,
+                            { model, reason: err.code }
+                        );
+                        recordLlmDiagnostic('model_retry', {
+                            traceId: options.traceId || null,
+                            model,
+                            reason: err.code,
+                            strategy: 'disable_thinking',
+                            previousResponse: err.diagnostic || null,
+                        });
+                        await releaseFailedModel(model);
+                        try {
+                            return await requestOllamaModel(model, systemPrompt, userPrompt, {
+                                ...options,
+                                think: false,
+                                ollamaOptions: {
+                                    ...(options.ollamaOptions || {}),
+                                    num_predict: Math.max(4096, Number(options.ollamaOptions?.num_predict || 0)),
+                                },
+                            });
+                        } catch (retryErr) {
+                            recoveryError = retryErr;
+                        }
+                    }
+
                     const recoverableCodes = new Set([
                         'OLLAMA_MODEL_ERROR',
                         'OLLAMA_EMPTY_RESPONSE',
                         'OLLAMA_CORRUPT_OUTPUT',
                         'OLLAMA_INCOMPLETE_RESPONSE',
                         'OLLAMA_STREAM_PARSE',
+                        'OLLAMA_TOKEN_LIMIT',
+                        'OLLAMA_INVALID_STRUCTURED_RESPONSE',
                     ]);
-                    const fallbackModel = recoverableCodes.has(err?.code)
+                    const fallbackModel = recoverableCodes.has(recoveryError?.code)
                         ? resolveRecoveryModel(model)
                         : '';
-                    if (!fallbackModel) throw err;
+                    if (!fallbackModel) throw recoveryError;
 
-                    console.warn(`[GnosysLLM] ${model} failed (${err.code}); retrying with ${fallbackModel}.`, err);
+                    console.warn(`[GnosysLLM] ${model} failed (${recoveryError.code}); retrying with ${fallbackModel}.`, recoveryError);
                     emitGenerationStatus(
                         options,
                         'model_recovery',
                         `${model} returned an unusable response. Unloading it and retrying with ${fallbackModel}...`,
-                        { model: fallbackModel, failedModel: model, reason: err.code }
+                        { model: fallbackModel, failedModel: model, reason: recoveryError.code }
                     );
+                    recordLlmDiagnostic('model_fallback', {
+                        traceId: options.traceId || null,
+                        failedModel: model,
+                        fallbackModel,
+                        reason: recoveryError.code,
+                        previousResponse: recoveryError.diagnostic || null,
+                    });
                     await releaseFailedModel(model);
                     const recovered = await requestOllamaModel(fallbackModel, systemPrompt, userPrompt, options);
-                    rememberRecoveredModel(fallbackModel, model);
                     return { ...recovered, recoveredFrom: model };
                 }
             },

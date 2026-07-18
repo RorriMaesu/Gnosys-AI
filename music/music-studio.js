@@ -354,6 +354,58 @@
     let isChatResponding = false;
     let isCritiqueMode = false;
     let activeCritiqueData = null;
+    const MAX_ASSISTANT_HISTORY_MESSAGES = 8;
+    const MAX_ASSISTANT_HISTORY_CHARACTERS = 12000;
+    const CRITIQUE_RESPONSE_FORMAT = {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+            scores: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    mnemonic: { type: 'integer', minimum: 0, maximum: 100, description: 'Mnemonic density score from 0 to 100.' },
+                    rhythm: { type: 'integer', minimum: 0, maximum: 100, description: 'Rhythm and flow score from 0 to 100.' },
+                    accuracy: { type: 'integer', minimum: 0, maximum: 100, description: 'Factual accuracy score from 0 to 100.' },
+                    rhyme: { type: 'integer', minimum: 0, maximum: 100, description: 'Rhyme and catchiness score from 0 to 100.' },
+                },
+                required: ['mnemonic', 'rhythm', 'accuracy', 'rhyme'],
+            },
+            annotations: {
+                type: 'array',
+                minItems: 1,
+                maxItems: 12,
+                items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                        startLine: { type: 'integer', minimum: 1 },
+                        endLine: { type: 'integer', minimum: 1 },
+                        category: { type: 'string', enum: ['rhythm', 'mnemonic', 'accuracy', 'rhyme'] },
+                        message: { type: 'string', maxLength: 500 },
+                        suggestion: { type: 'string', maxLength: 500 },
+                    },
+                    required: ['startLine', 'endLine', 'category', 'message', 'suggestion'],
+                },
+            },
+            chatResponse: { type: 'string', maxLength: 1500 },
+        },
+        required: ['scores', 'annotations', 'chatResponse'],
+    };
+
+    function getRecentStudioConversationHistory() {
+        const source = studioConversationHistory.slice(0, -1);
+        const selected = [];
+        let characterCount = 0;
+        for (let i = source.length - 1; i >= 0 && selected.length < MAX_ASSISTANT_HISTORY_MESSAGES; i--) {
+            const entry = source[i];
+            if (!entry || typeof entry.content !== 'string' || !entry.content.trim()) continue;
+            if (characterCount + entry.content.length > MAX_ASSISTANT_HISTORY_CHARACTERS) break;
+            selected.unshift({ role: entry.role, content: entry.content });
+            characterCount += entry.content.length;
+        }
+        return selected;
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         // If we are in the top-level parent window wrapper (where the page is wrapped in an iframe), abort
@@ -2432,7 +2484,35 @@
         await runCritiqueAPI(userPrompt);
     }
 
-    function renderCritiqueStatus(message, state = 'loading') {
+    function appendLlmDiagnosticButton(container, traceId = null) {
+        if (!container || typeof window.GnosysLLM?.downloadDiagnostics !== 'function') return;
+        if (traceId) {
+            const trace = document.createElement('div');
+            trace.className = 'mt-2 text-[10px] font-mono text-slate-500 break-all';
+            trace.textContent = `Diagnostic trace: ${traceId}`;
+            container.appendChild(trace);
+        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'mt-3 px-3 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-[10px] font-bold text-slate-300 border border-white/10 transition-colors';
+        button.innerHTML = '<i class="fa-solid fa-file-arrow-down mr-1.5"></i>Download Safe LLM Diagnostic';
+        button.addEventListener('click', () => window.GnosysLLM.downloadDiagnostics());
+        container.appendChild(button);
+    }
+
+    function renderAssistantError(container, error, prefix = 'Assistant request failed') {
+        if (!container) return;
+        container.innerHTML = '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'text-red-300';
+        const message = document.createElement('div');
+        message.textContent = `${prefix}: ${error?.message || 'Unknown local model error.'}`;
+        wrapper.appendChild(message);
+        appendLlmDiagnosticButton(wrapper, error?.traceId || null);
+        container.appendChild(wrapper);
+    }
+
+    function renderCritiqueStatus(message, state = 'loading', traceId = null) {
         const listContainer = document.getElementById('critique-annotations-list');
         if (!listContainer) return;
         const isError = state === 'error';
@@ -2447,6 +2527,7 @@
             status.appendChild(icon);
         }
         status.appendChild(document.createTextNode(String(message || 'Working...')));
+        if (isError) appendLlmDiagnosticButton(status, traceId);
         listContainer.appendChild(status);
     }
 
@@ -2523,6 +2604,7 @@ Return exactly one JSON object in this format:
   "chatResponse": "A concise explanation of the two most important critique findings."
 }
 Return strict JSON only: use double-quoted keys and strings, and do not include comments, markdown fences, XML tags, or trailing commas.
+Return no more than 12 annotations. Combine nearby lines into one annotation instead of repeating the same feedback.
 Use chatResponse to walk the user through 1 or 2 key critique points step-by-step. Let the user decide when to apply changes.
 NEVER place critiques, notes, comments, feedback, or explanations inside the <edit_lyrics> tag or inline within the lyrics. The <edit_lyrics> tag must contain ONLY clean, performable song lyrics. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
 `;
@@ -2536,39 +2618,12 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
                     // stream can never masquerade as a formatting failure.
                     stream: false,
                     structuredResponse: true,
-                    responseFormat: {
-                        type: 'object',
-                        properties: {
-                            scores: {
-                                type: 'object',
-                                properties: {
-                                    mnemonic: { type: 'integer', minimum: 0, maximum: 100 },
-                                    rhythm: { type: 'integer', minimum: 0, maximum: 100 },
-                                    accuracy: { type: 'integer', minimum: 0, maximum: 100 },
-                                    rhyme: { type: 'integer', minimum: 0, maximum: 100 },
-                                },
-                                required: ['mnemonic', 'rhythm', 'accuracy', 'rhyme'],
-                            },
-                            annotations: {
-                                type: 'array',
-                                items: {
-                                    type: 'object',
-                                    properties: {
-                                        startLine: { type: 'integer', minimum: 1 },
-                                        endLine: { type: 'integer', minimum: 1 },
-                                        category: { type: 'string', enum: ['rhythm', 'mnemonic', 'accuracy', 'rhyme'] },
-                                        message: { type: 'string' },
-                                        suggestion: { type: 'string' },
-                                    },
-                                    required: ['startLine', 'endLine', 'category', 'message', 'suggestion'],
-                                },
-                            },
-                            chatResponse: { type: 'string' },
-                        },
-                        required: ['scores', 'annotations', 'chatResponse'],
-                    },
-                    ollamaOptions: { temperature: 0.2 },
-                    history: studioConversationHistory.slice(0, -1),
+                    responseFormat: CRITIQUE_RESPONSE_FORMAT,
+                    think: false,
+                    ollamaOptions: { temperature: 0.2, num_predict: 4096 },
+                    // The current lyrics are already present in the system prompt.
+                    // Old critique JSON only bloats context and encourages repetition.
+                    history: [],
                     onToken: (token, fullText) => {
                         responseText = fullText;
                     },
@@ -2604,7 +2659,7 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
                 // Also append the chat response to the chat history bubble so they can read it when switching back
                 const bubble = appendChatMessage("Gnosys AI", "", "agent");
                 const bubbleBody = bubble.querySelector('.agent-message-body');
-                const chatText = parseChatResponse(responseText) || String(critiqueData.chatResponse || '').trim();
+                const chatText = getAssistantDisplayText(responseText, critiqueData);
                 if (chatText) {
                     bubbleBody.innerHTML = parseMarkdown(chatText);
                 } else {
@@ -2623,7 +2678,7 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
         } catch (err) {
             const message = err?.message || 'Unknown local model error.';
             console.error('[Music Studio] Critique run failed:', err);
-            renderCritiqueStatus(`Critique failed: ${message}`, 'error');
+            renderCritiqueStatus(`Critique failed: ${message}`, 'error', err?.traceId || null);
             showBannerNotification(`Critique run failed: ${message}`, "error");
         } finally {
             isChatResponding = false;
@@ -3039,6 +3094,18 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
         return chatText.trim();
     }
 
+    function getAssistantDisplayText(rawText, critiqueData = null) {
+        const critiqueChat = String(critiqueData?.chatResponse || '').trim();
+        if (critiqueChat) return critiqueChat;
+        const taggedChat = parseChatResponse(String(rawText || ''));
+        if (taggedChat) return taggedChat;
+        return String(rawText || '')
+            .replace(/<edit_lyrics\b[^>]*>[\s\S]*?<\/edit_lyrics>/gi, '')
+            .replace(/<update_settings>[\s\S]*?<\/update_settings>/gi, '')
+            .replace(/<critique_data>[\s\S]*?<\/critique_data>/gi, '')
+            .trim();
+    }
+
     function parseEditLyrics(rawText) {
         const match = rawText.match(/<edit_lyrics([^>]*)>([\s\S]*?)<\/edit_lyrics>/i);
         if (match) {
@@ -3291,30 +3358,13 @@ INSTRUCTIONS FOR CONVERSATION AND EDITING:
             systemPrompt += `
 CRITIQUE & REVIEW INSTRUCTIONS:
 The user wants to review and critique the current lyrics.
-You MUST analyze the lyrics across four dimensions and return a scorecard and specific line annotations.
-Place this data in a <critique_data>...</critique_data> tag containing a JSON object in this format:
-{
-  "scores": {
-    "mnemonic": 85, // Mnemonic Density (0-100)
-    "rhythm": 70,    // Rhythm & Flow (0-100)
-    "accuracy": 90,  // Scientific Accuracy (0-100)
-    "rhyme": 80      // Rhyme & Catchiness (0-100)
-  },
-  "annotations": [
-    {
-      "startLine": 5,
-      "endLine": 6,
-      "category": "rhythm", // "rhythm", "mnemonic", "accuracy", "rhyme"
-      "message": "Line 6 is metrically heavy. Suggest shortening to balance syllables.",
-      "suggestion": "Physiology is how it works, the chemistry!"
-    }
-  ]
-}
-Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. NEVER place critiques, comments, or review notes inline inside the lyrics or within the <edit_lyrics> tag. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
+Analyze mnemonic density, rhythm and flow, factual accuracy, and rhyme and catchiness.
+For this response, return exactly one JSON object matching the supplied schema. Do not return XML tags or markdown fences.
+Use scores from 0 to 100. Return no more than 12 annotations, combining nearby lines when feedback repeats.
+Place a concise explanation of the two most important findings in chatResponse.
 `;
-        }
-
-        systemPrompt += `
+        } else {
+            systemPrompt += `
 EXAMPLE OUTPUT FORMATS:
 1. Normal Chat Response:
 <chat_response>I've made the chorus catchier by adding some rhythm terms! Let me update that section for you now.</chat_response>
@@ -3334,29 +3384,8 @@ Keep the body balanced in the homeostatic light!
   "music-bpm": "80"
 }
 </update_settings>
-
-3. Critique Mode Response:
-<chat_response>I've analyzed your lyrics and found some areas to refine. Specifically, line 6 has too many syllables, and we could increase mnemonic density on line 12. Take a look at the annotations on your Critique panel.</chat_response>
-<critique_data>
-{
-  "scores": {
-    "mnemonic": 75,
-    "rhythm": 60,
-    "accuracy": 95,
-    "rhyme": 80
-  },
-  "annotations": [
-    {
-      "startLine": 6,
-      "endLine": 6,
-      "category": "rhythm",
-      "message": "Line 6 breaks the syllable count of the meter.",
-      "suggestion": "Keep the body balanced in the homeostatic light!"
-    }
-  ]
-}
-</critique_data>
 `;
+        }
 
         const userPrompt = userText;
 
@@ -3410,9 +3439,23 @@ Keep the body balanced in the homeostatic light!
 
                 let streamStarted = false;
 
-                await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
-                    stream: true,
-                    history: studioConversationHistory.slice(0, -1),
+                const result = await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
+                    stream: !wantsCritique,
+                    structuredResponse: wantsCritique,
+                    responseFormat: wantsCritique ? CRITIQUE_RESPONSE_FORMAT : undefined,
+                    think: wantsCritique ? false : undefined,
+                    ollamaOptions: wantsCritique
+                        ? { temperature: 0.2, num_predict: 4096 }
+                        : { num_predict: 4096 },
+                    history: wantsCritique ? [] : getRecentStudioConversationHistory(),
+                    onStatus: (status) => {
+                        if (!status?.message) return;
+                        if (hudStatus) hudStatus.textContent = status.message;
+                        const modelText = modelRow?.querySelector('.stage-text');
+                        if (modelText && ['loading_model', 'model_loading', 'model_loaded', 'model_recovery', 'retry_without_thinking'].includes(status.stage)) {
+                            modelText.textContent = status.message;
+                        }
+                    },
                     onToken: (token, fullText) => {
                         responseText = fullText;
                         
@@ -3441,6 +3484,12 @@ Keep the body balanced in the homeostatic light!
                     }
                 });
 
+                responseText = String(result?.text || responseText || '').trim();
+                if (!responseText) {
+                    throw new Error(`${result?.model || 'The selected model'} returned no assistant response.`);
+                }
+                bubble.classList.remove('loading-state');
+
                 studioConversationHistory.push({ role: "assistant", content: responseText });
 
                 const edit = parseEditLyrics(responseText);
@@ -3460,13 +3509,17 @@ Keep the body balanced in the homeostatic light!
                 if (settings) {
                     applySettingsUpdate(settings);
                 }
+
+                const finalChatText = getAssistantDisplayText(responseText, critiqueData);
+                bubbleBody.innerHTML = parseMarkdown(finalChatText || 'The assistant completed the request.');
             } else {
                 bubble.classList.remove('loading-state');
                 bubbleBody.innerHTML = "Gnosys LLM Engine is currently loading or unavailable on this device tab.";
             }
         } catch (err) {
             bubble.classList.remove('loading-state');
-            bubbleBody.innerHTML = `Error generating response: ${err.message}`;
+            console.error('[Music Studio] Assistant request failed:', err);
+            renderAssistantError(bubbleBody, err, 'Error generating response');
         } finally {
             isChatResponding = false;
             if (sendBtn) {

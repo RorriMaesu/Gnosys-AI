@@ -944,7 +944,7 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
             source = handle.read()
 
         self.assertIn('btn-download-music-diagnostics', page)
-        self.assertIn('music-studio.js?v=20260718-critique-recovery1', page)
+        self.assertIn('music-studio.js?v=20260718-chatbot-diagnostics1', page)
         self.assertIn('/api/music/diagnostics?limit=150', source)
         self.assertIn('Prompts, lyrics, message content, and generated audio are not included.', source)
 
@@ -969,10 +969,12 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
             source = handle.read()
 
         self.assertIn('structuredResponse: true', source)
-        self.assertIn('responseFormat: {', source)
-        self.assertIn("required: ['scores', 'annotations', 'chatResponse']", source)
+        self.assertIn('responseFormat: CRITIQUE_RESPONSE_FORMAT', source)
+        self.assertIn('maxItems: 12', source)
+        self.assertIn('think: false', source)
+        self.assertIn('history: []', source)
         self.assertIn("responseText = String(result?.text || responseText || '').trim()", source)
-        self.assertIn("renderCritiqueStatus(`Critique failed: ${message}`, 'error')", source)
+        self.assertIn("renderCritiqueStatus(`Critique failed: ${message}`, 'error',", source)
         self.assertIn("parseStructuredJson(rawText, 'critique_data')", source)
 
     def test_llm_router_recovers_from_unusable_model_output(self):
@@ -983,8 +985,25 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
         self.assertIn("const DEFAULT_DESKTOP_MODEL = 'gemma4:12b'", source)
         self.assertIn('OLLAMA_CORRUPT_OUTPUT', source)
         self.assertIn('OLLAMA_INCOMPLETE_RESPONSE', source)
+        self.assertIn('OLLAMA_TOKEN_LIMIT', source)
+        self.assertIn('OLLAMA_INVALID_STRUCTURED_RESPONSE', source)
         self.assertIn('await releaseFailedModel(model)', source)
         self.assertIn("keep_alive: 0", source)
+        self.assertIn('downloadDiagnostics', source)
+        self.assertIn('thinkingLength', source)
+        self.assertIn("recordLlmDiagnostic('ollama_heartbeat'", source)
+        self.assertIn("`${OLLAMA_BASE_URL}/api/ps`", source)
+
+    def test_music_chat_uses_final_response_and_bounded_context(self):
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(project_root, 'music', 'music-studio.js'), 'r', encoding='utf-8') as handle:
+            source = handle.read()
+
+        self.assertIn('getRecentStudioConversationHistory()', source)
+        self.assertIn('MAX_ASSISTANT_HISTORY_CHARACTERS = 12000', source)
+        self.assertIn("responseText = String(result?.text || responseText || '').trim()", source)
+        self.assertIn('renderAssistantError(bubbleBody, err', source)
+        self.assertIn('Download Safe LLM Diagnostic', source)
 
 
 if __name__ == '__main__':
