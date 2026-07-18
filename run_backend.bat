@@ -23,6 +23,17 @@ if %errorlevel% equ 0 (
 
 setlocal enabledelayedexpansion
 
+:: Allow only the hosted Gnosys origin to reach this local helper in Edge.
+:: The PowerShell helper preserves existing policy values and supports -Remove.
+if exist "%~dp0scripts\configure-edge-loopback.ps1" (
+    echo [Gnosys AI] Configuring Microsoft Edge access for the hosted Music Studio...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\configure-edge-loopback.ps1"
+    if errorlevel 1 (
+        echo [Gnosys AI] WARNING: Edge loopback access could not be configured.
+        echo             The local Music Studio remains available at http://127.0.0.1:8020/music/
+    )
+)
+
 :: Check if ffmpeg is installed on the path
 where ffmpeg >nul 2>nul
 if errorlevel 1 (
