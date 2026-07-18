@@ -1097,7 +1097,8 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
             source = handle.read()
 
         self.assertIn('btn-download-music-diagnostics', page)
-        self.assertIn('music-studio.js?v=20260718-helper-version1', page)
+        self.assertIn('music-studio.js?v=20260718-critique-scorecard1', page)
+        self.assertIn('critique-score-justifications', page)
         self.assertIn('/api/music/diagnostics?limit=150', source)
         self.assertIn('Prompts, lyrics, message content, and generated audio are not included.', source)
 
@@ -1130,6 +1131,12 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
         self.assertIn("responseText = String(result?.text || responseText || '').trim()", source)
         self.assertIn("renderCritiqueStatus(`Critique failed: ${message}`, 'error',", source)
         self.assertIn("parseStructuredJson(rawText, 'critique_data')", source)
+        self.assertIn('formatNumberedLyrics(currentLyrics)', source)
+        self.assertIn('buildCritiqueEvidence(currentLyrics)', source)
+        self.assertIn('attachCritiqueSourceText(critiqueData, currentLyrics)', source)
+        self.assertIn("required: ['scores', 'justifications', 'annotations', 'chatResponse']", source)
+        self.assertIn('Lyrics changed — run Critique again', source)
+        self.assertIn('buildCritiqueHistorySummary(critiqueData)', source)
 
     def test_llm_router_recovers_from_unusable_model_output(self):
         project_root = os.path.dirname(os.path.abspath(__file__))
