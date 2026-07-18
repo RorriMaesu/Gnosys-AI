@@ -1134,10 +1134,18 @@
             badge.textContent = 'Starting (0/150)';
         }
         try {
-            const res = await fetch(`${API_BASE}/api/music/launch`, {
+            const localFetch = window.GnosysFetchLocalHelper || fetch;
+            const selectedMusicModel = document.getElementById('music-model')?.value || 'acemusic/acestep-v15-turbo';
+            const res = await localFetch(`${API_BASE}/api/music/launch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ comfy_path: comfyPath, vram_profile: vramProfile })
+                body: JSON.stringify({
+                    comfy_path: comfyPath,
+                    vram_profile: vramProfile,
+                    music_model: selectedMusicModel,
+                }),
+                timeoutMs: 60000,
+                targetAddressSpace: 'loopback',
             });
             const data = await res.json();
             if (data.status === 'success') {
@@ -1170,8 +1178,11 @@
         }
 
         try {
-            const res = await fetch(`${API_BASE}/api/music/stop`, {
-                method: 'POST'
+            const localFetch = window.GnosysFetchLocalHelper || fetch;
+            const res = await localFetch(`${API_BASE}/api/music/stop`, {
+                method: 'POST',
+                timeoutMs: 60000,
+                targetAddressSpace: 'loopback',
             });
             const data = await res.json();
             if (data.status === 'success') {

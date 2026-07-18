@@ -16,6 +16,7 @@ active_downloads_status = {}  # {repo_id: {'status': ..., 'progress': ..., 'spee
 active_download_processes = {}  # {repo_id: subprocess.Popen}
 install_status = {'progress': 0, 'step': 'idle', 'error': None}
 active_vram_profile = None
+active_music_model = None
 managed_ace_process = None
 accelerator_lock = threading.RLock()
 accelerator_state = {
@@ -30,6 +31,14 @@ ALLOWED_WEB_ORIGINS = {
     'http://127.0.0.1:8020',
     'http://localhost:8020',
 }
+
+DEFAULT_MUSIC_MODEL = 'acestep-v15-turbo'
+SUPPORTED_MUSIC_MODELS = {
+    'acestep-v15-turbo',
+    'acestep-v15-xl-turbo',
+    'acestep-v15-xl-sft',
+}
+MUSIC_GENERATION_TIMEOUT_SECONDS = 1800
 
 def get_quantime_install_path():
     if platform.system() != 'Windows':
@@ -196,6 +205,14 @@ def unload_ace_models():
 
 def required_music_free_mb(model_name):
     return 10240 if 'xl-' in (model_name or '').lower() else 6144
+
+def normalize_music_model(model_name):
+    normalized = (model_name or DEFAULT_MUSIC_MODEL).strip()
+    if normalized.startswith('acemusic/'):
+        normalized = normalized[len('acemusic/'):]
+    if normalized not in SUPPORTED_MUSIC_MODELS:
+        return DEFAULT_MUSIC_MODEL
+    return normalized
 
 def required_llm_free_mb(model_name):
     name = (model_name or '').lower()
@@ -755,7 +772,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        global active_vram_profile, managed_ace_process
+        global active_vram_profile, active_music_model, managed_ace_process
         request_origin = self.headers.get('Origin')
         if request_origin and request_origin not in ALLOWED_WEB_ORIGINS:
             self.send_response(403)
@@ -915,7 +932,6 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 ace_running = False
                 comfy_state = "offline"
                 if probe_port(8002):
-                    import urllib.request
                     try:
                         req = urllib.request.Request("http://127.0.0.1:8002/health")
                         with urllib.request.urlopen(req, timeout=1.0) as res:
@@ -964,6 +980,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'comfy_running': ace_running,
                     'comfy_state': comfy_state,
                     'active_vram_profile': active_vram_profile,
+                    'active_music_model': active_music_model,
                     'accelerator_owner': accelerator_state['owner'],
                     'custom_node_installed': True, # Mock true for backward compatibility
                     'models_installed': len(discovered_models) > 0,
@@ -993,11 +1010,13 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 ace_path = 'D:\\ComfyUI\\ACE-Step-1.5'
                 vram_profile = 'optimized'
+                music_model = DEFAULT_MUSIC_MODEL
                 content_length = int(self.headers.get('Content-Length', 0))
                 if content_length > 0:
                     body = json.loads(self.rfile.read(content_length).decode('utf-8'))
                     ace_path = body.get('comfy_path', ace_path)
                     vram_profile = body.get('vram_profile', 'optimized')
+                    music_model = normalize_music_model(body.get('music_model'))
                 ace_path = auto_resolve_ace_path(ace_path)
 
                 gpu_status = get_gpu_memory_status()
@@ -1006,8 +1025,16 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     vram_profile = 'optimized'
                     profile_adjusted = True
 
-                # Early Exit: If the API server is already running with the correct VRAM profile, share it
-                if probe_port(8002) and active_vram_profile == vram_profile:
+                # A warm server can switch models in-place. A lazy server must
+                # have been launched with the requested initial model, otherwise
+                # ACE-Step loads its larger default before switching models.
+                ace_health = get_ace_health()
+                can_share_server = (
+                    ace_health['online']
+                    and active_vram_profile == vram_profile
+                    and (ace_health['status'] == 'ok' or active_music_model == music_model)
+                )
+                if can_share_server:
                     print(f"[Launcher] API Server is already active on port 8002 with '{vram_profile}' profile. Sharing instance.")
                     self.send_response(200)
                     self.send_header('Content-type', 'application/json')
@@ -1017,6 +1044,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         'status': 'success',
                         'message': 'API Server is already running.',
                         'vram_profile': vram_profile,
+                        'music_model': active_music_model or music_model,
                         'profile_adjusted': profile_adjusted,
                     }).encode('utf-8'))
                     return
@@ -1028,10 +1056,12 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     kill_port_process(8002)
                     time.sleep(1.0)
                 active_vram_profile = None
+                active_music_model = None
 
                 # Launch environment copy with lazy loading enabled
                 env_copy = os.environ.copy()
                 env_copy["ACESTEP_NO_INIT"] = "true"
+                env_copy["ACESTEP_CONFIG_PATH"] = music_model
 
                 python_exe = os.path.join(ace_path, '.venv', 'Scripts', 'python.exe')
                 
@@ -1058,6 +1088,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     msg = f"Launched ACE-Step API Server ({vram_profile} VRAM) via system python"
 
                 active_vram_profile = vram_profile
+                active_music_model = music_model
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
@@ -1067,6 +1098,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'status': 'success',
                     'message': msg,
                     'vram_profile': vram_profile,
+                    'music_model': music_model,
                     'profile_adjusted': profile_adjusted,
                 }).encode('utf-8'))
             except Exception as e:
@@ -1145,7 +1177,6 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                             os.makedirs(os.path.join(tts_base, d), exist_ok=True)
                             
                         # Download config files to make nodes happy
-                        import urllib.request
                         configs = {
                             'ace_step_transformer/config.json': 'https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B/resolve/main/ace_step_transformer/config.json',
                             'music_dcae_f8c8/config.json': 'https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B/resolve/main/music_dcae_f8c8/config.json',
@@ -1289,16 +1320,23 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
                 payload = self.rfile.read(content_length)
+                try:
+                    generation_request = json.loads(payload.decode('utf-8'))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'status': 'error',
+                        'message': 'Music generation requires a valid JSON request body.',
+                    }).encode('utf-8'))
+                    return
 
                 # Keep generation compatible with an older or cached GitHub
                 # Pages frontend. The current UI acquires music ownership before
                 # this request, but the backend must also be able to recover after
                 # a helper restart, which resets its in-memory owner to idle.
                 if accelerator_state['owner'] != 'music':
-                    try:
-                        generation_request = json.loads(payload.decode('utf-8'))
-                    except (UnicodeDecodeError, json.JSONDecodeError):
-                        generation_request = {}
                     transition_accelerator(
                         'music',
                         music_model=generation_request.get('model'),
@@ -1316,32 +1354,40 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                     # Hold the coordinator lock for the full inference so another
                     # tab cannot unload weights while a track is being generated.
-                    with urllib.request.urlopen(req, timeout=600) as response_conn:
+                    with urllib.request.urlopen(req, timeout=MUSIC_GENERATION_TIMEOUT_SECONDS) as response_conn:
                         response_data = response_conn.read()
-                    
+
+                active_music_model = normalize_music_model(generation_request.get('model'))
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(response_data)))
                 self.end_headers()
                 self.wfile.write(response_data)
             except urllib.error.HTTPError as he:
+                error_data = he.read()
                 self.send_response(he.code)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
-                self.wfile.write(he.read())
+                self.wfile.write(error_data)
             except (urllib.error.URLError, TimeoutError, RuntimeError) as exc:
+                error_data = json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8')
                 self.send_response(503)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
-                self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
+                self.wfile.write(error_data)
             except Exception as exc:
+                error_data = json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8')
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
-                self.wfile.write(json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8'))
+                self.wfile.write(error_data)
         elif self.path == '/api/music/unload':
             try:
                 with accelerator_lock:
@@ -1377,6 +1423,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     if probe_port(8002):
                         kill_port_process(8002)
                     active_vram_profile = None
+                    active_music_model = None
                     accelerator_state['owner'] = 'idle'
                     accelerator_state['last_error'] = None
                     accelerator_state['updated_at'] = time.time()
@@ -1394,8 +1441,6 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/models':
             try:
-                import urllib.request
-                import urllib.error
                 req = urllib.request.Request('http://127.0.0.1:8002/v1/models')
                 with urllib.request.urlopen(req, timeout=10) as response_conn:
                     response_data = response_conn.read()
