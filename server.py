@@ -1025,7 +1025,6 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 print(f"[Launcher] Port 8002 mismatch or server offline. Cleaning up any openrouter processes...")
                 kill_openrouter_processes()
                 if probe_port(8002):
-                    import time
                     kill_port_process(8002)
                     time.sleep(1.0)
                 active_vram_profile = None
