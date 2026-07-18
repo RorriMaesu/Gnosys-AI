@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -69,6 +70,19 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             'last_error': None,
             'updated_at': None,
         })
+        if server.music_generation_lock.locked():
+            server.music_generation_lock.release()
+        with server.music_generation_state_lock:
+            server.music_generation_state.update({
+                'active': False,
+                'request_id': None,
+                'model': None,
+                'started_at': None,
+                'cancel_requested': False,
+                'last_result': None,
+                'last_error': None,
+                'updated_at': None,
+            })
 
     @staticmethod
     def snapshot(owner='idle', ace_status='lazy', ollama_models=None):
@@ -384,6 +398,123 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
             thread.join(timeout=5)
+
+    def test_stop_interrupts_active_generation_and_clears_busy_state(self):
+        upstream_started = threading.Event()
+        stop_upstream = threading.Event()
+        generation_response = {}
+
+        class BlockingUpstreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def read(self):
+                upstream_started.set()
+                if not stop_upstream.wait(timeout=5):
+                    raise TimeoutError('test generation did not receive stop signal')
+                raise server.urllib.error.URLError('ACE-Step process stopped')
+
+        server.accelerator_state['owner'] = 'music'
+        httpd = server.socketserver.ThreadingTCPServer(
+            ('127.0.0.1', 0),
+            server.GnosysHTTPRequestHandler,
+        )
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        def request_generation():
+            connection = http.client.HTTPConnection(
+                '127.0.0.1',
+                httpd.server_address[1],
+                timeout=10,
+            )
+            connection.request(
+                'POST',
+                '/api/music/generate',
+                body=json.dumps({
+                    'model': 'acemusic/acestep-v15-turbo',
+                    'messages': [{'role': 'user', 'content': '<prompt>test</prompt>'}],
+                }),
+                headers={'Content-Type': 'application/json'},
+            )
+            response = connection.getresponse()
+            generation_response['status'] = response.status
+            generation_response['body'] = json.loads(response.read().decode('utf-8'))
+            connection.close()
+
+        def stop_service():
+            stop_upstream.set()
+            return {'status': 'unloaded', 'mode': 'service_stopped'}
+
+        try:
+            with (
+                mock.patch.object(server, 'inspect_music_model', return_value={'installed': True}),
+                mock.patch.object(
+                    server.urllib.request,
+                    'urlopen',
+                    return_value=BlockingUpstreamResponse(),
+                ) as urlopen,
+                mock.patch.object(server, 'unload_ace_models', side_effect=stop_service) as unload,
+            ):
+                generation_thread = threading.Thread(target=request_generation, daemon=True)
+                generation_thread.start()
+                self.assertTrue(upstream_started.wait(timeout=3))
+                self.assertTrue(server.get_music_generation_snapshot()['active'])
+
+                duplicate = http.client.HTTPConnection(
+                    '127.0.0.1',
+                    httpd.server_address[1],
+                    timeout=3,
+                )
+                duplicate.request(
+                    'POST',
+                    '/api/music/generate',
+                    body=json.dumps({
+                        'model': 'acemusic/acestep-v15-turbo',
+                        'messages': [{'role': 'user', 'content': '<prompt>duplicate</prompt>'}],
+                    }),
+                    headers={'Content-Type': 'application/json'},
+                )
+                duplicate_response = duplicate.getresponse()
+                duplicate_body = json.loads(duplicate_response.read().decode('utf-8'))
+                duplicate.close()
+                self.assertEqual(duplicate_response.status, 409)
+                self.assertEqual(duplicate_body['status'], 'generation_in_progress')
+                self.assertIn('Stop Generation', duplicate_body['message'])
+                self.assertEqual(urlopen.call_count, 1)
+
+                started_at = time.monotonic()
+                stop_connection = http.client.HTTPConnection(
+                    '127.0.0.1',
+                    httpd.server_address[1],
+                    timeout=5,
+                )
+                stop_connection.request('POST', '/api/music/stop')
+                stop_response = stop_connection.getresponse()
+                stop_body = json.loads(stop_response.read().decode('utf-8'))
+                stop_connection.close()
+                stop_elapsed = time.monotonic() - started_at
+
+                generation_thread.join(timeout=5)
+                self.assertFalse(generation_thread.is_alive())
+                self.assertLess(stop_elapsed, 2)
+                self.assertEqual(stop_response.status, 200)
+                self.assertTrue(stop_body['result']['stopped_active_generation'])
+                unload.assert_called_once_with()
+                self.assertEqual(generation_response['status'], 409)
+                self.assertEqual(generation_response['body']['status'], 'cancelled')
+                snapshot = server.get_music_generation_snapshot()
+                self.assertFalse(snapshot['active'])
+                self.assertEqual(snapshot['last_result'], 'cancelled')
+                self.assertEqual(server.accelerator_state['owner'], 'idle')
+        finally:
+            stop_upstream.set()
+            httpd.shutdown()
+            httpd.server_close()
+            server_thread.join(timeout=5)
 
 
 if __name__ == '__main__':

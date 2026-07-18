@@ -26,6 +26,18 @@ accelerator_state = {
     'last_error': None,
     'updated_at': None,
 }
+music_generation_lock = threading.Lock()
+music_generation_state_lock = threading.Lock()
+music_generation_state = {
+    'active': False,
+    'request_id': None,
+    'model': None,
+    'started_at': None,
+    'cancel_requested': False,
+    'last_result': None,
+    'last_error': None,
+    'updated_at': None,
+}
 
 ALLOWED_WEB_ORIGINS = {
     'https://rorrimaesu.github.io',
@@ -362,6 +374,91 @@ def normalize_music_model(model_name):
         return DEFAULT_MUSIC_MODEL
     return normalized
 
+def get_music_generation_snapshot():
+    with music_generation_state_lock:
+        return dict(music_generation_state)
+
+def begin_music_generation(model_name):
+    if not music_generation_lock.acquire(blocking=False):
+        return None
+    request_id = f"music-{time.time_ns()}"
+    now = time.time()
+    with music_generation_state_lock:
+        music_generation_state.update({
+            'active': True,
+            'request_id': request_id,
+            'model': model_name,
+            'started_at': now,
+            'cancel_requested': False,
+            'last_result': 'running',
+            'last_error': None,
+            'updated_at': now,
+        })
+    return request_id
+
+def request_music_generation_cancel():
+    now = time.time()
+    with music_generation_state_lock:
+        was_active = music_generation_state['active']
+        if was_active:
+            music_generation_state['cancel_requested'] = True
+            music_generation_state['last_result'] = 'cancelling'
+            music_generation_state['updated_at'] = now
+        snapshot = dict(music_generation_state)
+    return was_active, snapshot
+
+def music_generation_was_cancelled(request_id):
+    with music_generation_state_lock:
+        return (
+            music_generation_state['request_id'] == request_id
+            and music_generation_state['cancel_requested']
+        )
+
+def finish_music_generation(request_id, result, error=None):
+    should_release = False
+    now = time.time()
+    with music_generation_state_lock:
+        if music_generation_state['request_id'] == request_id:
+            if music_generation_state['cancel_requested']:
+                result = 'cancelled'
+                error = None
+            music_generation_state.update({
+                'active': False,
+                'request_id': None,
+                'model': None,
+                'started_at': None,
+                'cancel_requested': False,
+                'last_result': result,
+                'last_error': error,
+                'updated_at': now,
+            })
+            should_release = True
+    if should_release and music_generation_lock.locked():
+        music_generation_lock.release()
+
+def wait_for_music_generation_idle(timeout=10):
+    deadline = time.time() + timeout
+    snapshot = get_music_generation_snapshot()
+    while snapshot['active'] and time.time() < deadline:
+        time.sleep(0.05)
+        snapshot = get_music_generation_snapshot()
+    return snapshot
+
+def stop_music_service():
+    was_generating, generation_before = request_music_generation_cancel()
+    with accelerator_lock:
+        service_result = unload_ace_models()
+        accelerator_state['owner'] = 'idle'
+        accelerator_state['last_error'] = None
+        accelerator_state['updated_at'] = time.time()
+    generation_after = wait_for_music_generation_idle()
+    return {
+        'service': service_result,
+        'stopped_active_generation': was_generating,
+        'generation_before': generation_before,
+        'generation': generation_after,
+    }
+
 def required_llm_free_mb(model_name):
     name = (model_name or '').lower()
     if '26b' in name:
@@ -393,6 +490,7 @@ def get_accelerator_snapshot():
         'last_error': accelerator_state['last_error'],
         'updated_at': accelerator_state['updated_at'],
         'active_vram_profile': active_vram_profile,
+        'music_generation': get_music_generation_snapshot(),
         'ace': ace,
         'ollama': ollama,
         'gpu': gpu,
@@ -406,6 +504,9 @@ def transition_accelerator(target_owner, music_model=None, llm_model=None, vram_
     if not accelerator_lock.acquire(timeout=1):
         raise RuntimeError('The accelerator is busy generating a track. Wait for generation to finish before switching models.')
     try:
+        generation = get_music_generation_snapshot()
+        if generation['active'] and target_owner != 'music':
+            raise RuntimeError('A track is currently generating. Use Stop Generation before switching GPU owners.')
         accelerator_state['transitioning'] = True
         accelerator_state['last_error'] = None
         accelerator_state['updated_at'] = time.time()
@@ -1132,6 +1233,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'active_vram_profile': active_vram_profile,
                     'active_music_model': active_music_model,
                     'accelerator_owner': accelerator_state['owner'],
+                    'generation': get_music_generation_snapshot(),
                     'custom_node_installed': True, # Mock true for backward compatibility
                     'models_installed': len(discovered_models) > 0,
                     'active_downloads': active_downloads,
@@ -1470,6 +1572,9 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/generate':
+            generation_id = None
+            generation_result = 'failed'
+            generation_error = None
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
                 payload = self.rfile.read(content_length)
@@ -1528,18 +1633,39 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with accelerator_lock:
                     if accelerator_state['owner'] != 'music':
                         raise RuntimeError('Music does not own the accelerator. Complete the VRAM transition before generating.')
-                    req = urllib.request.Request(
-                        'http://127.0.0.1:8002/v1/chat/completions',
-                        data=payload,
-                        headers={'Content-Type': 'application/json'}
-                    )
+                    generation_id = begin_music_generation(requested_model)
 
-                    # Hold the coordinator lock for the full inference so another
-                    # tab cannot unload weights while a track is being generated.
-                    with urllib.request.urlopen(req, timeout=MUSIC_GENERATION_TIMEOUT_SECONDS) as response_conn:
-                        response_data = response_conn.read()
+                if generation_id is None:
+                    generation = get_music_generation_snapshot()
+                    error_data = json.dumps({
+                        'status': 'generation_in_progress',
+                        'message': 'A track is already being generated. Use Stop Generation to cancel it before starting another.',
+                        'generation': generation,
+                    }).encode('utf-8')
+                    self.send_response(409)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Content-Length', str(len(error_data)))
+                    self.end_headers()
+                    self.wfile.write(error_data)
+                    return
+
+                req = urllib.request.Request(
+                    'http://127.0.0.1:8002/v1/chat/completions',
+                    data=payload,
+                    headers={'Content-Type': 'application/json'}
+                )
+
+                # Inference runs without the coordinator lock so the Stop
+                # Generation endpoint can terminate ACE-Step immediately.
+                with urllib.request.urlopen(req, timeout=MUSIC_GENERATION_TIMEOUT_SECONDS) as response_conn:
+                    response_data = response_conn.read()
+
+                if music_generation_was_cancelled(generation_id):
+                    raise RuntimeError('Generation cancelled by user.')
 
                 active_music_model = requested_model
+                generation_result = 'completed'
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -1547,36 +1673,55 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(response_data)
             except urllib.error.HTTPError as he:
-                error_data = he.read()
-                self.send_response(he.code)
+                generation_error = str(he)
+                cancelled = generation_id and music_generation_was_cancelled(generation_id)
+                if cancelled:
+                    error_data = json.dumps({
+                        'status': 'cancelled',
+                        'message': 'Track generation was stopped.',
+                    }).encode('utf-8')
+                    status_code = 409
+                else:
+                    error_data = he.read()
+                    status_code = he.code
+                self.send_response(status_code)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
                 self.wfile.write(error_data)
             except (urllib.error.URLError, TimeoutError, RuntimeError) as exc:
-                error_data = json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8')
-                self.send_response(503)
+                generation_error = str(exc)
+                cancelled = generation_id and music_generation_was_cancelled(generation_id)
+                error_data = json.dumps({
+                    'status': 'cancelled' if cancelled else 'error',
+                    'message': 'Track generation was stopped.' if cancelled else str(exc),
+                }).encode('utf-8')
+                self.send_response(409 if cancelled else 503)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
                 self.wfile.write(error_data)
             except Exception as exc:
-                error_data = json.dumps({'status': 'error', 'message': str(exc)}).encode('utf-8')
-                self.send_response(500)
+                generation_error = str(exc)
+                cancelled = generation_id and music_generation_was_cancelled(generation_id)
+                error_data = json.dumps({
+                    'status': 'cancelled' if cancelled else 'error',
+                    'message': 'Track generation was stopped.' if cancelled else str(exc),
+                }).encode('utf-8')
+                self.send_response(409 if cancelled else 500)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
                 self.wfile.write(error_data)
+            finally:
+                if generation_id is not None:
+                    finish_music_generation(generation_id, generation_result, generation_error)
         elif self.path == '/api/music/unload':
             try:
-                with accelerator_lock:
-                    result = unload_ace_models()
-                    accelerator_state['owner'] = 'idle'
-                    accelerator_state['last_error'] = None
-                    accelerator_state['updated_at'] = time.time()
+                result = stop_music_service()
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -1591,30 +1736,21 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
         elif self.path == '/api/music/stop':
             try:
-                with accelerator_lock:
-                    print("[Launcher] Stopping ACE-Step service processes...")
-                    if managed_ace_process and managed_ace_process.poll() is None:
-                        managed_ace_process.terminate()
-                        try:
-                            managed_ace_process.wait(timeout=10)
-                        except subprocess.TimeoutExpired:
-                            managed_ace_process.kill()
-                    managed_ace_process = None
-                    if probe_port(8002):
-                        kill_openrouter_processes()
-                    if probe_port(8002):
-                        kill_port_process(8002)
-                    active_vram_profile = None
-                    active_music_model = None
-                    accelerator_state['owner'] = 'idle'
-                    accelerator_state['last_error'] = None
-                    accelerator_state['updated_at'] = time.time()
-                
+                print("[Launcher] Stopping active music generation and ACE-Step service...")
+                result = stop_music_service()
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(json.dumps({'status': 'success', 'message': 'ACE-Step service stopped successfully.'}).encode('utf-8'))
+                self.wfile.write(json.dumps({
+                    'status': 'success',
+                    'message': (
+                        'Track generation stopped and ACE-Step service shut down.'
+                        if result['stopped_active_generation']
+                        else 'ACE-Step service stopped successfully.'
+                    ),
+                    'result': result,
+                }).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')

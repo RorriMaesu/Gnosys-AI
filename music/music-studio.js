@@ -11,6 +11,9 @@
     let pendingTrack = null;
     let playlistBackendWarningShown = false;
     let isTrackGenerating = false;
+    let activeGenerationController = null;
+    let activeGenerationStageInterval = null;
+    let serviceStoppedManually = false;
 
     let explorerCurrentPath = comfyPath;
 
@@ -1137,6 +1140,7 @@
     }
 
     async function launchService() {
+        serviceStoppedManually = false;
         if (isLaunchingService) return;
         isLaunchingService = true;
         const badge = document.getElementById('comfy-status-badge');
@@ -1183,9 +1187,19 @@
 
     async function stopService() {
         const stopBtn = document.getElementById('btn-stop-service');
+        const wasGenerating = isTrackGenerating
+            || pendingGeneration
+            || Boolean(window.latestStatusData?.generation?.active);
+        serviceStoppedManually = true;
+        pendingGeneration = false;
+        activeGenerationController?.abort();
+        if (activeGenerationStageInterval) {
+            clearInterval(activeGenerationStageInterval);
+            activeGenerationStageInterval = null;
+        }
         if (stopBtn) {
             stopBtn.disabled = true;
-            stopBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Stopping...';
+            stopBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> ${wasGenerating ? 'Stopping Track...' : 'Stopping Service...'}`;
         }
 
         try {
@@ -1196,8 +1210,23 @@
                 targetAddressSpace: 'loopback',
             });
             const data = await res.json();
-            if (data.status === 'success') {
-                showBannerNotification('ACE-Step service stopped and VRAM released.', 'success');
+            if (res.ok && data.status === 'success') {
+                isTrackGenerating = false;
+                const generateBtn = document.getElementById('btn-generate-track');
+                const progressContainer = document.getElementById('generation-progress-container');
+                const statusText = document.getElementById('gen-status-text');
+                const fill = document.getElementById('gen-progress-bar-fill');
+                const percent = document.getElementById('gen-percent');
+                if (generateBtn) generateBtn.disabled = false;
+                if (progressContainer && wasGenerating) progressContainer.classList.remove('hidden');
+                if (statusText && wasGenerating) statusText.textContent = 'Generation stopped. You can start a new track.';
+                if (fill && wasGenerating) fill.style.width = '0%';
+                if (percent && wasGenerating) percent.textContent = '0%';
+                if (window.VRAMManager) window.VRAMManager.activeOwner = 'idle';
+                showBannerNotification(
+                    wasGenerating ? 'Track generation stopped and VRAM released.' : 'ACE-Step service stopped and VRAM released.',
+                    'success'
+                );
             } else {
                 showBannerNotification(`Failed to stop service: ${data.message}`, 'error');
             }
@@ -1544,6 +1573,30 @@
             window.latestStatusData = data;
 
             const stopBtn = document.getElementById('btn-stop-service');
+            const backendGenerating = Boolean(data.generation?.active);
+            const generateBtn = document.getElementById('btn-generate-track');
+            if (backendGenerating) {
+                isTrackGenerating = true;
+                if (generateBtn) generateBtn.disabled = true;
+                if (stopBtn) {
+                    stopBtn.classList.remove('hidden');
+                    if (!stopBtn.disabled) {
+                        stopBtn.innerHTML = '<i class="fa-solid fa-stop mr-1.5"></i> Stop Generation';
+                    }
+                }
+                const progressContainer = document.getElementById('generation-progress-container');
+                const generationStatus = document.getElementById('gen-status-text');
+                if (progressContainer) progressContainer.classList.remove('hidden');
+                if (generationStatus && !activeGenerationController) {
+                    generationStatus.textContent = 'A track is generating in the local music service. Use Stop Generation to cancel it.';
+                }
+            } else if (!activeGenerationController) {
+                isTrackGenerating = false;
+                if (generateBtn && !pendingGeneration && !isLaunchingService) generateBtn.disabled = false;
+                if (stopBtn && !stopBtn.disabled) {
+                    stopBtn.innerHTML = '<i class="fa-solid fa-power-off mr-1.5"></i> Stop Service';
+                }
+            }
 
             if (data.comfy_running) {
                 launchBtn.classList.add('hidden');
@@ -1616,11 +1669,11 @@
                     }
                     launchBtn.classList.remove('hidden');
                     installBtn.classList.add('hidden');
-                    if (stopBtn) stopBtn.classList.add('hidden');
+                    if (stopBtn && !backendGenerating) stopBtn.classList.add('hidden');
 
                     // Auto-start server if enabled
                     const autoStartEnabled = document.getElementById('auto-start-checkbox')?.checked ?? true;
-                    if (autoStartEnabled && !isLaunchingService && missing.length === 0) {
+                    if (autoStartEnabled && !serviceStoppedManually && !isLaunchingService && missing.length === 0) {
                         launchService();
                     }
                 }
@@ -3154,6 +3207,7 @@ Keep the body balanced in the homeostatic light!
                 stageIndex++;
             }
         }, 3000);
+        activeGenerationStageInterval = stageInterval;
 
         const modelVal = document.getElementById('music-model').value;
         const promptVal = document.getElementById('music-prompt').value;
@@ -3201,6 +3255,9 @@ Keep the body balanced in the homeostatic light!
             seed: seedInputVal ? parseInt(seedInputVal) : null
         };
 
+        const generationController = new AbortController();
+        activeGenerationController = generationController;
+
         try {
             const localFetch = window.GnosysFetchLocalHelper || fetch;
             const res = await localFetch(`${API_BASE}/api/music/generate`, {
@@ -3209,7 +3266,8 @@ Keep the body balanced in the homeostatic light!
                 body: JSON.stringify(payload),
                 // Required by current Chromium builds when a secure public page
                 // intentionally talks to the user's loopback helper.
-                targetAddressSpace: 'loopback'
+                targetAddressSpace: 'loopback',
+                signal: generationController.signal,
             });
             
             clearInterval(stageInterval);
@@ -3241,13 +3299,16 @@ Keep the body balanced in the homeostatic light!
         } catch (err) {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             const msg = err.message || '';
-            statusText.textContent = 'Generation failed: ' + msg;
+            const wasStopped = generationController.signal.aborted || err.name === 'AbortError';
+            statusText.textContent = wasStopped ? 'Generation stopped. You can start a new track.' : 'Generation failed: ' + msg;
 
             const isLocalNetworkBlock = window.location.protocol === 'https:'
                 && API_BASE.startsWith('http://127.0.0.1')
                 && (err instanceof TypeError || /failed to fetch|network|cors/i.test(msg));
             const isOOM = /out of memory|cuda|oom|allocation|allocat/i.test(msg);
-            if (isLocalNetworkBlock) {
+            if (wasStopped) {
+                // The Stop Generation action already provides the user-facing notice.
+            } else if (isLocalNetworkBlock) {
                 statusText.innerHTML = 'The browser blocked access to the local music helper. Allow <strong>Local network access</strong> for this site, reload, and try again. You can also <a class="text-teal-300 underline" href="http://127.0.0.1:8020/music/" target="_blank" rel="noopener">open the local Music Studio</a>.';
                 showBannerNotification('Local Network Access is blocked. Open this site\'s browser permissions, set Local network access to Allow, then reload.', 'warning');
             } else if (isOOM) {
@@ -3258,6 +3319,8 @@ Keep the body balanced in the homeostatic light!
             }
         } finally {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
+            if (activeGenerationStageInterval === stageInterval) activeGenerationStageInterval = null;
+            if (activeGenerationController === generationController) activeGenerationController = null;
             isTrackGenerating = false;
             btn.disabled = false;
             // Reset status badge from backend to clear the manual "Loading Weights" override
