@@ -364,14 +364,17 @@
     window.GnosysFetchLocalHelper = fetchLocalHelper;
 
     async function requestAcceleratorOwner(owner, options = {}) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (options.traceId) headers['X-Gnosys-Trace-Id'] = options.traceId;
         const response = await fetchLocalHelper(`${API_BASE}/api/accelerator/acquire`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
                 owner,
                 music_model: options.musicModel || null,
                 llm_model: options.llmModel || null,
                 vram_profile: options.vramProfile || null,
+                trace_id: options.traceId || null,
             }),
             timeoutMs: 60000,
             targetAddressSpace: 'loopback',
@@ -383,7 +386,15 @@
             payload = {};
         }
         if (!response.ok || payload.status !== 'success') {
-            throw new Error(payload.message || `Accelerator transition failed (${response.status}).`);
+            const error = new Error(payload.message || `Accelerator transition failed (${response.status}).`);
+            error.name = 'AcceleratorTransitionError';
+            error.httpStatus = response.status;
+            error.errorCode = payload.error_code || 'MUSIC_ACCELERATOR_TRANSITION_FAILED';
+            error.traceId = payload.trace_id || response.headers.get('X-Gnosys-Trace-Id') || options.traceId || null;
+            error.retryable = payload.retryable !== false;
+            error.suggestedAction = payload.suggested_action || 'Reset VRAM and retry.';
+            error.payload = payload;
+            throw error;
         }
         return payload.accelerator;
     }
@@ -423,7 +434,7 @@
         },
 
         async acquireForMusic(options = {}) {
-            console.log('[VRAMManager] Releasing browser and Ollama models before music generation...');
+            console.log(`[VRAMManager][${options.traceId || 'no-trace'}] Releasing browser and Ollama models before music generation...`);
             if (state.provider && typeof state.provider.close === 'function') {
                 await state.provider.close();
             }

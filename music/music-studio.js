@@ -11,9 +11,12 @@
     let pendingTrack = null;
     let playlistBackendWarningShown = false;
     let isTrackGenerating = false;
+    let generationStartPending = false;
     let activeGenerationController = null;
     let activeGenerationStageInterval = null;
     let serviceStoppedManually = false;
+    let currentGenerationTraceId = null;
+    let lastGenerationFailure = null;
 
     let explorerCurrentPath = comfyPath;
 
@@ -29,6 +32,143 @@
             ...init
         });
     }
+
+    function createMusicTraceId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return `music-ui-${window.crypto.randomUUID()}`;
+        }
+        return `music-ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    async function createGenerationResponseError(response, fallbackTraceId) {
+        const responseText = await response.text();
+        let payload = {};
+        try {
+            payload = responseText ? JSON.parse(responseText) : {};
+        } catch (_err) {
+            payload = { message: responseText };
+        }
+        const detail = typeof payload.detail === 'string'
+            ? payload.detail
+            : (payload.detail?.message || payload.error?.message || '');
+        const message = payload.message || detail || `Music generation failed with HTTP ${response.status}.`;
+        const error = new Error(message);
+        error.name = 'MusicGenerationError';
+        error.httpStatus = response.status;
+        error.errorCode = payload.error_code || payload.status || `HTTP_${response.status}`;
+        error.traceId = payload.trace_id || response.headers.get('X-Gnosys-Trace-Id') || fallbackTraceId;
+        error.requestId = payload.request_id || payload.active_request_id || response.headers.get('X-Gnosys-Request-Id') || null;
+        error.activeTraceId = payload.active_trace_id || null;
+        error.stage = payload.stage || payload.generation?.stage || null;
+        error.retryable = payload.retryable !== false;
+        error.suggestedAction = payload.suggested_action || 'Download the diagnostic report and retry after checking the local service status.';
+        error.payload = payload;
+        return error;
+    }
+
+    function clearGenerationDiagnosticSummary() {
+        const summary = document.getElementById('music-generation-diagnostic-summary');
+        if (summary) summary.classList.add('hidden');
+    }
+
+    function showGenerationDiagnosticSummary(error) {
+        lastGenerationFailure = {
+            timestamp: new Date().toISOString(),
+            http_status: error.httpStatus || null,
+            error_code: error.errorCode || 'MUSIC_GENERATION_FAILED',
+            message: error.message || 'Unknown generation failure.',
+            trace_id: error.traceId || currentGenerationTraceId,
+            request_id: error.requestId || null,
+            active_trace_id: error.activeTraceId || null,
+            stage: error.stage || null,
+            retryable: error.retryable !== false,
+            suggested_action: error.suggestedAction || null,
+        };
+        window.GnosysLastMusicGenerationFailure = lastGenerationFailure;
+
+        const summary = document.getElementById('music-generation-diagnostic-summary');
+        const code = document.getElementById('music-generation-error-code');
+        const action = document.getElementById('music-generation-error-action');
+        const trace = document.getElementById('music-generation-trace-id');
+        if (summary) summary.classList.remove('hidden');
+        if (code) code.textContent = `${lastGenerationFailure.error_code}${lastGenerationFailure.http_status ? ` • HTTP ${lastGenerationFailure.http_status}` : ''}`;
+        if (action) action.textContent = lastGenerationFailure.suggested_action || lastGenerationFailure.message;
+        if (trace) {
+            const ids = [
+                lastGenerationFailure.trace_id ? `Trace: ${lastGenerationFailure.trace_id}` : '',
+                lastGenerationFailure.request_id ? `Request: ${lastGenerationFailure.request_id}` : '',
+            ].filter(Boolean);
+            trace.textContent = ids.join(' • ');
+        }
+        console.error(`[Music Studio][${lastGenerationFailure.trace_id || 'no-trace'}] Generation diagnostic`, lastGenerationFailure);
+    }
+
+    async function downloadMusicDiagnostics() {
+        const button = document.getElementById('btn-download-music-diagnostics');
+        const originalHtml = button?.innerHTML;
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Building Diagnostic Report...';
+        }
+
+        let helperReport = null;
+        let helperError = null;
+        try {
+            const response = await fetchHelper(`${API_BASE}/api/music/diagnostics?limit=150`, {
+                timeoutMs: 15000,
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.status !== 'success') {
+                throw new Error(payload.message || `Diagnostic endpoint returned HTTP ${response.status}.`);
+            }
+            helperReport = payload.report;
+        } catch (error) {
+            helperError = error.message || String(error);
+        }
+
+        const report = {
+            schema_version: 1,
+            generated_at_utc: new Date().toISOString(),
+            privacy: 'Prompts, lyrics, message content, and generated audio are not included.',
+            browser: {
+                origin: window.location.origin,
+                path: window.location.pathname,
+                user_agent: navigator.userAgent,
+                online: navigator.onLine,
+            },
+            music_studio: {
+                client_id: clientId,
+                selected_model: document.getElementById('music-model')?.value || null,
+                vram_profile: vramProfile,
+                generation_start_pending: generationStartPending,
+                local_generation_active: isTrackGenerating,
+                backend_generation: window.latestStatusData?.generation || null,
+                last_failure: lastGenerationFailure,
+            },
+            helper_report: helperReport,
+            helper_report_error: helperError,
+        };
+
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `gnosys-music-diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        showBannerNotification(
+            helperReport ? 'Safe music diagnostic report downloaded.' : 'Browser diagnostic report downloaded; the local helper report was unavailable.',
+            helperReport ? 'success' : 'warning'
+        );
+
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+        }
+    }
+    window.GnosysDownloadMusicDiagnostics = downloadMusicDiagnostics;
 
     // Chat and Lyric Editor State
     window.lyricStudioState = {
@@ -918,6 +1058,7 @@
 
         // Music generation trigger
         document.getElementById('btn-generate-track').addEventListener('click', generateStudyTrack);
+        document.getElementById('btn-download-music-diagnostics')?.addEventListener('click', downloadMusicDiagnostics);
 
         // Copy launch command helper
         const copyCmdBtn = document.getElementById('btn-copy-launch-cmd');
@@ -3059,21 +3200,90 @@ Keep the body balanced in the homeostatic light!
     }
 
     async function generateStudyTrack() {
+        if (!navigator.locks || typeof navigator.locks.request !== 'function') {
+            return runStudyTrackGeneration();
+        }
+
+        return navigator.locks.request(
+            'gnosys-ai-music-generation',
+            { mode: 'exclusive', ifAvailable: true },
+            async lock => {
+                if (lock) return runStudyTrackGeneration();
+
+                const btn = document.getElementById('btn-generate-track');
+                const progressContainer = document.getElementById('generation-progress-container');
+                const statusText = document.getElementById('gen-status-text');
+                if (btn) btn.disabled = true;
+                if (progressContainer) progressContainer.classList.remove('hidden');
+                if (statusText) statusText.textContent = 'Another Music Studio tab is already preparing or generating a track.';
+                showBannerNotification('Another Music Studio tab owns music generation. Wait there or use Stop Generation.', 'info');
+                console.warn('[Music Studio] Cross-tab duplicate generation trigger ignored.', { clientId });
+                window.setTimeout(checkMusicServiceStatus, 750);
+                return null;
+            }
+        );
+    }
+
+    async function runStudyTrackGeneration() {
         const btn = document.getElementById('btn-generate-track');
         const progressContainer = document.getElementById('generation-progress-container');
         const statusText = document.getElementById('gen-status-text');
         const fill = document.getElementById('gen-progress-bar-fill');
         const percent = document.getElementById('gen-percent');
 
+        // Close the click/queue race before the first await. Previously the
+        // permission check ran while the button was still active, allowing two
+        // generation flows to reach the backend and making the second look like
+        // an unexplained HTTP 409 while the first track continued in the background.
+        if (generationStartPending || pendingGeneration || isTrackGenerating || activeGenerationController) {
+            progressContainer.classList.remove('hidden');
+            statusText.textContent = 'A generation request is already being prepared or processed.';
+            console.warn('[Music Studio] Duplicate generation trigger ignored by the client guard.', {
+                generationStartPending,
+                pendingGeneration,
+                isTrackGenerating,
+                hasActiveController: Boolean(activeGenerationController),
+                traceId: currentGenerationTraceId,
+            });
+            return;
+        }
+        if (window.latestStatusData?.generation?.active) {
+            btn.disabled = true;
+            progressContainer.classList.remove('hidden');
+            statusText.textContent = 'A track is already generating in the local service. Use Stop Generation to cancel it.';
+            showBannerNotification('A track is already generating. Wait for it to finish or use Stop Generation.', 'info');
+            return;
+        }
+
+        generationStartPending = true;
+        btn.disabled = true;
+        currentGenerationTraceId = createMusicTraceId();
+        clearGenerationDiagnosticSummary();
+
         // Start the Edge permission request immediately from the Generate click,
         // before model preparation awaits cause the user gesture to expire.
-        if (window.parent !== window && typeof window.parent.GnosysEnsureLocalNetworkAccess === 'function') {
-            const localAccessReady = await window.parent.GnosysEnsureLocalNetworkAccess();
-            if (!localAccessReady) {
-                statusText.textContent = 'Local AI permission is required before generating a track.';
-                showBannerNotification('Enable Local AI in the permission panel, then try Generate Track again.', 'warning');
-                return;
+        try {
+            if (window.parent !== window && typeof window.parent.GnosysEnsureLocalNetworkAccess === 'function') {
+                const localAccessReady = await window.parent.GnosysEnsureLocalNetworkAccess();
+                if (!localAccessReady) {
+                    statusText.textContent = 'Local AI permission is required before generating a track.';
+                    showBannerNotification('Enable Local AI in the permission panel, then try Generate Track again.', 'warning');
+                    btn.disabled = false;
+                    return;
+                }
             }
+        } catch (permissionError) {
+            const error = new Error(permissionError.message || 'Unable to verify local AI permission.');
+            error.errorCode = 'MUSIC_LOCAL_PERMISSION_CHECK_FAILED';
+            error.traceId = currentGenerationTraceId;
+            error.suggestedAction = 'Allow Local network access for this site, reload, and try again.';
+            showGenerationDiagnosticSummary(error);
+            statusText.textContent = error.message;
+            showBannerNotification(error.suggestedAction, 'warning');
+            btn.disabled = false;
+            return;
+        } finally {
+            generationStartPending = false;
         }
 
         // Check if server is online
@@ -3089,6 +3299,7 @@ Keep the body balanced in the homeostatic light!
                 showBannerNotification('Generation queued. It will run automatically once the server is ready.', 'info');
             } else if (statusTextVal === 'Not Found') {
                 showBannerNotification('ACE-Step service not found. Please run the install wizard to set it up.', 'error');
+                btn.disabled = false;
             } else {
                 pendingGeneration = true;
                 btn.disabled = true;
@@ -3127,7 +3338,6 @@ Keep the body balanced in the homeostatic light!
             }
         }
 
-        btn.disabled = true;
         isTrackGenerating = true;
         progressContainer.classList.remove('hidden');
         
@@ -3155,11 +3365,16 @@ Keep the body balanced in the homeostatic light!
                 await window.VRAMManager.acquireForMusic({
                     musicModel: selectedMusicModel,
                     vramProfile,
+                    traceId: currentGenerationTraceId,
                 });
             } catch (unloadErr) {
                 console.error('[Music Studio] Accelerator transition failed:', unloadErr);
+                unloadErr.errorCode = unloadErr.errorCode || 'MUSIC_ACCELERATOR_TRANSITION_FAILED';
+                unloadErr.traceId = unloadErr.traceId || currentGenerationTraceId;
+                unloadErr.suggestedAction = unloadErr.suggestedAction || 'Reset VRAM, confirm no other GPU task is active, and retry.';
+                showGenerationDiagnosticSummary(unloadErr);
                 statusText.textContent = `GPU preparation failed: ${unloadErr.message}`;
-                showBannerNotification(`GPU preparation failed: ${unloadErr.message}`, 'error');
+                showBannerNotification(`GPU preparation failed (${unloadErr.errorCode}). Download diagnostics for details.`, 'error');
                 isTrackGenerating = false;
                 btn.disabled = false;
                 return;
@@ -3169,6 +3384,10 @@ Keep the body balanced in the homeostatic light!
                 await window.GnosysLLM.unload(true);
             } catch (unloadErr) {
                 console.error('[Music Studio] VRAM optimization failed:', unloadErr);
+                unloadErr.errorCode = unloadErr.errorCode || 'MUSIC_VRAM_RELEASE_FAILED';
+                unloadErr.traceId = currentGenerationTraceId;
+                unloadErr.suggestedAction = 'Reset VRAM, restart the local helper, and retry.';
+                showGenerationDiagnosticSummary(unloadErr);
                 statusText.textContent = `GPU preparation failed: ${unloadErr.message}`;
                 showBannerNotification(`GPU preparation failed: ${unloadErr.message}`, 'error');
                 isTrackGenerating = false;
@@ -3176,6 +3395,11 @@ Keep the body balanced in the homeostatic light!
                 return;
             }
         } else {
+            const coordinatorError = new Error('GPU coordinator is unavailable. Start the local helper and try again.');
+            coordinatorError.errorCode = 'MUSIC_GPU_COORDINATOR_UNAVAILABLE';
+            coordinatorError.traceId = currentGenerationTraceId;
+            coordinatorError.suggestedAction = 'Start or restart run_backend.bat, then reload the Music Studio.';
+            showGenerationDiagnosticSummary(coordinatorError);
             statusText.textContent = 'GPU coordinator is unavailable. Start the local helper and try again.';
             showBannerNotification('GPU coordinator is unavailable. Start the local helper and try again.', 'error');
             isTrackGenerating = false;
@@ -3257,12 +3481,18 @@ Keep the body balanced in the homeostatic light!
 
         const generationController = new AbortController();
         activeGenerationController = generationController;
+        const generationTraceId = currentGenerationTraceId;
+        let preserveBackendBusyState = false;
 
         try {
             const localFetch = window.GnosysFetchLocalHelper || fetch;
             const res = await localFetch(`${API_BASE}/api/music/generate`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Gnosys-Trace-Id': generationTraceId,
+                    'X-Gnosys-Client-Id': clientId,
+                },
                 body: JSON.stringify(payload),
                 // Required by current Chromium builds when a secure public page
                 // intentionally talks to the user's loopback helper.
@@ -3276,7 +3506,7 @@ Keep the body balanced in the homeostatic light!
             statusText.textContent = 'Decoding final WAV file...';
 
             if (!res.ok) {
-                throw new Error(await res.text());
+                throw await createGenerationResponseError(res, generationTraceId);
             }
 
             const data = await res.json();
@@ -3299,8 +3529,13 @@ Keep the body balanced in the homeostatic light!
         } catch (err) {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             const msg = err.message || '';
-            const wasStopped = generationController.signal.aborted || err.name === 'AbortError';
-            statusText.textContent = wasStopped ? 'Generation stopped. You can start a new track.' : 'Generation failed: ' + msg;
+            const errorCode = err.errorCode || '';
+            const wasStopped = generationController.signal.aborted
+                || err.name === 'AbortError'
+                || errorCode === 'MUSIC_GENERATION_CANCELLED'
+                || err.payload?.status === 'cancelled';
+            const conciseMessage = msg.length > 500 ? `${msg.slice(0, 500)}…` : msg;
+            statusText.textContent = wasStopped ? 'Generation stopped. You can start a new track.' : `Generation failed: ${conciseMessage}`;
 
             const isLocalNetworkBlock = window.location.protocol === 'https:'
                 && API_BASE.startsWith('http://127.0.0.1')
@@ -3309,22 +3544,41 @@ Keep the body balanced in the homeostatic light!
             if (wasStopped) {
                 // The Stop Generation action already provides the user-facing notice.
             } else if (isLocalNetworkBlock) {
+                err.errorCode = err.errorCode || 'MUSIC_LOCAL_HELPER_UNREACHABLE';
+                err.traceId = err.traceId || generationTraceId;
+                err.suggestedAction = 'Allow Local network access for this site, reload, and try again.';
+                showGenerationDiagnosticSummary(err);
                 statusText.innerHTML = 'The browser blocked access to the local music helper. Allow <strong>Local network access</strong> for this site, reload, and try again. You can also <a class="text-teal-300 underline" href="http://127.0.0.1:8020/music/" target="_blank" rel="noopener">open the local Music Studio</a>.';
                 showBannerNotification('Local Network Access is blocked. Open this site\'s browser permissions, set Local network access to Allow, then reload.', 'warning');
             } else if (isOOM) {
+                err.errorCode = err.errorCode || 'MUSIC_GPU_OUT_OF_MEMORY';
+                err.traceId = err.traceId || generationTraceId;
+                err.suggestedAction = err.suggestedAction || 'Use the optimized VRAM profile, reset VRAM, and retry with a shorter track.';
+                showGenerationDiagnosticSummary(err);
                 showBannerNotification('Generation failed due to GPU VRAM limits. Try switching to a lower VRAM profile or stopping other GPU processes.', 'warning');
                 console.warn('[Music Studio] VRAM OOM detected during generation:', msg);
+            } else if (errorCode === 'MUSIC_GENERATION_IN_PROGRESS' || err.payload?.status === 'generation_in_progress') {
+                preserveBackendBusyState = true;
+                showGenerationDiagnosticSummary(err);
+                statusText.textContent = 'Another track request is already running. Use Stop Generation to cancel it or wait for it to finish.';
+                showBannerNotification('An existing track is still generating; the duplicate request was safely rejected.', 'info');
+            } else if (errorCode === 'MUSIC_CHECKPOINT_REPAIR_REQUIRED' || err.payload?.status === 'repair_required') {
+                showGenerationDiagnosticSummary(err);
+                showBannerNotification(err.suggestedAction || 'The selected music model needs repair before it can generate.', 'warning');
             } else {
-                showBannerNotification('Generation failed: ' + msg, 'error');
+                err.traceId = err.traceId || generationTraceId;
+                showGenerationDiagnosticSummary(err);
+                showBannerNotification(`Generation failed (${err.errorCode || 'unknown error'}). Download the diagnostic report for details.`, 'error');
             }
         } finally {
             if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             if (activeGenerationStageInterval === stageInterval) activeGenerationStageInterval = null;
             if (activeGenerationController === generationController) activeGenerationController = null;
+            if (currentGenerationTraceId === generationTraceId) currentGenerationTraceId = null;
             isTrackGenerating = false;
-            btn.disabled = false;
+            if (!preserveBackendBusyState) btn.disabled = false;
             // Reset status badge from backend to clear the manual "Loading Weights" override
-            checkMusicServiceStatus();
+            await checkMusicServiceStatus();
         }
     }
 
