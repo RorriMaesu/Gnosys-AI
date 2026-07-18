@@ -2,6 +2,7 @@
 
 (function () {
     const OLLAMA_DEFAULT_URL = 'http://localhost:11434';
+    const DEFAULT_DESKTOP_MODEL = 'gemma4:12b';
     const LITERT_SETUP_STATUS_EVENT = 'gnosys-litert-setup-status';
     let launchModal = null;
     let pollInterval = null;
@@ -796,7 +797,8 @@
     };
 
     const RECOMMENDED_MODELS = [
-        { value: 'gemma4:e4b', label: 'Gemma 4 (e4b) - Default MTP', size_gb: 9.6 },
+        { value: 'gemma4:12b', label: 'Gemma 4 (12B) - Verified Default', size_gb: 7.6 },
+        { value: 'gemma4:e4b', label: 'Gemma 4 (e4b) - Compatibility Mode', size_gb: 9.6 },
         { value: 'llama3.2', label: 'Llama 3.2 (3B) - Fast CPU Inference', size_gb: 2.0 },
         { value: 'qwen2.5', label: 'Qwen 2.5 (7B) - High Quality Coding/Logic', size_gb: 4.7 },
         { value: 'llama3', label: 'Llama 3 (8B) - Balanced', size_gb: 4.7 },
@@ -968,7 +970,7 @@
         const isCurrentInstalledOrRec = RECOMMENDED_MODELS.some(m => m.value === currentModel) || 
                                         checkInstalled(currentModel) || 
                                         currentModel.startsWith('litert:');
-        if (!isCurrentInstalledOrRec && currentModel && currentModel !== '__custom__' && currentModel !== 'gemma4:e4b') {
+        if (!isCurrentInstalledOrRec && currentModel && currentModel !== '__custom__' && currentModel !== DEFAULT_DESKTOP_MODEL) {
             const unlistedGroup = document.createElement('optgroup');
             unlistedGroup.label = 'Currently Active Model';
             const opt = document.createElement('option');
@@ -1142,10 +1144,10 @@
             const legacy = localStorage.getItem(moduleKey);
             if (legacy) return legacy;
         }
-        return 'gemma4:e4b';
+        return DEFAULT_DESKTOP_MODEL;
     };
 
-    window.getActiveModel = function(moduleKey = null, fallbackModel = 'gemma4:e4b') {
+    window.getActiveModel = function(moduleKey = null, fallbackModel = DEFAULT_DESKTOP_MODEL) {
         const routeMode = localStorage.getItem('gnosys_llm_route_mode');
         if (routeMode === 'mobile-ondevice') {
             return localStorage.getItem('gnosys_ondevice_selected_model') || 'gemma-4-e2b';
@@ -1172,7 +1174,7 @@
         return raw.replace(/:latest$/i, '');
     };
 
-    window.getActiveModelLabel = function(moduleKey = null, fallbackModel = 'gemma4:e4b') {
+    window.getActiveModelLabel = function(moduleKey = null, fallbackModel = DEFAULT_DESKTOP_MODEL) {
         return window.formatModelLabel(window.getActiveModel(moduleKey, fallbackModel));
     };
 
