@@ -122,6 +122,7 @@
             box-shadow: 0 0 0 rgba(100, 116, 139, 0);
         }
         .generation-telemetry-dot[data-state="active"],
+        .generation-telemetry-dot[data-state="loading"],
         .generation-telemetry-dot[data-state="starting"] {
             background: #2dd4bf;
             box-shadow: 0 0 10px rgba(45, 212, 191, 0.8);
@@ -930,8 +931,30 @@
             </div>
         </div>
 
+        <!-- Local helper out-of-date notice (shown when the helper reports an older version than this page expects) -->
+        <div id="helper-update-banner" class="glass-card rounded-2xl py-3 px-5 mb-5 border-amber-500/20 bg-amber-950/10 flex flex-col sm:flex-row justify-between items-center gap-4 hidden">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center text-sm border border-amber-500/20 text-amber-400 shrink-0">
+                    <i class="fa-solid fa-rotate"></i>
+                </div>
+                <div>
+                    <h2 class="text-xs font-bold text-white">Your Local Helper Needs an Update</h2>
+                    <p class="text-[11px] text-slate-300 mt-0.5 max-w-xl leading-relaxed">
+                        This page has newer music features than the helper running on your computer.
+                        <span id="helper-update-banner-version"></span>
+                        <span class="block mt-1">Download the <a href="https://github.com/RorriMaesu/Gnosys-AI/archive/refs/heads/main.zip" class="font-bold text-teal-300 hover:text-teal-200 underline">latest version</a>, extract it over your existing Gnosys folder, then double-click <code class="font-mono text-amber-300 bg-amber-950/30 px-1.5 py-0.5 rounded">run_backend.bat</code> again.</span>
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <button id="btn-dismiss-helper-update" class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-bold text-slate-300 hover:text-white transition-all whitespace-nowrap">
+                    <i class="fa-solid fa-xmark mr-1"></i> Not Now
+                </button>
+            </div>
+        </div>
+
         <div class="cockpit-grid">
-            
+
             <!-- Column 1: Chatbot (md:col-span-6 cockpit-chat flex flex-col h-full) -->
             <div class="md:col-span-6 cockpit-chat flex flex-col h-full">
                 <div class="glass-card rounded-3xl p-6 flex-grow flex flex-col border border-white/10 relative overflow-hidden cockpit-panel min-h-[550px]">
@@ -1637,7 +1660,7 @@
 
     <script src="../assets/llm-router.js?v=20260718-chatbot-diagnostics1"></script>
     <script src="../assets/ollama-launcher.js?v=20260718-chatbot-diagnostics1"></script>
-    <script src="music-studio.js?v=20260718-chatbot-diagnostics1"></script>
+    <script src="music-studio.js?v=20260718-helper-version1"></script>
     <script src="../assets/js/global-player.js?v=20260718-stop-cancel1" defer></script>
 </body>
 </html>

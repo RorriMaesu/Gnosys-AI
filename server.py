@@ -57,6 +57,9 @@ music_generation_state = {
     'last_compute_activity_at': None,
     'last_gpu_sample': None,
     'gpu_sample_count': 0,
+    'peak_gpu_used_mb': 0,
+    'model_confirmed_resident_at': None,
+    'last_ace_process_sample': None,
     'monitor_status': 'idle',
     'monitor_message': 'No music generation is active.',
     'last_result': None,
@@ -70,6 +73,10 @@ music_generation_state = {
 }
 music_diagnostic_lock = threading.Lock()
 music_diagnostic_events = collections.deque(maxlen=200)
+
+# Reported to the hosted frontend so it can prompt users to update a stale
+# local helper. Bump whenever server.py behavior changes in a user-visible way.
+GNOSYS_HELPER_VERSION = '2026.07.18'
 
 ALLOWED_WEB_ORIGINS = {
     'https://rorrimaesu.github.io',
@@ -339,6 +346,65 @@ def get_gpu_activity_status():
         }
     except Exception:
         return None
+
+def music_minimum_resident_mb(model_name):
+    """VRAM floor below which the selected music model cannot be resident."""
+    return 4500 if 'xl-' in str(model_name or '').lower() else 2500
+
+def get_ace_process_telemetry():
+    """Sample the managed ACE-Step process so checkpoint loading can be proven.
+
+    During a cold XL load the weights are read into system RAM long before any
+    VRAM is used, so process working-set and CPU-time growth are the only
+    truthful liveness signals in that phase.
+    """
+    process = managed_ace_process
+    if process is None:
+        return None
+    if process.poll() is not None:
+        return {'alive': False, 'pid': process.pid, 'sampled_at': time.time()}
+    sample = {'alive': True, 'pid': process.pid, 'sampled_at': time.time()}
+    try:
+        if platform.system() == 'Windows':
+            import ctypes
+            from ctypes import wintypes
+
+            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+                _fields_ = [
+                    ('cb', wintypes.DWORD),
+                    ('PageFaultCount', wintypes.DWORD),
+                    ('PeakWorkingSetSize', ctypes.c_size_t),
+                    ('WorkingSetSize', ctypes.c_size_t),
+                    ('QuotaPeakPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPeakNonPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaNonPagedPoolUsage', ctypes.c_size_t),
+                    ('PagefileUsage', ctypes.c_size_t),
+                    ('PeakPagefileUsage', ctypes.c_size_t),
+                ]
+
+            handle = wintypes.HANDLE(int(process._handle))
+            counters = PROCESS_MEMORY_COUNTERS()
+            counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+            if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+                sample['working_set_mb'] = int(counters.WorkingSetSize / (1024 * 1024))
+            creation, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
+            if ctypes.windll.kernel32.GetProcessTimes(
+                handle, ctypes.byref(creation), ctypes.byref(exited), ctypes.byref(kernel), ctypes.byref(user)
+            ):
+                def filetime_seconds(filetime):
+                    return ((filetime.dwHighDateTime << 32) + filetime.dwLowDateTime) / 1e7
+                sample['cpu_seconds'] = round(filetime_seconds(kernel) + filetime_seconds(user), 2)
+        else:
+            with open(f'/proc/{process.pid}/statm', 'r', encoding='ascii') as handle:
+                resident_pages = int(handle.read().split()[1])
+            sample['working_set_mb'] = int(resident_pages * os.sysconf('SC_PAGE_SIZE') / (1024 * 1024))
+            with open(f'/proc/{process.pid}/stat', 'r', encoding='ascii') as handle:
+                fields = handle.read().rsplit(')', 1)[1].split()
+            sample['cpu_seconds'] = round((int(fields[11]) + int(fields[12])) / os.sysconf('SC_CLK_TCK'), 2)
+    except Exception:
+        pass
+    return sample
 
 def get_ollama_runtime_status():
     try:
@@ -730,6 +796,9 @@ def begin_music_generation(model_name, trace_id=None, request_summary=None):
             'last_compute_activity_at': now,
             'last_gpu_sample': None,
             'gpu_sample_count': 0,
+            'peak_gpu_used_mb': 0,
+            'model_confirmed_resident_at': None,
+            'last_ace_process_sample': None,
             'monitor_status': 'starting',
             'monitor_message': 'The helper accepted the request and is preparing ACE-Step.',
             'last_result': 'running',
@@ -800,23 +869,53 @@ def classify_music_generation_activity(snapshot, gpu, service_online, now=None):
     used_mb = int((gpu or {}).get('used_mb') or 0)
     model_name = str(snapshot.get('model') or '').lower()
     vram_profile = str((snapshot.get('request_summary') or {}).get('vram_profile') or '').lower()
-    minimum_resident_mb = 4500 if 'xl-' in model_name else 2500
+    minimum_resident_mb = music_minimum_resident_mb(model_name)
+    confirmed_resident_at = snapshot.get('model_confirmed_resident_at')
+    ace_process = snapshot.get('last_ace_process_sample') or {}
 
+    # "Model released" is only a valid diagnosis if this request previously
+    # proved the model resident in VRAM. During a cold load, VRAM legitimately
+    # stays near 1 GB while ~20 GB of weights stream into system RAM first.
     if (
         elapsed >= 60
         and vram_profile != 'low'
         and used_mb > 0
         and used_mb < minimum_resident_mb
+        and confirmed_resident_at
         and snapshot.get('stage') in ('ace_step_initializing', 'ace_step_inference')
     ):
+        peak_mb = int(snapshot.get('peak_gpu_used_mb') or 0)
         return (
             'model_released',
-            f'The request is still marked active, but GPU memory fell to {used_mb} MB. The {"XL " if "xl-" in model_name else ""}music model is no longer resident in VRAM.',
+            f'GPU memory fell to {used_mb} MB after the {"XL " if "xl-" in model_name else ""}music model was resident (peak {peak_mb} MB this request). The model is no longer resident in VRAM.',
             True,
         )
 
     if snapshot.get('stage') in ('accepted', 'connecting_to_ace'):
         return 'starting', 'Preparing the request and opening the ACE-Step generation stream.', False
+
+    if (
+        snapshot.get('stage') == 'ace_step_initializing'
+        and not confirmed_resident_at
+        and not gpu_active
+    ):
+        activity_age = int(compute_quiet)
+        if compute_quiet < MUSIC_TELEMETRY_STALL_SECONDS:
+            working_set_mb = int(ace_process.get('working_set_mb') or 0)
+            ram_note = (
+                f'the ACE-Step process is holding {working_set_mb / 1024:.1f} GB of system RAM and '
+                if working_set_mb else ''
+            )
+            return (
+                'loading',
+                f'ACE-Step is loading the model checkpoint into system RAM — {ram_note}loading activity was observed {activity_age}s ago. Low GPU memory use is normal during this phase.',
+                False,
+            )
+        return (
+            'suspected_stall',
+            f'ACE-Step has shown no loading activity (CPU, RAM, or GPU changes) for {activity_age} seconds while preparing the model. The load may be stuck.',
+            True,
+        )
     if heartbeat_age is not None and heartbeat_age <= MUSIC_TELEMETRY_HEARTBEAT_STALE_SECONDS:
         if gpu_active:
             return 'active', f'ACE-Step is responding; the GPU is working at {gpu_util}%.', False
@@ -841,6 +940,7 @@ def get_music_generation_realtime_snapshot():
     """Build the fast polling response without scanning models or contacting Ollama."""
     gpu = get_gpu_activity_status()
     service_online = probe_port(8002)
+    ace_process = get_ace_process_telemetry()
     process_alive = None
     if managed_ace_process is not None:
         process_alive = managed_ace_process.poll() is None
@@ -850,14 +950,36 @@ def get_music_generation_realtime_snapshot():
         if music_generation_state.get('active'):
             previous_gpu = music_generation_state.get('last_gpu_sample') or {}
             gpu_util = int((gpu or {}).get('utilization_gpu_percent') or 0)
+            used_mb_now = int((gpu or {}).get('used_mb') or 0)
             memory_delta = abs(
-                int((gpu or {}).get('used_mb') or 0)
-                - int(previous_gpu.get('used_mb') or 0)
+                used_mb_now - int(previous_gpu.get('used_mb') or 0)
             ) if previous_gpu and gpu else 0
             if gpu_util >= MUSIC_TELEMETRY_GPU_ACTIVE_PERCENT or memory_delta >= 16:
                 music_generation_state['last_compute_activity_at'] = now
             music_generation_state['last_gpu_sample'] = gpu
             music_generation_state['gpu_sample_count'] += 1
+            if used_mb_now > int(music_generation_state.get('peak_gpu_used_mb') or 0):
+                music_generation_state['peak_gpu_used_mb'] = used_mb_now
+            if (
+                used_mb_now >= music_minimum_resident_mb(music_generation_state.get('model'))
+                and not music_generation_state.get('model_confirmed_resident_at')
+            ):
+                music_generation_state['model_confirmed_resident_at'] = now
+            # Checkpoint loading is CPU-side work: growing working-set or CPU
+            # time proves progress while VRAM is still untouched.
+            if ace_process and ace_process.get('alive'):
+                previous_process = music_generation_state.get('last_ace_process_sample') or {}
+                working_set_delta = abs(
+                    int(ace_process.get('working_set_mb') or 0)
+                    - int(previous_process.get('working_set_mb') or 0)
+                )
+                cpu_delta = (
+                    float(ace_process.get('cpu_seconds') or 0)
+                    - float(previous_process.get('cpu_seconds') or 0)
+                )
+                if previous_process and (working_set_delta >= 32 or cpu_delta >= 0.25):
+                    music_generation_state['last_compute_activity_at'] = now
+                music_generation_state['last_ace_process_sample'] = ace_process
 
         snapshot = dict(music_generation_state)
         snapshot['timeline'] = list(music_generation_state.get('timeline') or [])
@@ -1474,7 +1596,11 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         global install_thread, install_status
         if self.path == '/api/accelerator/status':
             try:
-                response = {'status': 'success', 'accelerator': get_accelerator_snapshot()}
+                response = {
+                    'status': 'success',
+                    'helper_version': GNOSYS_HELPER_VERSION,
+                    'accelerator': get_accelerator_snapshot(),
+                }
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
@@ -1956,6 +2082,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 response = {
                     'status': 'success',
+                    'helper_version': GNOSYS_HELPER_VERSION,
                     'comfy_path': ace_path,
                     'comfy_installed': ace_installed,
                     'comfy_running': ace_running,
@@ -2462,7 +2589,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 update_music_generation_stage(
                     generation_id,
                     diagnostic_stage,
-                    monitor_message='ACE-Step is loading or preparing the selected model. GPU and VRAM samples remain live during this phase.',
+                    monitor_message='ACE-Step is loading or preparing the selected model. A cold XL load reads ~20 GB from disk into system RAM first, so GPU memory can stay low for several minutes — this is normal.',
                 )
                 response_conn = open_music_generation_upstream(
                     payload,
