@@ -37,8 +37,14 @@
             body: init.body,
             targetAddressSpace: 'loopback',
         };
+        if (init.signal) {
+            requestInit.signal = init.signal;
+        }
         if (init.timeoutMs && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-            requestInit.signal = AbortSignal.timeout(init.timeoutMs);
+            const timeoutSignal = AbortSignal.timeout(init.timeoutMs);
+            requestInit.signal = requestInit.signal && typeof AbortSignal.any === 'function'
+                ? AbortSignal.any([requestInit.signal, timeoutSignal])
+                : requestInit.signal || timeoutSignal;
         }
         return fetch(target.href, requestInit);
     };
