@@ -112,6 +112,10 @@
     // Helper to determine relative paths for icon image or assets depending on depth
     function getRootPath() {
         const path = window.location.pathname.toLowerCase();
+        if (window.location.hostname.endsWith('github.io')) {
+            const repository = window.location.pathname.split('/').filter(Boolean)[0];
+            return repository ? `/${repository}/` : '/';
+        }
         if (path.includes('/chemistry/math-refresher/')) {
             return '../../';
         } else if (path.includes('/syngnosia/') || path.includes('/chemistry/') || path.includes('/math/') || path.includes('/psychology/') || path.includes('/anatomy1/') || path.includes('/anatomy2/') || path.includes('/anatomy3/') || path.includes('/music/')) {
