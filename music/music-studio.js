@@ -375,6 +375,17 @@
                 },
                 required: ['mnemonic', 'rhythm', 'accuracy', 'rhyme'],
             },
+            justifications: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    mnemonic: { type: 'string', maxLength: 300, description: 'One-sentence evidence-based reason for the mnemonic score.' },
+                    rhythm: { type: 'string', maxLength: 300, description: 'One-sentence evidence-based reason for the rhythm score.' },
+                    accuracy: { type: 'string', maxLength: 300, description: 'One-sentence evidence-based reason for the accuracy score.' },
+                    rhyme: { type: 'string', maxLength: 300, description: 'One-sentence evidence-based reason for the rhyme score.' },
+                },
+                required: ['mnemonic', 'rhythm', 'accuracy', 'rhyme'],
+            },
             annotations: {
                 type: 'array',
                 minItems: 1,
@@ -387,14 +398,16 @@
                         endLine: { type: 'integer', minimum: 1 },
                         category: { type: 'string', enum: ['rhythm', 'mnemonic', 'accuracy', 'rhyme'] },
                         message: { type: 'string', maxLength: 500 },
-                        suggestion: { type: 'string', maxLength: 500 },
+                        suggestion: { type: 'string', maxLength: 500, description: 'Replacement text for the annotated lines. Omit when the feedback has no direct rewrite (e.g. "verify this fact").' },
                     },
-                    required: ['startLine', 'endLine', 'category', 'message', 'suggestion'],
+                    // suggestion is deliberately optional: forcing one makes the
+                    // model fabricate rewrites for advice-only annotations.
+                    required: ['startLine', 'endLine', 'category', 'message'],
                 },
             },
             chatResponse: { type: 'string', maxLength: 1500 },
         },
-        required: ['scores', 'annotations', 'chatResponse'],
+        required: ['scores', 'justifications', 'annotations', 'chatResponse'],
     };
 
     function getRecentStudioConversationHistory() {
@@ -2562,6 +2575,80 @@
         listContainer.appendChild(status);
     }
 
+    function countWordSyllables(word) {
+        const cleaned = String(word || '').toLowerCase().replace(/[^a-z]/g, '');
+        if (!cleaned) return 0;
+        const groups = cleaned.match(/[aeiouy]+/g);
+        if (!groups) return 1;
+        let count = groups.length;
+        // Silent trailing "e" ("state", "rhyme") unless it is the only vowel
+        // sound or part of a consonant-le ending ("table").
+        if (count > 1 && cleaned.length > 2 && cleaned.endsWith('e') && !cleaned.endsWith('le')) count--;
+        return Math.max(1, count);
+    }
+
+    function rhymeTail(word) {
+        const cleaned = String(word || '').toLowerCase().replace(/[^a-z]/g, '');
+        const match = cleaned.match(/[aeiouy]+[^aeiouy]*$/);
+        return match ? match[0] : cleaned;
+    }
+
+    function computeLyricMetrics(lyricsText) {
+        const lines = String(lyricsText || '').split('\n');
+        const syllableRows = [];
+        const endWords = [];
+        lines.forEach((line, index) => {
+            const text = line.trim();
+            if (!text || /^\[.*\]$/.test(text)) return;
+            const words = text.split(/\s+/);
+            syllableRows.push(`${index + 1}:${words.reduce((sum, w) => sum + countWordSyllables(w), 0)}`);
+            const lastWord = words[words.length - 1].replace(/[^a-zA-Z']/g, '');
+            if (lastWord) endWords.push({ line: index + 1, word: lastWord, tail: rhymeTail(lastWord) });
+        });
+        const rhymePairs = [];
+        for (let i = 1; i < endWords.length; i++) {
+            for (let j = Math.max(0, i - 3); j < i; j++) {
+                const a = endWords[j];
+                const b = endWords[i];
+                if (a.tail && a.tail === b.tail && a.word.toLowerCase() !== b.word.toLowerCase()) {
+                    rhymePairs.push(`${a.line}&${b.line} ("${a.word}"/"${b.word}")`);
+                    break;
+                }
+            }
+        }
+        return {
+            lyricLineCount: syllableRows.length,
+            syllableSummary: syllableRows.join(', '),
+            rhymeSummary: rhymePairs.length ? rhymePairs.join('; ') : 'no matching end-rhyme tails detected by the heuristic',
+        };
+    }
+
+    function buildCritiqueEvidence(lyricsText) {
+        const metrics = computeLyricMetrics(lyricsText);
+        return `
+MEASURED EVIDENCE (computed mechanically from the workspace; trust these counts over your own counting):
+- Lyric lines (excluding blank lines and [Section] tags): ${metrics.lyricLineCount}
+- Approximate syllables per line (lineNumber:syllables): ${metrics.syllableSummary || 'none'}
+- Detected end-rhyme pairs (heuristic): ${metrics.rhymeSummary}
+
+SCORING RUBRIC (anchor every score to these bands and the evidence above):
+- mnemonic: 90-100 nearly every lyric line carries a subject-specific fact or term; 70-89 most lines do; 40-69 substantial filler; 0-39 mostly filler.
+- rhythm: 90-100 syllable counts are consistent (within about 2) across corresponding section lines; 70-89 a few heavy or light lines; 40-69 frequently uneven; 0-39 no discernible meter.
+- accuracy: 90-100 every factual claim is correct; deduct in proportion to the severity of each error. If you are unsure about a claim, do not guess — add an "accuracy" annotation telling the student to verify it.
+- rhyme: 90-100 a consistent, intentional rhyme scheme (the detected pairs support it); 70-89 mostly rhymed; 40-69 sporadic; 0-39 essentially unrhymed.
+
+In "justifications", give a one-sentence reason per score that cites the evidence (syllable spread, rhyme pairs, or specific facts).`;
+    }
+
+    function formatNumberedLyrics(lyricsText) {
+        // Models cannot reliably count lines themselves, so every prompt that
+        // asks for line-anchored output shows the numbering explicitly.
+        return String(lyricsText || '')
+            .split('\n')
+            .map((line, index) => `${index + 1}| ${line}`)
+            .join('\n');
+    }
+
     async function runCritiqueAPI(userPrompt) {
         if (isChatResponding) return;
         isChatResponding = true;
@@ -2607,10 +2694,16 @@ Your objective is to help the student write, refine, and structure catchy, mnemo
 
 The target subject is: "${subjectName}".
 
-CURRENT LYRICS WORKSPACE CONTENT:
+CURRENT LYRICS WORKSPACE CONTENT (${currentLyrics.split('\n').length} lines; each line is prefixed with its line number and "| " for reference):
 """
-${currentLyrics}
+${formatNumberedLyrics(currentLyrics)}
 """
+
+LINE NUMBER RULES:
+- startLine and endLine MUST be the exact numbers shown before the "| " separator above.
+- Blank lines and [Section] tags are numbered lines too — never skip them when referencing lines.
+- The number prefixes are reference annotations only. NEVER include "N| " prefixes in suggestion text.
+${buildCritiqueEvidence(currentLyrics)}
 
 CRITIQUE & REVIEW MODE IS ACTIVE:
 The user is focusing on reviewing and critiquing the current lyrics.
@@ -2622,6 +2715,12 @@ Return exactly one JSON object in this format:
     "rhythm": 70,
     "accuracy": 90,
     "rhyme": 80
+  },
+  "justifications": {
+    "mnemonic": "12 of 16 lyric lines carry a course term or definition.",
+    "rhythm": "Verse lines range 7-9 syllables but line 6 spikes to 14.",
+    "accuracy": "All anatomy claims check out; the ATP count on line 9 should be verified.",
+    "rhyme": "Detected end-rhymes cover both verses; the bridge is unrhymed."
   },
   "annotations": [
     {
@@ -2675,17 +2774,19 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
 
                 if (hudStatus) hudStatus.textContent = 'Validating the structured critique response...';
                 renderCritiqueStatus('Validating the structured critique response...');
-                const critiqueData = parseCritiqueData(responseText);
+                const critiqueData = parseCritiqueData(responseText, currentLyrics.split('\n').length);
                 if (!critiqueData) {
                     throw new Error(
                         `${result?.model || 'The selected model'} responded, but did not return a valid critique scorecard. ` +
                         'Try again or select Gemma 4 (12B).'
                     );
                 }
+                attachCritiqueSourceText(critiqueData, currentLyrics);
 
-                // Add to chat history
+                // Store a compact summary instead of the raw critique JSON so
+                // later chat requests are not bloated with stale scorecards.
                 studioConversationHistory.push({ role: "user", content: userPrompt });
-                studioConversationHistory.push({ role: "assistant", content: responseText });
+                studioConversationHistory.push({ role: "assistant", content: buildCritiqueHistorySummary(critiqueData) });
 
                 // Also append the chat response to the chat history bubble so they can read it when switching back
                 const bubble = appendChatMessage("Gnosys AI", "", "agent");
@@ -2830,7 +2931,7 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
         return null;
     }
 
-    function normalizeCritiqueData(data) {
+    function normalizeCritiqueData(data, lineCount) {
         if (!data || typeof data !== 'object' || !data.scores || !Array.isArray(data.annotations)) return null;
         const scoreNames = ['mnemonic', 'rhythm', 'accuracy', 'rhyme'];
         const scores = {};
@@ -2840,28 +2941,68 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
             scores[name] = Math.max(0, Math.min(100, Math.round(value)));
         }
 
+        // Ollama's structured outputs enforce JSON shape but not maxItems or
+        // numeric bounds, so every limit is re-applied here.
+        const maxLines = Number.isFinite(Number(lineCount)) && Number(lineCount) > 0 ? Math.round(Number(lineCount)) : null;
         const categories = new Set(['rhythm', 'mnemonic', 'accuracy', 'rhyme']);
         const annotations = data.annotations.map(annotation => {
             if (!annotation || typeof annotation !== 'object') return null;
-            const startLine = Math.max(1, Math.round(Number(annotation.startLine) || 1));
-            const endLine = Math.max(startLine, Math.round(Number(annotation.endLine) || startLine));
+            let startLine = Math.max(1, Math.round(Number(annotation.startLine) || 1));
+            if (maxLines && startLine > maxLines) return null;
+            let endLine = Math.max(startLine, Math.round(Number(annotation.endLine) || startLine));
+            if (maxLines) endLine = Math.min(endLine, maxLines);
             const message = String(annotation.message || '').trim();
             if (!message) return null;
+            const suggestion = String(annotation.suggestion || '')
+                .split('\n')
+                .map(line => line.replace(/^\s*\d+\|\s?/, ''))
+                .join('\n')
+                .trim();
             return {
                 startLine,
                 endLine,
-                category: categories.has(annotation.category) ? annotation.category : 'rhythm',
+                category: categories.has(annotation.category) ? annotation.category : 'general',
                 message,
-                suggestion: String(annotation.suggestion || '').trim(),
+                suggestion,
             };
-        }).filter(Boolean);
+        }).filter(Boolean).slice(0, 12);
 
-        return { ...data, scores, annotations };
+        // Justifications are optional at parse time so older or partial model
+        // outputs still render a scorecard.
+        const justifications = {};
+        if (data.justifications && typeof data.justifications === 'object') {
+            for (const name of scoreNames) {
+                const text = String(data.justifications[name] || '').trim();
+                if (text) justifications[name] = text.slice(0, 300);
+            }
+        }
+
+        return { ...data, scores, annotations, justifications };
     }
 
-    function parseCritiqueData(rawText) {
+    function buildCritiqueHistorySummary(critiqueData) {
+        const scores = critiqueData?.scores || {};
+        const scoreText = ['mnemonic', 'rhythm', 'accuracy', 'rhyme']
+            .map(name => `${name} ${scores[name]}`)
+            .join(', ');
+        const chatText = String(critiqueData?.chatResponse || '').trim();
+        return `[Lyric critique completed — scores: ${scoreText}] ${chatText}`.trim();
+    }
+
+    function attachCritiqueSourceText(critiqueData, lyricsText) {
+        // Remember exactly which text each annotation was written against, so
+        // Apply Refinement can refuse to splice into lyrics that have changed.
+        if (!critiqueData || !Array.isArray(critiqueData.annotations)) return critiqueData;
+        const lines = String(lyricsText || '').split('\n');
+        critiqueData.annotations.forEach(annotation => {
+            annotation.sourceText = lines.slice(annotation.startLine - 1, annotation.endLine).join('\n');
+        });
+        return critiqueData;
+    }
+
+    function parseCritiqueData(rawText, lineCount) {
         const parsed = parseStructuredJson(rawText, 'critique_data');
-        const normalized = normalizeCritiqueData(parsed);
+        const normalized = normalizeCritiqueData(parsed, lineCount);
         if (!normalized) {
             console.error('[Music Studio] Invalid critique response structure:', rawText);
         }
@@ -2878,15 +3019,48 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
         
         // Update scorecard numbers and bars
         const fields = ['mnemonic', 'rhythm', 'accuracy', 'rhyme'];
+
+        // Deltas are computed once per critique run (re-renders after applying
+        // a suggestion must not compare the run against itself).
+        if (data.scores && !data.scoreDeltas) {
+            let previousScores = null;
+            try {
+                previousScores = JSON.parse(localStorage.getItem('gnosys_critique_prev_scores') || 'null');
+            } catch (_err) { /* ignore corrupt storage */ }
+            data.scoreDeltas = {};
+            fields.forEach(f => {
+                const prev = Number(previousScores?.[f]);
+                if (Number.isFinite(prev)) data.scoreDeltas[f] = data.scores[f] - prev;
+            });
+            try {
+                localStorage.setItem('gnosys_critique_prev_scores', JSON.stringify(data.scores));
+            } catch (_err) { /* storage full or unavailable */ }
+        }
+
         fields.forEach(f => {
             const valEl = document.getElementById(`score-${f}-val`);
             const barEl = document.getElementById(`score-${f}-bar`);
             if (valEl && barEl && data.scores && typeof data.scores[f] !== 'undefined') {
                 const score = data.scores[f];
-                valEl.textContent = `${score}%`;
+                const delta = data.scoreDeltas?.[f];
+                const deltaHtml = Number.isFinite(delta) && delta !== 0
+                    ? ` <span class="${delta > 0 ? 'text-emerald-400' : 'text-rose-400'}" title="Compared with the previous critique run">${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}</span>`
+                    : '';
+                valEl.innerHTML = `${score}%${deltaHtml}`;
                 barEl.style.width = `${score}%`;
+                const row = valEl.closest('.space-y-1');
+                if (row) row.title = data.justifications?.[f] || '';
             }
         });
+
+        const justificationsBox = document.getElementById('critique-score-justifications');
+        if (justificationsBox) {
+            const entries = fields
+                .filter(f => data.justifications?.[f])
+                .map(f => `<p class="text-[10px] text-slate-400 leading-relaxed text-left"><span class="font-bold capitalize text-slate-300">${f}:</span> ${escapeHtml(data.justifications[f])}</p>`);
+            justificationsBox.innerHTML = entries.join('');
+            justificationsBox.classList.toggle('hidden', entries.length === 0);
+        }
         
         // Update annotations list
         const listContainer = document.getElementById('critique-annotations-list');
@@ -2918,14 +3092,19 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
 
             let suggestionHtml = '';
             if (item.suggestion) {
+                const actionHtml = item.stale
+                    ? `<div class="w-full py-1.5 rounded-lg bg-amber-500/10 text-[10px] font-bold text-amber-400 text-center border border-amber-500/20">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Lyrics changed — run Critique again
+                    </div>`
+                    : `<button class="btn-apply-critique-suggestion w-full py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-[10px] font-bold text-indigo-300 hover:text-white transition-all border border-indigo-500/20 cursor-pointer"
+                        data-idx="${idx}">
+                        <i class="fa-solid fa-check mr-1"></i> Apply Refinement
+                    </button>`;
                 suggestionHtml = `
                 <div class="mt-2.5 p-2.5 rounded-xl bg-slate-950/40 border border-white/5 space-y-2">
                     <p class="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 text-left">Suggested Replacement</p>
                     <pre class="font-mono text-[11px] text-slate-300 whitespace-pre-wrap leading-normal text-left">${escapeHtml(item.suggestion)}</pre>
-                    <button class="btn-apply-critique-suggestion w-full py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-[10px] font-bold text-indigo-300 hover:text-white transition-all border border-indigo-500/20 cursor-pointer" 
-                        data-idx="${idx}">
-                        <i class="fa-solid fa-check mr-1"></i> Apply Refinement
-                    </button>
+                    ${actionHtml}
                 </div>`;
             }
 
@@ -2992,22 +3171,49 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
     function applyCritiqueSuggestion(idx) {
         if (!activeCritiqueData || !activeCritiqueData.annotations || !activeCritiqueData.annotations[idx]) return;
         const item = activeCritiqueData.annotations[idx];
-        if (!item.suggestion) return;
-        
+        if (!item.suggestion || item.stale) return;
+
         const lyricsTextarea = document.getElementById('generated-lyrics');
         if (!lyricsTextarea) return;
-        
+
+        // Refuse to splice if the target lines no longer match what the
+        // critique was written against (manual edits, other applies, etc.).
+        if (typeof item.sourceText === 'string') {
+            const currentLines = lyricsTextarea.value.split('\n');
+            const currentRangeText = currentLines.slice(item.startLine - 1, item.endLine).join('\n');
+            if (currentRangeText !== item.sourceText) {
+                item.stale = true;
+                renderCritiqueDashboard(activeCritiqueData);
+                showBannerNotification('The lyrics changed since this critique ran, so this suggestion no longer matches. Run Critique again for fresh suggestions.', 'warning');
+                return;
+            }
+        }
+
         const edit = {
             target: 'range',
             start: item.startLine,
             end: item.endLine,
             content: item.suggestion
         };
-        
+
         applyLyricsEdit(edit);
-        
-        // Remove this card from active data and re-render
+
+        // The splice may change the total line count: shift annotations below
+        // the edit and drop any that overlapped the replaced range.
+        const replacedLineCount = item.endLine - item.startLine + 1;
+        const lineDelta = item.suggestion.split('\n').length - replacedLineCount;
         activeCritiqueData.annotations.splice(idx, 1);
+        activeCritiqueData.annotations = activeCritiqueData.annotations.filter(other =>
+            other.endLine < item.startLine || other.startLine > item.endLine
+        );
+        if (lineDelta !== 0) {
+            activeCritiqueData.annotations.forEach(other => {
+                if (other.startLine > item.endLine) {
+                    other.startLine += lineDelta;
+                    other.endLine += lineDelta;
+                }
+            });
+        }
         renderCritiqueDashboard(activeCritiqueData);
     }
 
@@ -3355,10 +3561,15 @@ Your objective is to help the student write, refine, and structure catchy, mnemo
 
 The target subject is: "${subjectName}".
 
-CURRENT LYRICS WORKSPACE CONTENT:
+CURRENT LYRICS WORKSPACE CONTENT (${currentLyrics.split('\n').length} lines; each line is prefixed with its line number and "| " for reference):
 """
-${currentLyrics}
+${formatNumberedLyrics(currentLyrics)}
 """
+
+LINE NUMBER RULES:
+- Any line references you output (edit_lyrics start/end, critique startLine/endLine) MUST use the exact numbers shown before the "| " separator above.
+- Blank lines and [Section] tags are numbered lines too — never skip them when referencing lines.
+- The number prefixes are reference annotations only. NEVER include "N| " prefixes inside <edit_lyrics> content or suggestion text.
 
 ${selectionContext}
 
@@ -3387,6 +3598,8 @@ INSTRUCTIONS FOR CONVERSATION AND EDITING:
 
         if (wantsCritique) {
             systemPrompt += `
+${buildCritiqueEvidence(currentLyrics)}
+
 CRITIQUE & REVIEW INSTRUCTIONS:
 The user wants to review and critique the current lyrics.
 Analyze mnemonic density, rhythm and flow, factual accuracy, and rhyme and catchiness.
@@ -3528,8 +3741,15 @@ Keep the body balanced in the homeostatic light!
                     applyLyricsEdit(edit);
                 }
 
-                const critiqueData = parseCritiqueData(responseText);
+                const critiqueData = parseCritiqueData(responseText, currentLyrics.split('\n').length);
                 if (critiqueData) {
+                    attachCritiqueSourceText(critiqueData, currentLyrics);
+                    // Swap the raw critique JSON pushed above for a compact
+                    // summary so it does not bloat later chat context.
+                    const lastEntry = studioConversationHistory[studioConversationHistory.length - 1];
+                    if (lastEntry && lastEntry.role === 'assistant' && lastEntry.content === responseText) {
+                        lastEntry.content = buildCritiqueHistorySummary(critiqueData);
+                    }
                     renderCritiqueDashboard(critiqueData);
                     if (isCritiqueMode === false && wantsCritique) {
                         toggleAssistantMode('critique');

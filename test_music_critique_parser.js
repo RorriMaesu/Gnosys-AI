@@ -15,6 +15,7 @@ ${source.slice(parserStart, parserEnd)}
 ${source.slice(displayStart, displayEnd)}
 this.parseCritiqueData = parseCritiqueData;
 this.getAssistantDisplayText = getAssistantDisplayText;
+this.attachCritiqueSourceText = attachCritiqueSourceText;
 `;
 const context = { console: { error() {} } };
 vm.createContext(context);
@@ -54,4 +55,38 @@ const legacyTagged = context.parseCritiqueData(`<critique_data>{
 assert.equal(legacyTagged.scores.rhyme, 63);
 
 assert.equal(context.parseCritiqueData('{"scores":{"mnemonic":1}}'), null);
+
+// Line clamping, category fallback, number-prefix stripping, and the
+// 12-annotation cap must be enforced client-side because Ollama's structured
+// outputs only guarantee JSON shape, not numeric bounds.
+const boundsJson = JSON.stringify({
+    scores: { mnemonic: 50, rhythm: 50, accuracy: 50, rhyme: 50 },
+    justifications: { mnemonic: 'dense', rhythm: 'even', accuracy: 'checked', rhyme: 'paired' },
+    annotations: [
+        { startLine: 8, endLine: 120, category: 'vibes', message: 'Clamp and relabel me.', suggestion: '9| Keep this line' },
+        { startLine: 99, endLine: 200, category: 'rhythm', message: 'I am past the end of the document.' },
+        ...Array.from({ length: 14 }, (_, i) => ({ startLine: 1, endLine: 1, category: 'rhyme', message: `extra ${i}` })),
+    ],
+    chatResponse: 'ok',
+});
+const bounded = context.parseCritiqueData(boundsJson, 10);
+assert.equal(bounded.annotations[0].endLine, 10);
+assert.equal(bounded.annotations[0].category, 'general');
+assert.equal(bounded.annotations[0].suggestion, 'Keep this line');
+assert.equal(bounded.annotations.length, 12);
+assert.ok(!bounded.annotations.some(a => a.startLine > 10));
+assert.equal(bounded.justifications.rhythm, 'even');
+
+// Without a line count (legacy callers), no clamping is applied.
+const unclamped = context.parseCritiqueData(boundsJson);
+assert.equal(unclamped.annotations[0].endLine, 120);
+
+// Source-text capture for the stale-apply guard.
+const lyrics = ['[Verse]', 'alpha', 'beta', 'gamma'].join('\n');
+const withSource = context.attachCritiqueSourceText(
+    { annotations: [{ startLine: 2, endLine: 3 }] },
+    lyrics,
+);
+assert.equal(withSource.annotations[0].sourceText, 'alpha\nbeta');
+
 console.log('Music critique parser and display tests passed.');
