@@ -1,4 +1,6 @@
+import http.client
 import http.server
+import socket
 import socketserver
 import subprocess
 import platform
@@ -32,6 +34,13 @@ accelerator_state = {
 }
 music_generation_lock = threading.Lock()
 music_generation_state_lock = threading.Lock()
+music_generation_upstream_lock = threading.Lock()
+music_generation_upstream = {
+    'request_id': None,
+    'connection': None,
+    'response': None,
+}
+cancelled_music_request_ids = collections.deque(maxlen=64)
 music_generation_state = {
     'active': False,
     'request_id': None,
@@ -75,6 +84,7 @@ SUPPORTED_MUSIC_MODELS = {
     'acestep-v15-xl-sft',
 }
 MUSIC_GENERATION_TIMEOUT_SECONDS = 1800
+MUSIC_GENERATION_STOP_GRACE_SECONDS = 3
 MUSIC_TELEMETRY_STALL_SECONDS = 180
 MUSIC_TELEMETRY_HEARTBEAT_STALE_SECONDS = 12
 MUSIC_TELEMETRY_GPU_ACTIVE_PERCENT = 5
@@ -384,20 +394,26 @@ def get_ace_health():
 def unload_ace_models():
     global active_vram_profile, active_music_model, managed_ace_process
     health = get_ace_health()
-    if not health['online']:
-        active_vram_profile = None
-        active_music_model = None
-        return {'status': 'offline'}
+    managed_process_was_alive = (
+        managed_ace_process is not None
+        and managed_ace_process.poll() is None
+    )
 
-    # Moving a compiled 4B model from CUDA back to CPU can hang for minutes and
-    # temporarily duplicate its memory. Stopping the helper-managed service is
-    # both faster and more reliable when handing the GPU back to Ollama.
-    if managed_ace_process is not None and managed_ace_process.poll() is None:
+    # Port health is not process health. ACE-Step can close its listener while
+    # a model-loading request and its Python/CUDA process are still alive. Always
+    # terminate the helper-managed process before treating the service as gone.
+    if managed_process_was_alive:
         managed_ace_process.terminate()
         try:
             managed_ace_process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             managed_ace_process.kill()
+            try:
+                managed_ace_process.wait(timeout=5)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    'ACE-Step process did not exit after terminate and kill.'
+                ) from exc
     managed_ace_process = None
 
     if probe_port(8002):
@@ -409,7 +425,7 @@ def unload_ace_models():
             active_vram_profile = None
             active_music_model = None
             return {
-                'status': 'unloaded',
+                'status': 'unloaded' if health['online'] or managed_process_was_alive else 'offline',
                 'music_lm_unloaded': True,
                 'mode': 'service_stopped',
                 'message': 'ACE-Step service stopped and GPU memory released.',
@@ -512,6 +528,82 @@ def extract_upstream_error(raw_body):
         if detail:
             return sanitize_diagnostic_text(detail)
     return sanitize_diagnostic_text(text)
+
+def open_music_generation_upstream(payload, request_id, trace_id):
+    """Open ACE-Step through a connection the stop endpoint can interrupt."""
+    connection = http.client.HTTPConnection(
+        '127.0.0.1',
+        8002,
+        timeout=MUSIC_GENERATION_TIMEOUT_SECONDS,
+    )
+    with music_generation_upstream_lock:
+        music_generation_upstream.update({
+            'request_id': request_id,
+            'connection': connection,
+            'response': None,
+        })
+
+    try:
+        if music_generation_was_cancelled(request_id):
+            raise RuntimeError('Generation cancelled by user.')
+        connection.request(
+            'POST',
+            '/v1/chat/completions',
+            body=payload,
+            headers={
+                'Content-Type': 'application/json',
+                'X-Gnosys-Trace-Id': trace_id,
+            },
+        )
+        if music_generation_was_cancelled(request_id):
+            raise RuntimeError('Generation cancelled by user.')
+        response = connection.getresponse()
+        with music_generation_upstream_lock:
+            if music_generation_upstream.get('request_id') != request_id:
+                response.close()
+                connection.close()
+                raise RuntimeError('Generation cancelled by user.')
+            music_generation_upstream['response'] = response
+        return response
+    except Exception:
+        close_music_generation_upstream(request_id)
+        raise
+
+def close_music_generation_upstream(request_id=None):
+    """Interrupt the active ACE socket and release its HTTP resources."""
+    with music_generation_upstream_lock:
+        active_request_id = music_generation_upstream.get('request_id')
+        if request_id is not None and active_request_id not in (None, request_id):
+            return False
+        connection = music_generation_upstream.get('connection')
+        response = music_generation_upstream.get('response')
+        music_generation_upstream.update({
+            'request_id': None,
+            'connection': None,
+            'response': None,
+        })
+
+    sock = getattr(connection, 'sock', None) if connection is not None else None
+    if sock is not None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            sock.close()
+        except OSError:
+            pass
+    if response is not None:
+        try:
+            response.close()
+        except Exception:
+            pass
+    if connection is not None:
+        try:
+            connection.close()
+        except Exception:
+            pass
+    return connection is not None or response is not None
 
 def read_ace_generation_response(response_conn, request_id, model_name):
     """Convert ACE-Step's live SSE response back to the JSON shape used by the UI."""
@@ -809,15 +901,20 @@ def request_music_generation_cancel():
     with music_generation_state_lock:
         was_active = music_generation_state['active']
         if was_active:
+            first_request = not music_generation_state['cancel_requested']
             music_generation_state['cancel_requested'] = True
             music_generation_state['last_result'] = 'cancelling'
             music_generation_state['stage'] = 'cancelling'
-            music_generation_state['stage_started_at'] = now
             music_generation_state['monitor_status'] = 'cancelling'
             music_generation_state['monitor_message'] = 'Stopping ACE-Step and releasing its GPU memory…'
-            music_generation_state['timeline'].append(
-                _music_timeline_entry('cancelling', timestamp=now)
-            )
+            request_id = music_generation_state.get('request_id')
+            if request_id and request_id not in cancelled_music_request_ids:
+                cancelled_music_request_ids.append(request_id)
+            if first_request:
+                music_generation_state['stage_started_at'] = now
+                music_generation_state['timeline'].append(
+                    _music_timeline_entry('cancelling', timestamp=now)
+                )
             music_generation_state['updated_at'] = now
         snapshot = dict(music_generation_state)
     return was_active, snapshot
@@ -825,8 +922,11 @@ def request_music_generation_cancel():
 def music_generation_was_cancelled(request_id):
     with music_generation_state_lock:
         return (
-            music_generation_state['request_id'] == request_id
-            and music_generation_state['cancel_requested']
+            request_id in cancelled_music_request_ids
+            or (
+                music_generation_state['request_id'] == request_id
+                and music_generation_state['cancel_requested']
+            )
         )
 
 def finish_music_generation(request_id, result, error=None, error_code=None, http_status=None):
@@ -893,21 +993,58 @@ def stop_music_service():
         'accelerator_owner': accelerator_state.get('owner'),
     })
     was_generating, generation_before = request_music_generation_cancel()
+    request_id = generation_before.get('request_id')
+    upstream_closed = close_music_generation_upstream(request_id)
     with accelerator_lock:
         service_result = unload_ace_models()
         accelerator_state['owner'] = 'idle'
         accelerator_state['last_error'] = None
         accelerator_state['updated_at'] = time.time()
-    generation_after = wait_for_music_generation_idle()
+    generation_after = wait_for_music_generation_idle(
+        timeout=MUSIC_GENERATION_STOP_GRACE_SECONDS
+    )
+    forced_cleanup = False
+    if (
+        was_generating
+        and generation_after.get('active')
+        and generation_after.get('request_id') == request_id
+    ):
+        forced_cleanup = True
+        record_music_diagnostic(
+            'stop_forced_state_cleanup',
+            trace_id=trace_id,
+            request_id=request_id,
+            level='warning',
+            details={
+                'reason': 'Generation worker did not exit within the stop grace period.',
+                'grace_seconds': MUSIC_GENERATION_STOP_GRACE_SECONDS,
+                'service_status': service_result.get('status'),
+                'upstream_socket_closed': upstream_closed,
+            },
+        )
+        finish_music_generation(
+            request_id,
+            'cancelled',
+            error_code='MUSIC_GENERATION_CANCELLED',
+            http_status=409,
+        )
+        generation_after = get_music_generation_snapshot()
+
+    if generation_after.get('active') and generation_after.get('request_id') == request_id:
+        raise RuntimeError('Music generation state remained active after forced cancellation.')
     record_music_diagnostic('stop_completed', trace_id=trace_id, request_id=generation_before.get('request_id'), details={
         'stopped_active_generation': was_generating,
         'generation_active': generation_after.get('active'),
         'last_result': generation_after.get('last_result'),
         'service_status': service_result.get('status'),
+        'upstream_socket_closed': upstream_closed,
+        'forced_state_cleanup': forced_cleanup,
     })
     return {
         'service': service_result,
         'stopped_active_generation': was_generating,
+        'upstream_socket_closed': upstream_closed,
+        'forced_state_cleanup': forced_cleanup,
         'generation_before': generation_before,
         'generation': generation_after,
     }
@@ -1063,7 +1200,12 @@ def kill_port_process(port):
     import re
     try:
         if platform.system() == 'Windows':
-            output = subprocess.check_output(f'netstat -ano | findstr :{port}', shell=True).decode('utf-8', errors='ignore')
+            output = subprocess.check_output(
+                ['netstat', '-ano'],
+                text=True,
+                timeout=5,
+                errors='ignore',
+            )
             pids = set()
             for line in output.strip().split('\n'):
                 line = line.strip()
@@ -1076,14 +1218,31 @@ def kill_port_process(port):
                         pids.add(int(pid))
             for pid in pids:
                 print(f"[Launcher] Killing process {pid} on port {port}")
-                subprocess.run(f'taskkill /F /T /PID {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(
+                    ['taskkill', '/F', '/T', '/PID', str(pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=10,
+                    check=False,
+                )
         else:
             # Unix/Mac
-            output = subprocess.check_output(f'lsof -t -i:{port}', shell=True).decode('utf-8', errors='ignore')
+            output = subprocess.check_output(
+                ['lsof', '-t', f'-i:{port}'],
+                text=True,
+                timeout=5,
+                errors='ignore',
+            )
             pids = [int(p) for p in output.strip().split('\n') if p.isdigit()]
             for pid in pids:
                 print(f"[Launcher] Killing process {pid} on port {port}")
-                subprocess.run(f'kill -9 {pid}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(
+                    ['kill', '-9', str(pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=10,
+                    check=False,
+                )
         return True
     except Exception as e:
         print(f"[Launcher] Error killing process on port {port}: {e}")
@@ -2294,15 +2453,6 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     monitor_message='Opening ACE-Step’s live generation stream.',
                 )
                 record_music_diagnostic('generation_started', trace_id=trace_id, request_id=generation_id, details=request_summary)
-                req = urllib.request.Request(
-                    'http://127.0.0.1:8002/v1/chat/completions',
-                    data=payload,
-                    headers={
-                        'Content-Type': 'application/json',
-                        'X-Gnosys-Trace-Id': trace_id,
-                    }
-                )
-
                 # Inference runs without the coordinator lock so the Stop
                 # Generation endpoint can terminate ACE-Step immediately.
                 diagnostic_stage = 'ace_step_initializing'
@@ -2311,12 +2461,19 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     diagnostic_stage,
                     monitor_message='ACE-Step is loading or preparing the selected model. GPU and VRAM samples remain live during this phase.',
                 )
-                with urllib.request.urlopen(req, timeout=MUSIC_GENERATION_TIMEOUT_SECONDS) as response_conn:
+                response_conn = open_music_generation_upstream(
+                    payload,
+                    generation_id,
+                    trace_id,
+                )
+                try:
                     response_data = read_ace_generation_response(
                         response_conn,
                         generation_id,
                         requested_model,
                     )
+                finally:
+                    close_music_generation_upstream(generation_id)
 
                 diagnostic_stage = 'validating_audio'
                 update_music_generation_stage(
@@ -2389,7 +2546,13 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Length', str(len(error_data)))
                 self.end_headers()
                 self.wfile.write(error_data)
-            except (urllib.error.URLError, TimeoutError, RuntimeError) as exc:
+            except (
+                urllib.error.URLError,
+                http.client.HTTPException,
+                ConnectionError,
+                TimeoutError,
+                RuntimeError,
+            ) as exc:
                 cancelled = generation_id and music_generation_was_cancelled(generation_id)
                 generation_error = None if cancelled else sanitize_diagnostic_text(exc)
                 if cancelled:
@@ -2479,6 +2642,8 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(error_data)
             finally:
+                if generation_id is not None:
+                    close_music_generation_upstream(generation_id)
                 if generation_id is not None:
                     finish_music_generation(
                         generation_id,

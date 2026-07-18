@@ -64,6 +64,8 @@ class CheckpointIntegrityTests(unittest.TestCase):
 
 class AcceleratorCoordinatorTests(unittest.TestCase):
     def setUp(self):
+        server.close_music_generation_upstream()
+        server.cancelled_music_request_ids.clear()
         server.accelerator_state.update({
             'owner': 'idle',
             'transitioning': False,
@@ -406,6 +408,142 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             server.active_vram_profile = original_profile
             server.active_music_model = original_model
 
+    def test_ace_unload_terminates_managed_process_when_port_is_already_offline(self):
+        fake_process = mock.Mock()
+        fake_process.poll.return_value = None
+        original_process = server.managed_ace_process
+        original_profile = server.active_vram_profile
+        original_model = server.active_music_model
+        server.managed_ace_process = fake_process
+        server.active_vram_profile = 'optimized'
+        server.active_music_model = 'acestep-v15-xl-turbo'
+        try:
+            with (
+                mock.patch.object(server, 'get_ace_health', return_value={'online': False, 'status': 'offline'}),
+                mock.patch.object(server, 'probe_port', return_value=False),
+                mock.patch.object(server, 'kill_port_process') as kill_port,
+            ):
+                result = server.unload_ace_models()
+
+            fake_process.terminate.assert_called_once_with()
+            fake_process.wait.assert_called_once_with(timeout=5)
+            fake_process.kill.assert_not_called()
+            kill_port.assert_not_called()
+            self.assertEqual(result['status'], 'unloaded')
+            self.assertEqual(result['mode'], 'service_stopped')
+            self.assertIsNone(server.managed_ace_process)
+            self.assertIsNone(server.active_vram_profile)
+            self.assertIsNone(server.active_music_model)
+        finally:
+            server.managed_ace_process = original_process
+            server.active_vram_profile = original_profile
+            server.active_music_model = original_model
+
+    def test_close_music_upstream_interrupts_registered_socket(self):
+        request_id = 'music-cancellable-socket-test'
+        connection = mock.Mock()
+        response = mock.Mock()
+        with server.music_generation_upstream_lock:
+            server.music_generation_upstream.update({
+                'request_id': request_id,
+                'connection': connection,
+                'response': response,
+            })
+
+        closed = server.close_music_generation_upstream(request_id)
+
+        self.assertTrue(closed)
+        connection.sock.shutdown.assert_called_once_with(server.socket.SHUT_RDWR)
+        connection.sock.close.assert_called_once_with()
+        response.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+        self.assertIsNone(server.music_generation_upstream['request_id'])
+
+    def test_close_music_upstream_unblocks_waiting_response_headers(self):
+        request_id = server.begin_music_generation(
+            'acestep-v15-xl-turbo',
+            trace_id='music-ui-blocked-headers-test',
+        )
+        request_sent = threading.Event()
+        socket_closed = threading.Event()
+        result = {}
+
+        class BlockingSocket:
+            def shutdown(self, _how):
+                socket_closed.set()
+
+            def close(self):
+                socket_closed.set()
+
+        class BlockingConnection:
+            def __init__(self):
+                self.sock = BlockingSocket()
+
+            def request(self, *_args, **_kwargs):
+                request_sent.set()
+
+            def getresponse(self):
+                if not socket_closed.wait(timeout=3):
+                    raise TimeoutError('test socket was not interrupted')
+                raise ConnectionResetError('test socket closed by stop request')
+
+            def close(self):
+                socket_closed.set()
+
+        connection = BlockingConnection()
+
+        def open_upstream():
+            try:
+                server.open_music_generation_upstream(b'{}', request_id, 'music-ui-blocked-headers-test')
+            except Exception as exc:
+                result['error'] = exc
+
+        try:
+            with mock.patch.object(server.http.client, 'HTTPConnection', return_value=connection):
+                worker = threading.Thread(target=open_upstream, daemon=True)
+                worker.start()
+                self.assertTrue(request_sent.wait(timeout=2))
+                started = time.monotonic()
+                self.assertTrue(server.close_music_generation_upstream(request_id))
+                worker.join(timeout=2)
+                elapsed = time.monotonic() - started
+
+            self.assertFalse(worker.is_alive())
+            self.assertLess(elapsed, 1)
+            self.assertIsInstance(result.get('error'), ConnectionResetError)
+        finally:
+            server.finish_music_generation(request_id, 'cancelled', http_status=409)
+
+    def test_stop_force_clears_state_when_generation_worker_does_not_exit(self):
+        server.accelerator_state['owner'] = 'music'
+        request_id = server.begin_music_generation(
+            'acestep-v15-xl-turbo',
+            trace_id='music-ui-stale-worker-test',
+        )
+        self.assertIsNotNone(request_id)
+
+        with (
+            mock.patch.object(server, 'close_music_generation_upstream', return_value=True) as close_upstream,
+            mock.patch.object(server, 'unload_ace_models', return_value={'status': 'offline'}),
+            mock.patch.object(
+                server,
+                'wait_for_music_generation_idle',
+                side_effect=lambda timeout: server.get_music_generation_snapshot(),
+            ),
+        ):
+            result = server.stop_music_service()
+
+        close_upstream.assert_called_once_with(request_id)
+        self.assertTrue(result['forced_state_cleanup'])
+        self.assertTrue(result['upstream_socket_closed'])
+        self.assertFalse(result['generation']['active'])
+        self.assertEqual(result['generation']['last_result'], 'cancelled')
+        self.assertEqual(result['generation']['last_error_code'], 'MUSIC_GENERATION_CANCELLED')
+        self.assertFalse(server.music_generation_lock.locked())
+        event_names = [event['event'] for event in server.get_recent_music_diagnostics(20)]
+        self.assertIn('stop_forced_state_cleanup', event_names)
+        self.assertIn('stop_completed', event_names)
+
     def test_music_generate_proxy_returns_upstream_response(self):
         expected_payload = {
             'choices': [{
@@ -439,10 +577,10 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
         try:
             with (
                 mock.patch.object(
-                    server.urllib.request,
-                    'urlopen',
+                    server,
+                    'open_music_generation_upstream',
                     return_value=FakeUpstreamResponse(),
-                ) as urlopen,
+                ) as open_upstream,
                 mock.patch.object(
                     server,
                     'inspect_music_model',
@@ -481,10 +619,7 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
                 int(response.getheader('Content-Length')),
                 len(expected_bytes),
             )
-            self.assertEqual(
-                urlopen.call_args.kwargs['timeout'],
-                server.MUSIC_GENERATION_TIMEOUT_SECONDS,
-            )
+            open_upstream.assert_called_once()
         finally:
             httpd.shutdown()
             httpd.server_close()
@@ -502,8 +637,8 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
         try:
             with (
                 mock.patch.object(
-                    server.urllib.request,
-                    'urlopen',
+                    server,
+                    'open_music_generation_upstream',
                     side_effect=server.urllib.error.URLError('upstream unavailable'),
                 ),
                 mock.patch.object(
@@ -560,7 +695,7 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
         try:
             with (
                 mock.patch.object(server, 'inspect_music_model', return_value=integrity),
-                mock.patch.object(server.urllib.request, 'urlopen') as urlopen,
+                mock.patch.object(server, 'open_music_generation_upstream') as open_upstream,
             ):
                 connection = http.client.HTTPConnection(
                     '127.0.0.1',
@@ -586,7 +721,7 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             self.assertEqual(response.status, 409)
             self.assertEqual(response_body['status'], 'repair_required')
             self.assertIn('model-00001-of-00004.safetensors', response_body['message'])
-            urlopen.assert_not_called()
+            open_upstream.assert_not_called()
         finally:
             httpd.shutdown()
             httpd.server_close()
@@ -650,10 +785,10 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
             with (
                 mock.patch.object(server, 'inspect_music_model', return_value={'installed': True}),
                 mock.patch.object(
-                    server.urllib.request,
-                    'urlopen',
+                    server,
+                    'open_music_generation_upstream',
                     return_value=BlockingUpstreamResponse(),
-                ) as urlopen,
+                ) as open_upstream,
                 mock.patch.object(server, 'unload_ace_models', side_effect=stop_service) as unload,
             ):
                 generation_thread = threading.Thread(target=request_generation, daemon=True)
@@ -690,7 +825,7 @@ class AcceleratorCoordinatorTests(unittest.TestCase):
                 self.assertTrue(duplicate_body['active_request_id'].startswith('music-'))
                 self.assertIn('wait', duplicate_body['suggested_action'].lower())
                 self.assertIn('Stop Generation', duplicate_body['message'])
-                self.assertEqual(urlopen.call_count, 1)
+                self.assertEqual(open_upstream.call_count, 1)
 
                 started_at = time.monotonic()
                 stop_connection = http.client.HTTPConnection(
@@ -809,7 +944,7 @@ class FrontendMusicDiagnosticsTests(unittest.TestCase):
             source = handle.read()
 
         self.assertIn('btn-download-music-diagnostics', page)
-        self.assertIn('music-studio.js?v=20260718-generation-telemetry1', page)
+        self.assertIn('music-studio.js?v=20260718-stop-cancel1', page)
         self.assertIn('/api/music/diagnostics?limit=150', source)
         self.assertIn('Prompts, lyrics, message content, and generated audio are not included.', source)
 
