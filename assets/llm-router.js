@@ -5,6 +5,7 @@
                           'http://127.0.0.1:11434';
     let OLLAMA_TAGS_URL = `${OLLAMA_BASE_URL}/api/tags`;
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : 'http://127.0.0.1:8020';
+    const DEFAULT_DESKTOP_MODEL = 'gemma4:12b';
 
     const MODEL_CACHE_NAME = 'gnosys-litert-model-cache-v1';
 
@@ -628,6 +629,17 @@
     async function generateResponse(systemPrompt, userPrompt, options = {}) {
         await init();
 
+        // A temporary Ollama/helper outage during page startup used to leave the
+        // router permanently stuck on the no-AI provider. Re-probe immediately
+        // before a real request unless the user explicitly disabled AI.
+        if (
+            state.providerName === 'no-ai' &&
+            localStorage.getItem(STORAGE_KEYS.routeMode) !== 'no-ai'
+        ) {
+            emitGenerationStatus(options, 'probing_ollama', 'Checking the local Ollama service...');
+            await init(true);
+        }
+
         if (!state.provider) {
             if (state.isWebGpuSupported) {
                 showMobileChoiceModal();
@@ -637,9 +649,20 @@
         }
 
         // Proactively manage VRAM via VRAMManager
+        emitGenerationStatus(options, 'releasing_music', 'Releasing ACE-Step and reserving VRAM for the lyric assistant...');
         await VRAMManager.acquireForLLM();
+        emitGenerationStatus(options, 'llm_vram_ready', 'VRAM is ready for the lyric assistant.');
 
         return state.provider.generateResponse(systemPrompt, userPrompt, options);
+    }
+
+    function emitGenerationStatus(options, stage, message, detail = {}) {
+        if (typeof options?.onStatus !== 'function') return;
+        try {
+            options.onStatus({ stage, message, ...detail });
+        } catch (err) {
+            console.warn('[GnosysLLM] Generation status callback failed:', err);
+        }
     }
 
     async function probeOllamaTags() {
@@ -731,6 +754,17 @@
     }
 
     function createOllamaProvider() {
+        function findInstalledModel(candidate) {
+            const installed = Array.isArray(state.installedOllamaModels) ? state.installedOllamaModels : [];
+            const wanted = String(candidate || '').toLowerCase();
+            const exact = installed.find(model => model.toLowerCase() === wanted);
+            if (exact) return exact;
+            if (!wanted.includes(':')) {
+                return installed.find(model => model.split(':')[0].toLowerCase() === wanted) || '';
+            }
+            return '';
+        }
+
         function resolveModel(moduleKey) {
             let preferredModel = '';
             if (typeof window.getActiveModel === 'function') {
@@ -743,7 +777,7 @@
                 preferredModel = (
                     localStorage.getItem('gnosys_active_llm') ||
                     localStorage.getItem(moduleKey || '') ||
-                    'gemma4:e4b'
+                    DEFAULT_DESKTOP_MODEL
                 );
             }
 
@@ -774,92 +808,223 @@
             return preferredModel;
         }
 
+        function resolveStructuredModel(selectedModel) {
+            if (String(selectedModel).toLowerCase() !== 'gemma4:e4b') return selectedModel;
+            return findInstalledModel('gemma4:12b') || selectedModel;
+        }
+
+        function resolveRecoveryModel(failedModel) {
+            const failed = String(failedModel || '').toLowerCase();
+            const priorities = ['gemma4:12b', 'qwen2.5', 'llama3.2', 'llama3', 'mistral'];
+            for (const candidate of priorities) {
+                const installed = findInstalledModel(candidate);
+                if (installed && installed.toLowerCase() !== failed) return installed;
+            }
+            return (state.installedOllamaModels || []).find(model => {
+                const name = model.toLowerCase();
+                return name !== failed && !name.includes('embed');
+            }) || '';
+        }
+
+        function createOllamaError(code, message) {
+            const error = new Error(message);
+            error.code = code;
+            return error;
+        }
+
+        function looksLikePlaceholderCorruption(text) {
+            const value = String(text || '').trim();
+            if (!value) return false;
+            const placeholders = value.match(/<unused\d+>/gi) || [];
+            const remainder = value.replace(/<unused\d+>/gi, '').trim();
+            return placeholders.length >= 3 && remainder.length === 0;
+        }
+
+        function validateOllamaText(text, model) {
+            const value = String(text || '').trim();
+            if (!value) {
+                throw createOllamaError('OLLAMA_EMPTY_RESPONSE', `${model} returned an empty response.`);
+            }
+            if (looksLikePlaceholderCorruption(value)) {
+                throw createOllamaError(
+                    'OLLAMA_CORRUPT_OUTPUT',
+                    `${model} returned invalid placeholder tokens instead of a usable response.`
+                );
+            }
+            return value;
+        }
+
+        async function releaseFailedModel(model) {
+            try {
+                await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: AbortSignal.timeout(10000),
+                    body: JSON.stringify({ model, prompt: '', stream: false, keep_alive: 0 }),
+                });
+            } catch (err) {
+                console.warn(`[GnosysLLM] Could not immediately unload failed model '${model}':`, err);
+            }
+        }
+
+        function rememberRecoveredModel(model, failedModel) {
+            if (!model || model === failedModel) return;
+            localStorage.setItem('gnosys_active_llm', model);
+            window.dispatchEvent(new CustomEvent('gnosys-llm-model-changed', {
+                detail: { model, recoveredFrom: failedModel }
+            }));
+            refreshStatusBadges();
+        }
+
+        async function requestOllamaModel(model, systemPrompt, userPrompt, options) {
+            const stream = Boolean(options.stream);
+            const history = Array.isArray(options.history) ? options.history : [];
+
+            const messages = [];
+            if (systemPrompt) {
+                messages.push({ role: 'system', content: String(systemPrompt) });
+            }
+            for (const entry of history) {
+                if (!entry || typeof entry.content !== 'string' || typeof entry.role !== 'string') continue;
+                messages.push({ role: entry.role, content: entry.content });
+            }
+            messages.push({ role: 'user', content: String(userPrompt || '') });
+
+            emitGenerationStatus(options, 'loading_model', `Loading ${model} into VRAM...`, { model });
+            const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model,
+                    messages,
+                    stream,
+                    options: options.ollamaOptions || {},
+                    format: options.responseFormat || (options.structuredResponse ? 'json' : undefined),
+                    keep_alive: '90s',
+                }),
+            });
+
+            if (!response.ok) {
+                let detail = '';
+                try {
+                    detail = await response.text();
+                } catch (_err) {
+                    detail = '';
+                }
+                throw createOllamaError(
+                    response.status >= 500 ? 'OLLAMA_MODEL_ERROR' : 'OLLAMA_REQUEST_FAILED',
+                    `Ollama request failed for ${model}: ${response.status}${detail ? ` ${detail}` : ''}`
+                );
+            }
+
+            emitGenerationStatus(options, 'generating_response', `${model} is analyzing the lyrics...`, { model });
+
+            if (!stream) {
+                const payload = await response.json();
+                if (payload?.error) {
+                    throw createOllamaError('OLLAMA_MODEL_ERROR', `${model}: ${payload.error}`);
+                }
+                if (payload?.done === false) {
+                    throw createOllamaError('OLLAMA_INCOMPLETE_RESPONSE', `${model} stopped before completing its response.`);
+                }
+                const text = payload?.message?.content || payload?.response || '';
+                return { provider: 'desktop-ollama', model, text: validateOllamaText(text, model) };
+            }
+
+            if (!response.body) {
+                throw createOllamaError('OLLAMA_STREAM_MISSING', 'Ollama stream did not return a readable body.');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            let lineBuffer = '';
+            let sawCompletion = false;
+
+            const consumeLine = (line) => {
+                if (!line.trim()) return;
+                let data;
+                try {
+                    data = JSON.parse(line);
+                } catch (_err) {
+                    throw createOllamaError('OLLAMA_STREAM_PARSE', `${model} returned a malformed stream record.`);
+                }
+                if (data?.error) {
+                    throw createOllamaError('OLLAMA_MODEL_ERROR', `${model}: ${data.error}`);
+                }
+                if (data?.done === true) sawCompletion = true;
+                const token = typeof data?.message?.content === 'string' ? data.message.content : '';
+                if (!token) return;
+                fullText += token;
+                if (typeof options.onToken === 'function') {
+                    options.onToken(token, fullText);
+                }
+            };
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                lineBuffer += decoder.decode(value, { stream: true });
+                const lines = lineBuffer.split('\n');
+                lineBuffer = lines.pop() || '';
+                lines.forEach(consumeLine);
+            }
+
+            lineBuffer += decoder.decode();
+            if (lineBuffer.trim()) consumeLine(lineBuffer);
+            if (!sawCompletion) {
+                throw createOllamaError('OLLAMA_INCOMPLETE_RESPONSE', `${model} stream ended before Ollama reported completion.`);
+            }
+
+            return { provider: 'desktop-ollama', model, text: validateOllamaText(fullText, model) };
+        }
+
         return {
             async generateResponse(systemPrompt, userPrompt, options = {}) {
                 const moduleKey = options.moduleKey || 'gnosys_active_llm';
-                const model = options.model || resolveModel(moduleKey);
-                const stream = Boolean(options.stream);
-                const history = Array.isArray(options.history) ? options.history : [];
+                const selectedModel = options.model || resolveModel(moduleKey);
+                const model = options.structuredResponse
+                    ? resolveStructuredModel(selectedModel)
+                    : selectedModel;
 
-                const messages = [];
-                if (systemPrompt) {
-                    messages.push({ role: 'system', content: String(systemPrompt) });
-                }
-                for (const entry of history) {
-                    if (!entry || typeof entry.content !== 'string' || typeof entry.role !== 'string') continue;
-                    messages.push({ role: entry.role, content: entry.content });
-                }
-                messages.push({ role: 'user', content: String(userPrompt || '') });
-
-                const requestOptions = {};
-                if (String(model).toLowerCase().includes('gemma4')) {
-                    requestOptions.draft_num_predict = 4;
+                if (model !== selectedModel) {
+                    emitGenerationStatus(
+                        options,
+                        'model_compatibility_fallback',
+                        `${selectedModel} failed its compatibility check; using ${model} instead.`,
+                        { model, failedModel: selectedModel }
+                    );
                 }
 
-                const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model,
-                        messages,
-                        stream,
-                        options: requestOptions,
-                        keep_alive: "90s",
-                    }),
-                });
+                try {
+                    const result = await requestOllamaModel(model, systemPrompt, userPrompt, options);
+                    if (model !== selectedModel) rememberRecoveredModel(model, selectedModel);
+                    return result;
+                } catch (err) {
+                    const recoverableCodes = new Set([
+                        'OLLAMA_MODEL_ERROR',
+                        'OLLAMA_EMPTY_RESPONSE',
+                        'OLLAMA_CORRUPT_OUTPUT',
+                        'OLLAMA_INCOMPLETE_RESPONSE',
+                        'OLLAMA_STREAM_PARSE',
+                    ]);
+                    const fallbackModel = recoverableCodes.has(err?.code)
+                        ? resolveRecoveryModel(model)
+                        : '';
+                    if (!fallbackModel) throw err;
 
-                if (!response.ok) {
-                    let detail = '';
-                    try {
-                        detail = await response.text();
-                    } catch (_err) {
-                        detail = '';
-                    }
-                    throw new Error(`Ollama request failed: ${response.status}${detail ? ` ${detail}` : ''}`);
+                    console.warn(`[GnosysLLM] ${model} failed (${err.code}); retrying with ${fallbackModel}.`, err);
+                    emitGenerationStatus(
+                        options,
+                        'model_recovery',
+                        `${model} returned an unusable response. Unloading it and retrying with ${fallbackModel}...`,
+                        { model: fallbackModel, failedModel: model, reason: err.code }
+                    );
+                    await releaseFailedModel(model);
+                    const recovered = await requestOllamaModel(fallbackModel, systemPrompt, userPrompt, options);
+                    rememberRecoveredModel(fallbackModel, model);
+                    return { ...recovered, recoveredFrom: model };
                 }
-
-                if (!stream) {
-                    const payload = await response.json();
-                    const text = payload?.message?.content || payload?.response || '';
-                    return { provider: 'desktop-ollama', model, text: String(text) };
-                }
-
-                if (!response.body) {
-                    throw new Error('Ollama stream did not return a readable body.');
-                }
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let fullText = '';
-                let lineBuffer = '';
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    lineBuffer += decoder.decode(value, { stream: true });
-                    const lines = lineBuffer.split('\n');
-                    lineBuffer = lines.pop() || '';
-
-                    for (const line of lines) {
-                        if (!line.trim()) continue;
-                        let data;
-                        try {
-                            data = JSON.parse(line);
-                        } catch (_err) {
-                            continue;
-                        }
-
-                        const token = typeof data?.message?.content === 'string' ? data.message.content : '';
-                        if (!token) continue;
-                        fullText += token;
-                        if (typeof options.onToken === 'function') {
-                            options.onToken(token, fullText);
-                        }
-                    }
-                }
-
-                return { provider: 'desktop-ollama', model, text: fullText };
             },
         };
     }
@@ -1671,7 +1836,7 @@
             const model = window.getGnosysModel('gnosys_active_llm');
             if (model) return model;
         }
-        return localStorage.getItem('gnosys_active_llm') || 'gemma4:e4b';
+        return localStorage.getItem('gnosys_active_llm') || DEFAULT_DESKTOP_MODEL;
     }
 
     function getPrettyModelName(rawModel) {
@@ -2269,9 +2434,9 @@
         let onDeviceStorageMode = localStorage.getItem(STORAGE_KEYS.onDeviceStorageMode) || 'localfile';
         
         let activeSetupTab = (localStorage.getItem(STORAGE_KEYS.routeMode) === 'desktop-ollama') ? 'ollama' : 'browser';
-        let activeOllamaSelection = localStorage.getItem('gnosys_active_llm') || 'gemma4:e4b';
+        let activeOllamaSelection = localStorage.getItem('gnosys_active_llm') || DEFAULT_DESKTOP_MODEL;
         if (activeOllamaSelection.startsWith('litert:')) {
-            activeOllamaSelection = 'gemma4:e4b';
+            activeOllamaSelection = DEFAULT_DESKTOP_MODEL;
         }
 
         const ramGb = navigator.deviceMemory;
@@ -2451,11 +2616,11 @@
                                 <span class="gnosys-profile-card-desc">Highly capable reasoning and code comprehension. Requires 6GB+ VRAM.</span>
                             </div>
                             
-                            <!-- Card 4: Gemma 4 Pro 4.5B -->
-                            <div id="gnosys-profile-ollama-gemma4" class="gnosys-profile-card ${activeOllamaSelection === 'gemma4:e4b' ? 'active' : ''}">
-                                <span class="gnosys-profile-card-title">Gemma 4 Pro (4.5B)</span>
-                                <span class="gnosys-profile-card-badge">Pro Reasoning</span>
-                                <span class="gnosys-profile-card-desc">Rich Socratic dialogue. Requires premium gaming GPUs (11GB+ VRAM).</span>
+                            <!-- Card 4: Gemma 4 12B -->
+                            <div id="gnosys-profile-ollama-gemma4" class="gnosys-profile-card ${activeOllamaSelection === 'gemma4:12b' ? 'active' : ''}">
+                                <span class="gnosys-profile-card-title">Gemma 4 (12B)</span>
+                                <span class="gnosys-profile-card-badge">Recommended for Structured Work</span>
+                                <span class="gnosys-profile-card-desc">Verified for lyric critiques and structured JSON responses. Requires approximately 8GB+ VRAM.</span>
                             </div>
                         </div>
                     </div>
@@ -2927,8 +3092,8 @@
                 }
                 if (profileOllamaGemma4) {
                     profileOllamaGemma4.addEventListener('click', () => {
-                        activeOllamaSelection = 'gemma4:e4b';
-                        highlightOllamaCard('gemma4:e4b');
+                        activeOllamaSelection = 'gemma4:12b';
+                        highlightOllamaCard('gemma4:12b');
                     });
                 }
 
@@ -2937,7 +3102,7 @@
                         'llama3.2': profileOllamaLlama32,
                         'llama3': profileOllamaLlama3,
                         'qwen2.5': profileOllamaQwen25,
-                        'gemma4:e4b': profileOllamaGemma4
+                        'gemma4:12b': profileOllamaGemma4
                     };
                     Object.keys(cards).forEach(key => {
                         if (cards[key]) {

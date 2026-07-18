@@ -1353,7 +1353,7 @@
         // Initialize LLM Model Selector
         const llmSelector = document.getElementById('llm-model-selector');
         if (llmSelector && typeof window.populateModelSelector === 'function') {
-            const currentModel = window.getGnosysModel ? window.getGnosysModel('gnosys_active_llm') : (localStorage.getItem('gnosys_active_llm') || 'gemma4:e4b');
+            const currentModel = window.getGnosysModel ? window.getGnosysModel('gnosys_active_llm') : (localStorage.getItem('gnosys_active_llm') || 'gemma4:12b');
             const endpoint = localStorage.getItem("gnosys_ollama_endpoint") || localStorage.getItem("chemistry_ollama_endpoint") || "http://localhost:11434";
             const cleanEndpoint = endpoint.replace(/\/v1\/?$/, '').trim();
             window.populateModelSelector(llmSelector, currentModel, cleanEndpoint, {
@@ -1371,9 +1371,16 @@
 
             // Keep in sync on focus (in case the model is changed in other modals)
             llmSelector.addEventListener('focus', () => {
-                const updatedModel = window.getGnosysModel ? window.getGnosysModel('gnosys_active_llm') : (localStorage.getItem('gnosys_active_llm') || 'gemma4:e4b');
+                const updatedModel = window.getGnosysModel ? window.getGnosysModel('gnosys_active_llm') : (localStorage.getItem('gnosys_active_llm') || 'gemma4:12b');
                 if (llmSelector.value !== updatedModel) {
                     llmSelector.value = updatedModel;
+                }
+            });
+
+            window.addEventListener('gnosys-llm-model-changed', (event) => {
+                const recoveredModel = event?.detail?.model;
+                if (recoveredModel && llmSelector.value !== recoveredModel) {
+                    llmSelector.value = recoveredModel;
                 }
             });
         }
@@ -2425,6 +2432,24 @@
         await runCritiqueAPI(userPrompt);
     }
 
+    function renderCritiqueStatus(message, state = 'loading') {
+        const listContainer = document.getElementById('critique-annotations-list');
+        if (!listContainer) return;
+        const isError = state === 'error';
+        listContainer.innerHTML = '';
+        const status = document.createElement('div');
+        status.className = `text-xs py-6 text-center rounded-2xl border ${isError
+            ? 'text-red-300 bg-red-950/20 border-red-500/20'
+            : 'text-slate-400 italic bg-slate-950/20 border-white/5'}`;
+        if (!isError) {
+            const icon = document.createElement('i');
+            icon.className = 'fa-solid fa-circle-notch fa-spin mr-1.5 text-fuchsia-400 animate-spin';
+            status.appendChild(icon);
+        }
+        status.appendChild(document.createTextNode(String(message || 'Working...')));
+        listContainer.appendChild(status);
+    }
+
     async function runCritiqueAPI(userPrompt) {
         if (isChatResponding) return;
         isChatResponding = true;
@@ -2478,39 +2503,99 @@ ${currentLyrics}
 CRITIQUE & REVIEW MODE IS ACTIVE:
 The user is focusing on reviewing and critiquing the current lyrics.
 You MUST analyze the lyrics across four dimensions and return a scorecard and specific line annotations.
-Place this data in a <critique_data>...</critique_data> tag containing a JSON object in this format:
+Return exactly one JSON object in this format:
 {
   "scores": {
-    "mnemonic": 85, // Mnemonic Density (0-100)
-    "rhythm": 70,    // Rhythm & Flow (0-100)
-    "accuracy": 90,  // Scientific Accuracy (0-100)
-    "rhyme": 80      // Rhyme & Catchiness (0-100)
+    "mnemonic": 85,
+    "rhythm": 70,
+    "accuracy": 90,
+    "rhyme": 80
   },
   "annotations": [
     {
       "startLine": 5,
       "endLine": 6,
-      "category": "rhythm", // "rhythm", "mnemonic", "accuracy", "rhyme"
+      "category": "rhythm",
       "message": "Line 6 is metrically heavy. Suggest shortening to balance syllables.",
       "suggestion": "Physiology is how it works, the chemistry!"
     }
-  ]
+  ],
+  "chatResponse": "A concise explanation of the two most important critique findings."
 }
-Note: Place constructive critique explanations inside the <chat_response> tag, walking the user through 1 or 2 key critique points step-by-step. Let the user decide when to apply changes.
+Return strict JSON only: use double-quoted keys and strings, and do not include comments, markdown fences, XML tags, or trailing commas.
+Use chatResponse to walk the user through 1 or 2 key critique points step-by-step. Let the user decide when to apply changes.
 NEVER place critiques, notes, comments, feedback, or explanations inside the <edit_lyrics> tag or inline within the lyrics. The <edit_lyrics> tag must contain ONLY clean, performable song lyrics. Do not output <edit_lyrics> unless the user explicitly requested you to edit the document directly.
 `;
 
         try {
             if (window.GnosysLLM) {
                 let responseText = '';
-                
-                await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
-                    stream: true,
+
+                const result = await window.GnosysLLM.generateResponse(systemPrompt, userPrompt, {
+                    // Structured responses are collected atomically so an incomplete
+                    // stream can never masquerade as a formatting failure.
+                    stream: false,
+                    structuredResponse: true,
+                    responseFormat: {
+                        type: 'object',
+                        properties: {
+                            scores: {
+                                type: 'object',
+                                properties: {
+                                    mnemonic: { type: 'integer', minimum: 0, maximum: 100 },
+                                    rhythm: { type: 'integer', minimum: 0, maximum: 100 },
+                                    accuracy: { type: 'integer', minimum: 0, maximum: 100 },
+                                    rhyme: { type: 'integer', minimum: 0, maximum: 100 },
+                                },
+                                required: ['mnemonic', 'rhythm', 'accuracy', 'rhyme'],
+                            },
+                            annotations: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        startLine: { type: 'integer', minimum: 1 },
+                                        endLine: { type: 'integer', minimum: 1 },
+                                        category: { type: 'string', enum: ['rhythm', 'mnemonic', 'accuracy', 'rhyme'] },
+                                        message: { type: 'string' },
+                                        suggestion: { type: 'string' },
+                                    },
+                                    required: ['startLine', 'endLine', 'category', 'message', 'suggestion'],
+                                },
+                            },
+                            chatResponse: { type: 'string' },
+                        },
+                        required: ['scores', 'annotations', 'chatResponse'],
+                    },
+                    ollamaOptions: { temperature: 0.2 },
                     history: studioConversationHistory.slice(0, -1),
                     onToken: (token, fullText) => {
                         responseText = fullText;
+                    },
+                    onStatus: (status) => {
+                        if (!status?.message) return;
+                        if (hudStatus) hudStatus.textContent = status.message;
+                        renderCritiqueStatus(status.message);
                     }
                 });
+
+                if (result?.provider === 'no-ai') {
+                    throw new Error('The local lyric assistant is offline. Launch Ollama, then try Critique again.');
+                }
+                responseText = String(result?.text || responseText || '').trim();
+                if (!responseText) {
+                    throw new Error(`${result?.model || 'The selected model'} returned no critique text.`);
+                }
+
+                if (hudStatus) hudStatus.textContent = 'Validating the structured critique response...';
+                renderCritiqueStatus('Validating the structured critique response...');
+                const critiqueData = parseCritiqueData(responseText);
+                if (!critiqueData) {
+                    throw new Error(
+                        `${result?.model || 'The selected model'} responded, but did not return a valid critique scorecard. ` +
+                        'Try again or select Gemma 4 (12B).'
+                    );
+                }
 
                 // Add to chat history
                 studioConversationHistory.push({ role: "user", content: userPrompt });
@@ -2519,22 +2604,14 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
                 // Also append the chat response to the chat history bubble so they can read it when switching back
                 const bubble = appendChatMessage("Gnosys AI", "", "agent");
                 const bubbleBody = bubble.querySelector('.agent-message-body');
-                const chatText = parseChatResponse(responseText);
+                const chatText = parseChatResponse(responseText) || String(critiqueData.chatResponse || '').trim();
                 if (chatText) {
                     bubbleBody.innerHTML = parseMarkdown(chatText);
                 } else {
                     bubbleBody.innerHTML = "Lyrical critique completed. See scorecard and cards on the Critique Panel.";
                 }
 
-                const critiqueData = parseCritiqueData(responseText);
-                if (critiqueData) {
-                    renderCritiqueDashboard(critiqueData);
-                } else {
-                    const listContainer = document.getElementById('critique-annotations-list');
-                    if (listContainer) {
-                        listContainer.innerHTML = `<div class="text-xs text-slate-400 py-6 text-center italic bg-slate-950/20 rounded-2xl border border-white/5">Failed to extract structured critique data. The model might not have structured it properly. Please try again.</div>`;
-                    }
-                }
+                renderCritiqueDashboard(critiqueData);
                 
                 const settings = parseUpdateSettings(responseText);
                 if (settings) {
@@ -2544,7 +2621,10 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
                 showBannerNotification("Gnosys LLM Engine is unavailable.", "error");
             }
         } catch (err) {
-            showBannerNotification(`Critique run failed: ${err.message}`, "error");
+            const message = err?.message || 'Unknown local model error.';
+            console.error('[Music Studio] Critique run failed:', err);
+            renderCritiqueStatus(`Critique failed: ${message}`, 'error');
+            showBannerNotification(`Critique run failed: ${message}`, "error");
         } finally {
             isChatResponding = false;
             if (sendBtn) {
@@ -2563,67 +2643,147 @@ NEVER place critiques, notes, comments, feedback, or explanations inside the <ed
         }
     }
 
-    function cleanJsonString(jsonStr) {
-        let cleaned = "";
+    function stripJsonComments(jsonText) {
+        let result = '';
         let inString = false;
-        for (let i = 0; i < jsonStr.length; i++) {
-            let char = jsonStr[i];
-            if (char === '"' && (i === 0 || jsonStr[i-1] !== '\\')) {
-                // Structural quote checks
-                let isStructural = false;
-                let after = jsonStr.substring(i + 1).trim();
-                let before = jsonStr.substring(0, i).trim();
-                
-                if (before.endsWith('{') || before.endsWith('[') || before.endsWith(',')) {
-                    isStructural = true;
-                    inString = true;
-                } else if (after.startsWith(':')) {
-                    isStructural = true;
-                    inString = false;
-                } else if (before.endsWith(':')) {
-                    isStructural = true;
-                    inString = true;
-                } else if (after.startsWith(',') || after.startsWith('}') || after.startsWith(']')) {
-                    isStructural = true;
-                    inString = false;
+        let escaped = false;
+        let lineComment = false;
+        let blockComment = false;
+
+        for (let i = 0; i < jsonText.length; i++) {
+            const char = jsonText[i];
+            const next = jsonText[i + 1];
+
+            if (lineComment) {
+                if (char === '\n') {
+                    lineComment = false;
+                    result += char;
                 }
-                
-                if (isStructural) {
-                    cleaned += char;
-                } else {
-                    cleaned += '\\"'; // Escape internal unescaped double quote
+                continue;
+            }
+            if (blockComment) {
+                if (char === '*' && next === '/') {
+                    blockComment = false;
+                    i++;
                 }
-            } else {
-                cleaned += char;
+                continue;
+            }
+            if (!inString && char === '/' && next === '/') {
+                lineComment = true;
+                i++;
+                continue;
+            }
+            if (!inString && char === '/' && next === '*') {
+                blockComment = true;
+                i++;
+                continue;
+            }
+
+            result += char;
+            if (escaped) {
+                escaped = false;
+            } else if (char === '\\' && inString) {
+                escaped = true;
+            } else if (char === '"') {
+                inString = !inString;
             }
         }
-        return cleaned;
+
+        return result.replace(/,\s*([}\]])/g, '$1');
+    }
+
+    function extractBalancedJsonObject(text) {
+        const source = String(text || '');
+        const start = source.indexOf('{');
+        if (start < 0) return '';
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+
+        for (let i = start; i < source.length; i++) {
+            const char = source[i];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (char === '\\' && inString) {
+                escaped = true;
+                continue;
+            }
+            if (char === '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) continue;
+            if (char === '{') depth++;
+            if (char === '}') {
+                depth--;
+                if (depth === 0) return source.slice(start, i + 1);
+            }
+        }
+        return '';
+    }
+
+    function parseStructuredJson(rawText, tagName) {
+        const text = String(rawText || '');
+        const escapedTag = String(tagName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const tagMatch = text.match(new RegExp(`<${escapedTag}>([\\s\\S]*?)<\\/${escapedTag}>`, 'i'));
+        const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        const sources = [tagMatch?.[1], fenceMatch?.[1], text].filter(Boolean);
+
+        for (const source of sources) {
+            const candidate = extractBalancedJsonObject(source) || String(source).trim();
+            for (const value of [candidate, stripJsonComments(candidate)]) {
+                try {
+                    return JSON.parse(value);
+                } catch (_err) {
+                    // Try the next conservative representation.
+                }
+            }
+        }
+        return null;
+    }
+
+    function normalizeCritiqueData(data) {
+        if (!data || typeof data !== 'object' || !data.scores || !Array.isArray(data.annotations)) return null;
+        const scoreNames = ['mnemonic', 'rhythm', 'accuracy', 'rhyme'];
+        const scores = {};
+        for (const name of scoreNames) {
+            const value = Number(data.scores[name]);
+            if (!Number.isFinite(value)) return null;
+            scores[name] = Math.max(0, Math.min(100, Math.round(value)));
+        }
+
+        const categories = new Set(['rhythm', 'mnemonic', 'accuracy', 'rhyme']);
+        const annotations = data.annotations.map(annotation => {
+            if (!annotation || typeof annotation !== 'object') return null;
+            const startLine = Math.max(1, Math.round(Number(annotation.startLine) || 1));
+            const endLine = Math.max(startLine, Math.round(Number(annotation.endLine) || startLine));
+            const message = String(annotation.message || '').trim();
+            if (!message) return null;
+            return {
+                startLine,
+                endLine,
+                category: categories.has(annotation.category) ? annotation.category : 'rhythm',
+                message,
+                suggestion: String(annotation.suggestion || '').trim(),
+            };
+        }).filter(Boolean);
+
+        return { ...data, scores, annotations };
     }
 
     function parseCritiqueData(rawText) {
-        const match = rawText.match(/<critique_data>([\s\S]*?)<\/critique_data>/i);
-        if (match) {
-            try {
-                const cleanedContent = cleanJsonString(match[1].trim());
-                return JSON.parse(cleanedContent);
-            } catch (e) {
-                console.error("Failed to parse critique JSON:", e, match[1]);
-            }
+        const parsed = parseStructuredJson(rawText, 'critique_data');
+        const normalized = normalizeCritiqueData(parsed);
+        if (!normalized) {
+            console.error('[Music Studio] Invalid critique response structure:', rawText);
         }
-        return null;
+        return normalized;
     }
 
     function parseUpdateSettings(rawText) {
-        const match = rawText.match(/<update_settings>([\s\S]*?)<\/update_settings>/i);
-        if (match) {
-            try {
-                const cleanedContent = cleanJsonString(match[1].trim());
-                return JSON.parse(cleanedContent);
-            } catch (e) {
-                console.error("Failed to parse settings update JSON:", e, match[1]);
-            }
-        }
-        return null;
+        return parseStructuredJson(rawText, 'update_settings');
     }
 
     function renderCritiqueDashboard(data) {

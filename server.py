@@ -1541,6 +1541,7 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     else:
                         return "restricted"
                 
+                model_caps["gemma4:12b"] = classify(8.5, 12.0)
                 model_caps["gemma4:e4b"] = classify(11.0, 16.0)
                 model_caps["llama3"] = classify(6.0, 8.0)
                 model_caps["qwen2.5"] = classify(6.0, 8.0)
@@ -1550,7 +1551,9 @@ class GnosysHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Auto recommend best choice
                 auto_rec = "llama3.2"
-                if model_caps["gemma4:e4b"] == "recommended":
+                if model_caps["gemma4:12b"] == "recommended":
+                    auto_rec = "gemma4:12b"
+                elif model_caps["gemma4:e4b"] == "recommended":
                     auto_rec = "gemma4:e4b"
                 elif model_caps["qwen2.5"] == "recommended":
                     auto_rec = "qwen2.5"
