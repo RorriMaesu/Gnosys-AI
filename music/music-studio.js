@@ -13,7 +13,9 @@
     let isTrackGenerating = false;
     let generationStartPending = false;
     let activeGenerationController = null;
-    let activeGenerationStageInterval = null;
+    let generationTelemetryInterval = null;
+    let generationTelemetryInFlight = false;
+    let generationTelemetryLastReceivedAt = null;
     let serviceStoppedManually = false;
     let currentGenerationTraceId = null;
     let lastGenerationFailure = null;
@@ -38,6 +40,177 @@
             return `music-ui-${window.crypto.randomUUID()}`;
         }
         return `music-ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    function formatGenerationElapsed(totalSeconds) {
+        const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainder = seconds % 60;
+        return hours > 0
+            ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+            : `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+    }
+
+    function setGenerationPreparing(stage, message) {
+        document.getElementById('generation-progress-container')?.classList.remove('hidden');
+        const statusText = document.getElementById('gen-status-text');
+        const monitorMessage = document.getElementById('gen-monitor-message');
+        const dot = document.getElementById('gen-live-dot');
+        const bar = document.getElementById('generation-live-bar');
+        const fill = document.getElementById('gen-progress-bar-fill');
+        const percent = document.getElementById('gen-percent');
+        if (statusText) statusText.textContent = stage;
+        if (monitorMessage) monitorMessage.textContent = message;
+        if (dot) dot.dataset.state = 'starting';
+        if (bar) bar.dataset.state = 'starting';
+        if (fill) fill.style.removeProperty('width');
+        if (percent) percent.textContent = 'No exact %';
+    }
+
+    function renderGenerationTimeline(timeline) {
+        const list = document.getElementById('generation-live-timeline');
+        if (!list) return;
+        list.replaceChildren();
+        const entries = Array.isArray(timeline) ? timeline.slice(-8) : [];
+        if (!entries.length) {
+            const item = document.createElement('li');
+            item.className = 'generation-timeline-item';
+            item.textContent = 'Waiting for the helper to accept the request…';
+            list.appendChild(item);
+            return;
+        }
+        entries.forEach(entry => {
+            const item = document.createElement('li');
+            item.className = 'generation-timeline-item';
+            const elapsed = entry.timestamp && window.latestGenerationTelemetry?.started_at
+                ? Math.max(0, entry.timestamp - window.latestGenerationTelemetry.started_at)
+                : null;
+            item.textContent = `${entry.label || entry.stage}${elapsed === null ? '' : ` • +${formatGenerationElapsed(elapsed)}`}`;
+            list.appendChild(item);
+        });
+    }
+
+    function renderGenerationTelemetry(generation) {
+        if (!generation) return;
+        window.latestGenerationTelemetry = generation;
+        if (!window.latestStatusData) window.latestStatusData = {};
+        window.latestStatusData.generation = generation;
+        generationTelemetryLastReceivedAt = Date.now();
+
+        const generateButton = document.getElementById('btn-generate-track');
+        if (generation.active) {
+            isTrackGenerating = true;
+            if (generateButton) generateButton.disabled = true;
+        } else if (!activeGenerationController) {
+            isTrackGenerating = false;
+            if (generateButton && !pendingGeneration && !isLaunchingService) generateButton.disabled = false;
+        }
+
+        const container = document.getElementById('generation-progress-container');
+        const statusText = document.getElementById('gen-status-text');
+        const monitorMessage = document.getElementById('gen-monitor-message');
+        const dot = document.getElementById('gen-live-dot');
+        const bar = document.getElementById('generation-live-bar');
+        const fill = document.getElementById('gen-progress-bar-fill');
+        const elapsed = document.getElementById('gen-elapsed');
+        const percent = document.getElementById('gen-percent');
+        const heartbeatValue = document.getElementById('gen-heartbeat-value');
+        const gpuValue = document.getElementById('gen-gpu-value');
+        const vramValue = document.getElementById('gen-vram-value');
+        const serviceValue = document.getElementById('gen-service-value');
+        const lastUpdate = document.getElementById('gen-last-update');
+        const stallWarning = document.getElementById('generation-stall-warning');
+        const stallText = document.getElementById('generation-stall-warning-text');
+        const monitorState = generation.monitor_status || (generation.active ? 'starting' : 'idle');
+
+        if (generation.active || isTrackGenerating || activeGenerationController) {
+            container?.classList.remove('hidden');
+        }
+        if (statusText) statusText.textContent = generation.stage_label || 'Music generation';
+        if (monitorMessage) monitorMessage.textContent = generation.monitor_message || 'Waiting for a live status update.';
+        if (dot) dot.dataset.state = monitorState;
+        if (bar) bar.dataset.state = monitorState;
+        if (fill) fill.style.removeProperty('width');
+        if (elapsed) elapsed.textContent = formatGenerationElapsed(generation.elapsed_seconds);
+        if (percent) percent.textContent = generation.exact_progress_available ? 'Live progress' : 'No exact %';
+
+        const heartbeatAge = generation.heartbeat_age_seconds;
+        if (heartbeatValue) {
+            heartbeatValue.textContent = generation.heartbeat_count > 0
+                ? `${heartbeatAge !== null && heartbeatAge !== undefined ? `${heartbeatAge.toFixed(1)}s ago` : 'Live'} • ${generation.heartbeat_count} received`
+                : 'Waiting for first heartbeat';
+        }
+        const gpu = generation.gpu;
+        if (gpuValue) {
+            gpuValue.textContent = gpu
+                ? `${gpu.utilization_gpu_percent}% • ${gpu.power_watts} W • ${gpu.temperature_c}°C`
+                : 'GPU sample unavailable';
+        }
+        if (vramValue) {
+            vramValue.textContent = gpu
+                ? `${(gpu.used_mb / 1024).toFixed(1)} / ${(gpu.total_mb / 1024).toFixed(1)} GB`
+                : 'VRAM sample unavailable';
+        }
+        if (serviceValue) {
+            serviceValue.textContent = generation.service?.port_8002_open
+                ? 'ACE-Step port is open'
+                : 'ACE-Step is offline';
+        }
+        if (lastUpdate) lastUpdate.textContent = 'Updated now';
+        renderGenerationTimeline(generation.timeline);
+
+        const showStallWarning = Boolean(generation.stall_suspected);
+        stallWarning?.classList.toggle('hidden', !showStallWarning);
+        if (stallText && showStallWarning) stallText.textContent = generation.monitor_message;
+    }
+
+    async function pollGenerationTelemetry() {
+        if (generationTelemetryInFlight) return;
+        generationTelemetryInFlight = true;
+        try {
+            const response = await fetchHelper(`${API_BASE}/api/music/generation/status`, {
+                cache: 'no-store',
+                timeoutMs: 7000,
+            });
+            if (!response.ok) throw new Error(`Live status returned HTTP ${response.status}.`);
+            const payload = await response.json();
+            renderGenerationTelemetry(payload.generation);
+            if (!payload.generation?.active && !isTrackGenerating && !activeGenerationController) {
+                stopGenerationTelemetry();
+            }
+        } catch (error) {
+            if (isTrackGenerating || activeGenerationController || window.latestStatusData?.generation?.active) {
+                const monitorMessage = document.getElementById('gen-monitor-message');
+                const lastUpdate = document.getElementById('gen-last-update');
+                if (monitorMessage) {
+                    monitorMessage.textContent = 'Live feedback is reconnecting. The generation request may still be running.';
+                }
+                if (lastUpdate) {
+                    const age = generationTelemetryLastReceivedAt
+                        ? Math.round((Date.now() - generationTelemetryLastReceivedAt) / 1000)
+                        : null;
+                    lastUpdate.textContent = age === null ? 'Telemetry unavailable' : `Last update ${age}s ago`;
+                }
+            }
+            console.warn('[Music Studio] Generation telemetry poll failed:', error);
+        } finally {
+            generationTelemetryInFlight = false;
+        }
+    }
+
+    function startGenerationTelemetry() {
+        if (!generationTelemetryInterval) {
+            generationTelemetryInterval = window.setInterval(pollGenerationTelemetry, 2000);
+        }
+        void pollGenerationTelemetry();
+    }
+
+    function stopGenerationTelemetry() {
+        if (generationTelemetryInterval) {
+            window.clearInterval(generationTelemetryInterval);
+            generationTelemetryInterval = null;
+        }
     }
 
     async function createGenerationResponseError(response, fallbackTraceId) {
@@ -1059,6 +1232,7 @@
         // Music generation trigger
         document.getElementById('btn-generate-track').addEventListener('click', generateStudyTrack);
         document.getElementById('btn-download-music-diagnostics')?.addEventListener('click', downloadMusicDiagnostics);
+        document.getElementById('btn-stop-stalled-generation')?.addEventListener('click', stopService);
 
         // Copy launch command helper
         const copyCmdBtn = document.getElementById('btn-copy-launch-cmd');
@@ -1334,10 +1508,6 @@
         serviceStoppedManually = true;
         pendingGeneration = false;
         activeGenerationController?.abort();
-        if (activeGenerationStageInterval) {
-            clearInterval(activeGenerationStageInterval);
-            activeGenerationStageInterval = null;
-        }
         if (stopBtn) {
             stopBtn.disabled = true;
             stopBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> ${wasGenerating ? 'Stopping Track...' : 'Stopping Service...'}`;
@@ -1356,14 +1526,16 @@
                 const generateBtn = document.getElementById('btn-generate-track');
                 const progressContainer = document.getElementById('generation-progress-container');
                 const statusText = document.getElementById('gen-status-text');
-                const fill = document.getElementById('gen-progress-bar-fill');
+                const monitorMessage = document.getElementById('gen-monitor-message');
                 const percent = document.getElementById('gen-percent');
                 if (generateBtn) generateBtn.disabled = false;
                 if (progressContainer && wasGenerating) progressContainer.classList.remove('hidden');
                 if (statusText && wasGenerating) statusText.textContent = 'Generation stopped. You can start a new track.';
-                if (fill && wasGenerating) fill.style.width = '0%';
-                if (percent && wasGenerating) percent.textContent = '0%';
+                if (monitorMessage && wasGenerating) monitorMessage.textContent = 'ACE-Step was stopped and its GPU memory was released.';
+                if (percent && wasGenerating) percent.textContent = 'Stopped';
                 if (window.VRAMManager) window.VRAMManager.activeOwner = 'idle';
+                stopGenerationTelemetry();
+                void pollGenerationTelemetry();
                 showBannerNotification(
                     wasGenerating ? 'Track generation stopped and VRAM released.' : 'ACE-Step service stopped and VRAM released.',
                     'success'
@@ -1718,6 +1890,7 @@
             const generateBtn = document.getElementById('btn-generate-track');
             if (backendGenerating) {
                 isTrackGenerating = true;
+                startGenerationTelemetry();
                 if (generateBtn) generateBtn.disabled = true;
                 if (stopBtn) {
                     stopBtn.classList.remove('hidden');
@@ -1729,10 +1902,11 @@
                 const generationStatus = document.getElementById('gen-status-text');
                 if (progressContainer) progressContainer.classList.remove('hidden');
                 if (generationStatus && !activeGenerationController) {
-                    generationStatus.textContent = 'A track is generating in the local music service. Use Stop Generation to cancel it.';
+                    generationStatus.textContent = 'Reconnecting to the active track…';
                 }
             } else if (!activeGenerationController) {
                 isTrackGenerating = false;
+                stopGenerationTelemetry();
                 if (generateBtn && !pendingGeneration && !isLaunchingService) generateBtn.disabled = false;
                 if (stopBtn && !stopBtn.disabled) {
                     stopBtn.innerHTML = '<i class="fa-solid fa-power-off mr-1.5"></i> Stop Service';
@@ -3228,8 +3402,6 @@ Keep the body balanced in the homeostatic light!
         const btn = document.getElementById('btn-generate-track');
         const progressContainer = document.getElementById('generation-progress-container');
         const statusText = document.getElementById('gen-status-text');
-        const fill = document.getElementById('gen-progress-bar-fill');
-        const percent = document.getElementById('gen-percent');
 
         // Close the click/queue race before the first await. Previously the
         // permission check ran while the button was still active, allowing two
@@ -3292,10 +3464,10 @@ Keep the body balanced in the homeostatic light!
             if (statusTextVal.startsWith('Starting') || statusTextVal === 'Loading Weights') {
                 pendingGeneration = true;
                 btn.disabled = true;
-                progressContainer.classList.remove('hidden');
-                fill.style.width = '10%';
-                percent.textContent = '10%';
-                statusText.textContent = 'Queued: Waiting for ACE-Step API Server weights to finish loading...';
+                setGenerationPreparing(
+                    'Queued: waiting for ACE-Step',
+                    'The local service is still loading model weights. Generation will begin automatically when it is ready.'
+                );
                 showBannerNotification('Generation queued. It will run automatically once the server is ready.', 'info');
             } else if (statusTextVal === 'Not Found') {
                 showBannerNotification('ACE-Step service not found. Please run the install wizard to set it up.', 'error');
@@ -3303,10 +3475,10 @@ Keep the body balanced in the homeostatic light!
             } else {
                 pendingGeneration = true;
                 btn.disabled = true;
-                progressContainer.classList.remove('hidden');
-                fill.style.width = '10%';
-                percent.textContent = '10%';
-                statusText.textContent = 'Auto-starting background server and queuing generation...';
+                setGenerationPreparing(
+                    'Starting the local music service',
+                    'The request is queued while ACE-Step starts in the background.'
+                );
                 showBannerNotification('Auto-starting background server to generate track...', 'info');
                 launchService();
             }
@@ -3322,9 +3494,10 @@ Keep the body balanced in the homeostatic light!
                 
                 pendingGeneration = true;
                 btn.disabled = true;
-                progressContainer.classList.remove('hidden');
-                fill.style.width = '15%';
-                percent.textContent = '15%';
+                setGenerationPreparing(
+                    'Waiting for required model files',
+                    'Generation will begin after the selected checkpoint is fully available.'
+                );
                 
                 if (downloadsActive) {
                     statusText.textContent = 'Queued: Waiting for required models to finish downloading...';
@@ -3339,10 +3512,10 @@ Keep the body balanced in the homeostatic light!
         }
 
         isTrackGenerating = true;
-        progressContainer.classList.remove('hidden');
-        
-        fill.style.width = '5%';
-        percent.textContent = '5%';
+        setGenerationPreparing(
+            'Preparing the GPU',
+            'Gnosys is releasing the chatbot model before ACE-Step claims VRAM.'
+        );
         
         if (statusTextVal === 'Lazy Ready') {
             statusText.textContent = 'Mounting Neural Weights (takes 1-2 mins on first run)...';
@@ -3407,31 +3580,10 @@ Keep the body balanced in the homeostatic light!
             return;
         }
 
-        let progressPercent = 10;
-        fill.style.width = '10%';
-        percent.textContent = '10%';
-        statusText.textContent = 'Pre-processing audio configurations...';
-
-        const loadingStages = [
-            { pct: 20, text: 'Allocating VRAM workspace...' },
-            { pct: 35, text: 'Loading 4B Diffusion Transformer (DiT) weights...' },
-            { pct: 50, text: 'Resolving UMT5 Text Encoder weights...' },
-            { pct: 65, text: 'Running neural audio synthesis steps...' },
-            { pct: 80, text: 'Decoding features using DCAE f8c8 model...' },
-            { pct: 92, text: 'Reconstructing WAV output using Music Vocoder...' }
-        ];
-
-        let stageIndex = 0;
-        let stageInterval = setInterval(() => {
-            if (stageIndex < loadingStages.length) {
-                const stage = loadingStages[stageIndex];
-                fill.style.width = stage.pct + '%';
-                percent.textContent = stage.pct + '%';
-                statusText.textContent = stage.text;
-                stageIndex++;
-            }
-        }, 3000);
-        activeGenerationStageInterval = stageInterval;
+        setGenerationPreparing(
+            'Building the generation request',
+            'Audio settings are ready. Gnosys will now connect to ACE-Step’s live stream.'
+        );
 
         const modelVal = document.getElementById('music-model').value;
         const promptVal = document.getElementById('music-prompt').value;
@@ -3483,6 +3635,7 @@ Keep the body balanced in the homeostatic light!
         activeGenerationController = generationController;
         const generationTraceId = currentGenerationTraceId;
         let preserveBackendBusyState = false;
+        startGenerationTelemetry();
 
         try {
             const localFetch = window.GnosysFetchLocalHelper || fetch;
@@ -3500,10 +3653,10 @@ Keep the body balanced in the homeostatic light!
                 signal: generationController.signal,
             });
             
-            clearInterval(stageInterval);
-            fill.style.width = '95%';
-            percent.textContent = '95%';
-            statusText.textContent = 'Decoding final WAV file...';
+            setGenerationPreparing(
+                'Audio response received',
+                'The browser is validating the response and loading it into the player.'
+            );
 
             if (!res.ok) {
                 throw await createGenerationResponseError(res, generationTraceId);
@@ -3515,8 +3668,8 @@ Keep the body balanced in the homeostatic light!
             const audioItem = data?.choices?.[0]?.message?.audio?.[0];
             if (audioItem && audioItem.audio_url && audioItem.audio_url.url) {
                 const audioUrl = audioItem.audio_url.url; // This is a data:audio/mp3;base64,... URL
-                fill.style.width = '100%';
-                percent.textContent = '100%';
+                const percent = document.getElementById('gen-percent');
+                if (percent) percent.textContent = 'Complete';
                 loadAudioToPlayer(audioUrl);
 
                 // Mark music active in VRAMManager
@@ -3527,7 +3680,6 @@ Keep the body balanced in the homeostatic light!
                 throw new Error("No audio block returned in API response.");
             }
         } catch (err) {
-            if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
             const msg = err.message || '';
             const errorCode = err.errorCode || '';
             const wasStopped = generationController.signal.aborted
@@ -3571,12 +3723,11 @@ Keep the body balanced in the homeostatic light!
                 showBannerNotification(`Generation failed (${err.errorCode || 'unknown error'}). Download the diagnostic report for details.`, 'error');
             }
         } finally {
-            if (typeof stageInterval !== 'undefined') clearInterval(stageInterval);
-            if (activeGenerationStageInterval === stageInterval) activeGenerationStageInterval = null;
             if (activeGenerationController === generationController) activeGenerationController = null;
             if (currentGenerationTraceId === generationTraceId) currentGenerationTraceId = null;
             isTrackGenerating = false;
             if (!preserveBackendBusyState) btn.disabled = false;
+            await pollGenerationTelemetry();
             // Reset status badge from backend to clear the manual "Loading Weights" override
             await checkMusicServiceStatus();
         }
