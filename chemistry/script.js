@@ -244,6 +244,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bindDarkModeToggle();
     bindChemistrySettingsButton();
     bindTabs();
+    bindDimensionalAnalysisTutor();
     mountConstants();
     mountElementChips();
     mountConversionOptions();
@@ -4059,6 +4060,92 @@ function bindTabs() {
         document.getElementById(`nav-${id}`)?.addEventListener('click', () => activateChemTab(id));
         document.getElementById(`bnav-${id}`)?.addEventListener('click', () => activateChemTab(id));
     });
+}
+
+function bindDimensionalAnalysisTutor() {
+    const modes = ["classic", "tutor"];
+    const buttons = {
+        classic: document.getElementById("dimensions-mode-classic"),
+        tutor: document.getElementById("dimensions-mode-tutor")
+    };
+    const panels = {
+        classic: document.getElementById("dimensions-classic-panel"),
+        tutor: document.getElementById("dimensions-tutor-panel")
+    };
+    const iframe = document.getElementById("dimensional-analysis-tutor-frame");
+
+    if (!buttons.classic || !buttons.tutor || !panels.classic || !panels.tutor || !iframe) return;
+
+    const selectedClasses = ["bg-white", "dark:bg-slate-700", "text-gray-900", "dark:text-white", "shadow-sm"];
+    const idleClasses = ["text-gray-600", "dark:text-slate-300", "hover:text-gray-900", "dark:hover:text-white"];
+
+    const syncTutorTheme = () => {
+        if (!iframe.contentWindow) return;
+        const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+        const targetOrigin = window.location.origin === "null" ? "*" : window.location.origin;
+        iframe.contentWindow.postMessage({ type: "gnosys-theme", theme }, targetOrigin);
+    };
+
+    const ensureTutorLoaded = () => {
+        if (!iframe.getAttribute("src")) {
+            iframe.setAttribute("src", new URL(iframe.dataset.src, window.location.href).href);
+        } else {
+            syncTutorTheme();
+        }
+    };
+
+    const activateMode = (mode, moveFocus = false) => {
+        const requestedMode = modes.includes(mode) ? mode : "classic";
+
+        modes.forEach((id) => {
+            const isActive = id === requestedMode;
+            const button = buttons[id];
+            const panel = panels[id];
+
+            button.setAttribute("aria-selected", String(isActive));
+            button.setAttribute("tabindex", isActive ? "0" : "-1");
+            selectedClasses.forEach((className) => button.classList.toggle(className, isActive));
+            idleClasses.forEach((className) => button.classList.toggle(className, !isActive));
+
+            panel.hidden = !isActive;
+            panel.classList.toggle("hidden", !isActive);
+        });
+
+        if (requestedMode === "tutor") ensureTutorLoaded();
+        if (moveFocus) buttons[requestedMode].focus();
+    };
+
+    modes.forEach((mode) => {
+        const button = buttons[mode];
+        button.addEventListener("click", () => activateMode(mode));
+        button.addEventListener("keydown", (event) => {
+            const currentIndex = modes.indexOf(mode);
+            let nextIndex = null;
+
+            if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % modes.length;
+            if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + modes.length) % modes.length;
+            if (event.key === "Home") nextIndex = 0;
+            if (event.key === "End") nextIndex = modes.length - 1;
+            if (nextIndex === null) return;
+
+            event.preventDefault();
+            activateMode(modes[nextIndex], true);
+        });
+    });
+
+    iframe.addEventListener("load", syncTutorTheme);
+    window.addEventListener("message", (event) => {
+        if (event.source !== iframe.contentWindow || event.data?.type !== "gnosys-tutor-height") return;
+        const requestedHeight = Number(event.data.height);
+        if (!Number.isFinite(requestedHeight) || requestedHeight <= 0) return;
+        const comfortableHeight = Math.min(Math.max(Math.ceil(requestedHeight), 760), 2400);
+        iframe.style.height = `${comfortableHeight}px`;
+    });
+    document.getElementById("btn-darkmode")?.addEventListener("click", () => {
+        window.setTimeout(syncTutorTheme, 0);
+    });
+
+    activateMode("classic");
 }
 
 function mountConstants() {

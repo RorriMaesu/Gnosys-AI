@@ -1614,8 +1614,25 @@
         </section>
 
         <section id="view-dimensions" class="hidden-tab fade-in bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sm:p-8">
+            <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6 pb-6 border-b border-gray-100 dark:border-slate-800">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1">Dimensional Analysis</p>
+                    <h3 class="text-xl font-bold mb-1">Choose your learning experience</h3>
+                    <p class="text-sm text-gray-600 dark:text-slate-300">Keep building full conversion chains, or use the new guided tutor for a slower, step-by-step lesson.</p>
+                </div>
+                <div class="inline-flex self-start rounded-xl bg-gray-100 dark:bg-slate-900 p-1 border border-gray-200 dark:border-slate-700" role="tablist" aria-label="Dimensional analysis learning experience">
+                    <button id="dimensions-mode-classic" type="button" role="tab" aria-selected="true" aria-controls="dimensions-classic-panel" tabindex="0" class="px-4 py-2 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm text-sm font-bold transition-colors">
+                        Classic Builder
+                    </button>
+                    <button id="dimensions-mode-tutor" type="button" role="tab" aria-selected="false" aria-controls="dimensions-tutor-panel" tabindex="-1" class="px-4 py-2 rounded-lg text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white text-sm font-bold transition-colors">
+                        Guided Tutor <span class="ml-1 text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">New</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="dimensions-classic-panel" role="tabpanel" aria-labelledby="dimensions-mode-classic">
             <h3 class="text-xl font-bold mb-2">Dimensional Analysis Builder</h3>
-            <p class="text-gray-600 mb-5">Convert units by building a factor-label chain. Cross-cancel units to reach the target.</p>
+            <p class="text-gray-600 dark:text-slate-300 mb-5">Convert units by building a factor-label chain. Cross-cancel units to reach the target.</p>
             <p id="math-refresher-cta-dimensions" class="calc-struggle-cta hidden mb-4 text-sm text-amber-700 dark:text-amber-300 font-semibold">
                 Struggling with the calculation?
                 <button type="button" class="underline underline-offset-2 hover:text-amber-500 transition-colors" onclick="activateChemTab('math-refresher')">
@@ -1749,6 +1766,28 @@
 
             <div id="da-output" class="hidden mt-4 bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm text-gray-700"></div>
             <div id="da-tutor-anchor"></div>
+            </div>
+
+            <div id="dimensions-tutor-panel" role="tabpanel" aria-labelledby="dimensions-mode-tutor" class="hidden" hidden>
+                <div class="mb-4 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-slate-900/60 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-1">Metric Mind guided tutor</p>
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">Learn unit cancellation one decision at a time</h3>
+                        <p class="text-sm text-gray-600 dark:text-slate-300 mt-1">Your lesson, hints, and progress stay in place when you switch back to the Classic Builder.</p>
+                    </div>
+                    <a href="./dimensional-analysis-tutor/index.html?v=gnosys-20260806-3" target="_blank" rel="noopener" class="shrink-0 inline-flex items-center justify-center px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-gray-700 dark:text-slate-100 hover:border-amber-400 dark:hover:border-amber-600 transition-colors">
+                        Open in a new window
+                    </a>
+                </div>
+                <iframe
+                    id="dimensional-analysis-tutor-frame"
+                    title="Dimensional Analysis Tutor"
+                    data-src="./dimensional-analysis-tutor/index.html?v=gnosys-20260806-3"
+                    loading="lazy"
+                    class="block w-full rounded-2xl border-0 bg-white dark:bg-slate-950 shadow-inner"
+                    style="height: clamp(760px, calc(100vh - 8rem), 1100px);"
+                ></iframe>
+            </div>
         </section>
 
         <section id="view-stoich" class="hidden-tab fade-in bg-white rounded-3xl shadow-sm border border-gray-100 p-6 sm:p-8">
