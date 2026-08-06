@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Gnosys AI's interactive dimensional-analysis and scientific-notation tutor." />
+    <title>Gnosys AI — Dimensional Analysis Tutor</title>
+    <script>
+      (() => {
+        const applyTheme = (theme) => {
+          document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+        };
+
+        let initialTheme = "light";
+        try {
+          if (window.parent !== window && window.parent.document.documentElement.classList.contains("dark")) {
+            initialTheme = "dark";
+          } else if (localStorage.getItem("chemistry_darkmode") === "true") {
+            initialTheme = "dark";
+          }
+        } catch {}
+        applyTheme(initialTheme);
+
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent || event.data?.type !== "gnosys-theme") return;
+          applyTheme(event.data.theme);
+        });
+
+        const reportHeight = () => {
+          if (window.parent === window || !document.documentElement) return;
+          const height = Math.ceil(document.documentElement.scrollHeight);
+          window.parent.postMessage({ type: "gnosys-tutor-height", height }, "*");
+        };
+
+        window.addEventListener("DOMContentLoaded", () => {
+          reportHeight();
+          if ("ResizeObserver" in window && document.body) {
+            new ResizeObserver(reportHeight).observe(document.body);
+          }
+        });
+        window.addEventListener("resize", reportHeight);
+      })();
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#" aria-label="Gnosys AI dimensional analysis tutor home">
+          <span class="brand-mark" aria-hidden="true">10ˣ</span>
+          <span><strong>Gnosys AI</strong><small>Metric Mind tutor</small></span>
+        </a>
+
+        <nav class="primary-nav" aria-label="Learning modules">
+          <button class="nav-item active" data-view="conversion"><span>↔</span> Unit conversions</button>
+          <button class="nav-item" data-view="notation"><span>10ˣ</span> Scientific notation</button>
+          <button class="nav-item" data-view="reference"><span>≡</span> Prefix reference</button>
+        </nav>
+
+        <section class="progress-card" aria-labelledby="progress-title">
+          <div class="eyebrow" id="progress-title">Today’s progress</div>
+          <div class="progress-ring" id="progress-ring" style="--progress: 0%">
+            <span id="accuracy-value">—</span><small>accuracy</small>
+          </div>
+          <div class="progress-stats">
+            <span><strong id="solved-count">0</strong> solved</span>
+            <span><strong id="streak-count">0</strong> streak</span>
+          </div>
+          <button class="text-button" id="reset-progress">Reset progress</button>
+        </section>
+
+        <p class="sidebar-note">Nothing is timed. Getting lost is part of the lesson, not a failure state.</p>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Chemistry foundations</p>
+            <h1 id="page-title">Unit conversions</h1>
+          </div>
+          <button class="sound-button" id="read-button" title="Read the current instruction aloud" aria-label="Read current instruction aloud">Read it aloud</button>
+        </header>
+
+        <section id="conversion-view" class="view active" aria-labelledby="page-title">
+          <div class="control-strip">
+            <div class="segmented" role="group" aria-label="Learning mode">
+              <button class="active" data-mode="guided">Teach me</button>
+              <button data-mode="independent">Let me try</button>
+            </div>
+            <label class="select-label">Difficulty
+              <select id="difficulty-select">
+                <option value="foundations">Foundations</option>
+                <option value="standard">Standard</option>
+                <option value="challenge">Challenge</option>
+              </select>
+            </label>
+            <button class="secondary-button" id="new-problem">New problem</button>
+          </div>
+
+          <div class="lesson-grid">
+            <section class="problem-card">
+              <div class="card-heading">
+                <div>
+                  <p class="eyebrow">Current problem</p>
+                  <h2 id="problem-prompt">Convert 1.194 mg into Gg</h2>
+                </div>
+                <span class="level-chip" id="step-chip">Step 1 of 6</span>
+              </div>
+
+              <div class="unit-train" id="unit-train" aria-label="Unit conversion setup"></div>
+
+              <div class="instruction-panel" aria-live="polite">
+                <div class="step-number" id="step-number">1</div>
+                <div class="instruction-copy">
+                  <p class="eyebrow" id="step-label">Decode the starting unit</p>
+                  <h3 id="step-question"></h3>
+                  <p id="step-explanation"></p>
+                </div>
+              </div>
+
+              <div id="answer-area" class="answer-area"></div>
+              <div id="feedback" class="feedback" aria-live="assertive"></div>
+
+              <div class="action-row">
+                <button class="help-button" id="help-button">I’m lost — teach this step</button>
+                <button class="primary-button" id="check-button">Check this step</button>
+              </div>
+            </section>
+
+            <aside class="coach-column">
+              <section class="coach-card" id="coach-card">
+                <div class="coach-icon" aria-hidden="true">?</div>
+                <p class="eyebrow">Why are we doing this?</p>
+                <h2 id="coach-title">Units are part of the math</h2>
+                <p id="coach-copy">Our goal is to arrange equal amounts so the units we do not want appear once on top and once on the bottom. Then they cancel.</p>
+              </section>
+
+              <section class="sanity-card">
+                <p class="eyebrow">Common-sense check</p>
+                <div class="size-line"><span>Tiny unit</span><span class="line-arrow">→</span><span>Huge unit</span></div>
+                <p id="magnitude-check">Moving into a larger unit should make the written number smaller.</p>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section id="notation-view" class="view" aria-labelledby="notation-title">
+          <div class="module-intro">
+            <p class="eyebrow">One skill at a time</p>
+            <h2 id="notation-title">Scientific notation practice</h2>
+            <p>The exponent tells you how far the decimal travels. It does not tell you how many zeros to panic-count.</p>
+          </div>
+          <div class="notation-grid">
+            <section class="notation-card">
+              <div class="card-heading">
+                <p class="eyebrow">Current problem</p>
+                <button class="secondary-button" id="new-notation">New problem</button>
+              </div>
+              <h3 id="notation-prompt"></h3>
+              <div class="decimal-track" id="decimal-track"></div>
+              <div id="notation-answer" class="answer-area"></div>
+              <div id="notation-feedback" class="feedback" aria-live="polite"></div>
+              <div class="action-row">
+                <button class="help-button" id="notation-help">Show the decimal movement</button>
+                <button class="primary-button" id="notation-check">Check answer</button>
+              </div>
+            </section>
+            <aside class="coach-card notation-rule">
+              <div class="rule-pair"><strong>Positive exponent</strong><span>Move right →</span><small>The number becomes larger.</small></div>
+              <div class="rule-pair"><strong>Negative exponent</strong><span>← Move left</span><small>The number becomes smaller.</small></div>
+              <p class="memory-line">Memory shortcut: positive builds a big number; negative builds a tiny decimal.</p>
+            </aside>
+          </div>
+        </section>
+
+        <section id="reference-view" class="view" aria-labelledby="reference-title">
+          <div class="module-intro">
+            <p class="eyebrow">Keep this nearby</p>
+            <h2 id="reference-title">The metric prefix map</h2>
+            <p>Every prefix is just a power-of-ten label attached to the base unit.</p>
+          </div>
+          <div class="reference-card">
+            <div class="prefix-scale" id="prefix-scale"></div>
+            <div class="reference-note">
+              <strong>Case matters:</strong> mg is a milligram, while Mg is a megagram. Chemistry apparently decided capital letters should carry the weight of twelve orders of magnitude.
+            </div>
+          </div>
+          <div class="rules-grid">
+            <article><span class="rule-number">1</span><h3>Write what you have</h3><p>Put the starting measurement over 1. This gives your units a clear top and bottom.</p></article>
+            <article><span class="rule-number">2</span><h3>Cancel what you do not want</h3><p>Place the unwanted unit on the opposite side of the next fraction.</p></article>
+            <article><span class="rule-number">3</span><h3>Check what survives</h3><p>Only the requested unit should remain. If another unit survives, turn a fraction around.</p></article>
+            <article><span class="rule-number">4</span><h3>Check the direction</h3><p>Larger destination unit means a smaller number. Smaller destination unit means a larger number.</p></article>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="app.js?v=gnosys-20260806-3"></script>
+  </body>
+</html>
